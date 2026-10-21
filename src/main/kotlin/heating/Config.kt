@@ -8,6 +8,9 @@ import java.time.ZoneId
 data class Config(
     val apiToken: String,
     val mqttUrl: String = "tcp://localhost:1883",
+    /** Broker login; none means the broker is reached anonymously. */
+    val mqttUsername: String? = null,
+    val mqttPassword: String? = null,
     val z2mBaseTopic: String = "zigbee2mqtt",
     val timezone: ZoneId = ZoneId.of("Europe/London"),
     val dbPath: String = "heating.db",
@@ -31,9 +34,14 @@ data class Config(
         fun fromEnv(env: Map<String, String> = System.getenv()): Config {
             val token = env["HEATING_API_TOKEN"]?.takeIf { it.isNotBlank() }
                 ?: throw IllegalStateException("HEATING_API_TOKEN must be set")
+            val mqttUsername = env["MQTT_USERNAME"]?.takeIf { it.isNotBlank() }
+            val mqttPassword = env["MQTT_PASSWORD"]?.takeIf { it.isNotEmpty() }
+            check(mqttPassword == null || mqttUsername != null) { "MQTT_PASSWORD needs MQTT_USERNAME" }
             return Config(
                 apiToken = token,
                 mqttUrl = env["MQTT_URL"] ?: "tcp://localhost:1883",
+                mqttUsername = mqttUsername,
+                mqttPassword = mqttPassword,
                 z2mBaseTopic = env["Z2M_BASE_TOPIC"] ?: "zigbee2mqtt",
                 timezone = ZoneId.of(env["HEATING_TIMEZONE"] ?: "Europe/London"),
                 dbPath = env["HEATING_DB_PATH"] ?: "heating.db",

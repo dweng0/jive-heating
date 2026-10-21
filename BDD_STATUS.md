@@ -1,6 +1,6 @@
 # BDD Status
 
-Checked 306 scenario(s) across 82 test file(s).
+Checked 309 scenario(s) across 83 test file(s).
 
 
 ## Feature: Service foundation
@@ -73,6 +73,9 @@ Checked 306 scenario(s) across 82 test file(s).
 
 - [x] Docker image builds and runs the service
 - [x] Example environment file documents every variable
+- [x] Broker login comes from the environment
+- [x] Broker connection is anonymous when no login is set
+- [x] Service refuses a broker password without a username
 
 ## Feature: Grouped and independent control
 
@@ -409,4 +412,4 @@ Checked 306 scenario(s) across 82 test file(s).
 - [x] A plug losing contact is in the activity feed
 
 ---
-**306/306 scenarios covered.**
+**309/309 scenarios covered.**

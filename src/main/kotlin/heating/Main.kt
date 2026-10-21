@@ -22,7 +22,7 @@ fun main() {
     val http = HttpClient.newHttpClient()
     val heating = HeatingApp(
         config = config,
-        bus = PahoMqttBus(config.mqttUrl),
+        bus = PahoMqttBus(config.mqttUrl, username = config.mqttUsername, password = config.mqttPassword),
         store = SqliteStore(config.dbPath),
         clock = Clock.systemUTC(),
         httpGet = { url ->

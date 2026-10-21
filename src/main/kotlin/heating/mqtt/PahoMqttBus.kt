@@ -18,7 +18,12 @@ import java.util.concurrent.Executors
  * waiting for the broker's ack, the connection would time out, and on reconnect the retained
  * message that triggered it would arrive again, in a loop.
  */
-class PahoMqttBus(url: String, clientId: String = "home-heating") : MqttBus {
+class PahoMqttBus(
+    url: String,
+    clientId: String = "home-heating",
+    username: String? = null,
+    password: String? = null,
+) : MqttBus {
     private val log = LoggerFactory.getLogger(PahoMqttBus::class.java)
     private val client = MqttClient(url, clientId, MemoryPersistence())
     private val subscriptions = CopyOnWriteArrayList<Pair<String, (String, String) -> Unit>>()
@@ -45,10 +50,7 @@ class PahoMqttBus(url: String, clientId: String = "home-heating") : MqttBus {
 
             override fun deliveryComplete(token: IMqttDeliveryToken?) = Unit
         })
-        client.connect(MqttConnectOptions().apply {
-            isAutomaticReconnect = true
-            isCleanSession = true
-        })
+        client.connect(connectOptions(username, password))
     }
 
     override fun publish(topic: String, payload: String, retained: Boolean) {
@@ -58,5 +60,15 @@ class PahoMqttBus(url: String, clientId: String = "home-heating") : MqttBus {
     override fun subscribe(filter: String, handler: (topic: String, payload: String) -> Unit) {
         subscriptions += filter to handler
         client.subscribe(filter, 1)
+    }
+
+    companion object {
+        /** Connection settings: reconnects automatically, and logs in only when a username is given. */
+        fun connectOptions(username: String?, password: String?) = MqttConnectOptions().apply {
+            isAutomaticReconnect = true
+            isCleanSession = true
+            if (username != null) userName = username
+            if (password != null) this.password = password.toCharArray()
+        }
     }
 }

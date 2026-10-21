@@ -352,6 +352,20 @@ Engineering rules (apply to every scenario):
             Then .env.example lists HEATING_API_TOKEN, MQTT_URL, Z2M_BASE_TOPIC, HEATING_TIMEZONE and HEATING_DB_PATH
             And it contains no real secrets
 
+        Scenario: Broker login comes from the environment
+            Given MQTT_USERNAME is "heating" and MQTT_PASSWORD is "broker-pass"
+            When the service connects to the MQTT broker
+            Then it presents that username and password
+
+        Scenario: Broker connection is anonymous when no login is set
+            Given neither MQTT_USERNAME nor MQTT_PASSWORD is set
+            When the service connects to the MQTT broker
+            Then it presents no username or password
+
+        Scenario: Service refuses a broker password without a username
+            Given MQTT_PASSWORD is set but MQTT_USERNAME is not
+            Then the service refuses to start with "MQTT_PASSWORD needs MQTT_USERNAME"
+
     Feature: Grouped and independent control
         As the household
         I want a room with two radiators to act as one, or each radiator on its own

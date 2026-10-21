@@ -12,7 +12,7 @@
 [![Zigbee2MQTT](https://img.shields.io/badge/Zigbee2MQTT-TRVZB-FFC135?logo=zigbee&logoColor=black)](https://www.zigbee2mqtt.io)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-Thermostat-18BCF2?logo=homeassistant&logoColor=white)](https://www.home-assistant.io)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](Dockerfile)
-[![BDD](https://img.shields.io/badge/BDD%20scenarios-84%2F84-brightgreen)](BDD_STATUS.md)
+[![BDD](https://img.shields.io/badge/BDD%20scenarios-309%2F309-brightgreen)](BDD_STATUS.md)
 [![Built with BAADD](https://img.shields.io/badge/built%20with-BAADD-ff6f61)](https://github.com/dweng0/POPPINS)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -91,9 +91,9 @@ that is the only setup it has been tried with.
   Jive Heating to subscribe to. Moving to Zigbee2MQTT is the way to use it. Supporting ZHA would need a
   separate Home Assistant adapter, which doesn't exist yet.
 - **Valve friendly names** must not contain `/`.
-- **Current limitation:** the service connects to the broker without a username or password, so the
-  broker needs a listener that allows that (for example one bound to your LAN or a Docker network).
-  MQTT credentials are not configurable yet.
+- **Broker login:** if your broker needs a username and password, set `MQTT_USERNAME` and `MQTT_PASSWORD`
+  (see [Connect to your MQTT broker](#2-connect-to-your-mqtt-broker)). With neither set, it connects
+  anonymously.
 
 ## Quick start
 
@@ -112,6 +112,8 @@ Edit `.env`. At minimum set `HEATING_API_TOKEN` to a long random value. Generate
 |---|---|---|
 | `HEATING_API_TOKEN` | **required** | Service token. Used once to create the first admin, and by scripts |
 | `MQTT_URL` | `tcp://mosquitto:1883` | Where your Mosquitto broker is |
+| `MQTT_USERNAME` | unset | Broker username. Leave unset if your broker allows anonymous connections |
+| `MQTT_PASSWORD` | unset | Broker password. Needs `MQTT_USERNAME` |
 | `Z2M_BASE_TOPIC` | `zigbee2mqtt` | Zigbee2MQTT base topic |
 | `HEATING_TIMEZONE` | `Europe/London` | Schedule time zone, an [IANA name](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) like `America/New_York` |
 | `HEATING_DB_PATH` | `/data/heating.db` | SQLite file |
@@ -121,7 +123,35 @@ Edit `.env`. At minimum set `HEATING_API_TOKEN` to a long random value. Generate
 | `FCM_SERVICE_ACCOUNT_FILE` | unset | Firebase service-account key, for Android push notifications (see below) |
 | `WEBPUSH_CONTACT` | unset | `mailto:` or `https:` address, to enable browser notifications |
 
-### 2. Build and run the service
+### 2. Connect to your MQTT broker
+
+Jive Heating needs to reach the same Mosquitto (or other MQTT) broker that Zigbee2MQTT uses.
+
+1. **Find your broker's address.** Use the same address Zigbee2MQTT has under `mqtt: server:` in its
+   `configuration.yaml`, and put it in `MQTT_URL` (for example `tcp://192.168.1.10:1883`, or
+   `tcp://mosquitto:1883` if both run in Docker on one network).
+2. **Anonymous broker** (a LAN-only broker with `allow_anonymous true`): nothing more to do.
+3. **Broker with a login** (`allow_anonymous false`, or the Home Assistant Mosquitto add-on): add the
+   credentials to `.env`:
+
+   ```bash
+   MQTT_USERNAME=heating
+   MQTT_PASSWORD=a-long-random-password
+   ```
+
+   Create that user on the broker first. With a plain Mosquitto and a password file:
+
+   ```bash
+   mosquitto_passwd -b /mosquitto/config/passwd heating a-long-random-password
+   ```
+
+   then restart Mosquitto. In the Home Assistant add-on, add a user in the add-on's settings instead.
+4. **Check it connected.** The service logs `MQTT connected to ...` on startup. If the login is wrong it
+   fails to start, and the log shows the broker's refusal.
+
+If you set `MQTT_PASSWORD` without `MQTT_USERNAME` the service refuses to start and says so.
+
+### 3. Build and run the service
 
 The Docker build compiles the service and the web app together.
 
@@ -145,13 +175,13 @@ Or run it without Docker (needs JDK 17):
 HEATING_API_TOKEN=... MQTT_URL=tcp://localhost:1883 WEB_DIR=web/dist ./gradlew run
 ```
 
-### 3. Create the first admin
+### 4. Create the first admin
 
 Open `http://localhost:8098` (or your server's address). On first launch the app asks for the
 service token from your `.env`, plus a username and password for the admin account. After that you sign
 in with the username and password, and can add other people under **Account → People**.
 
-### 4. Add your valves and rooms
+### 5. Add your valves and rooms
 
 1. Pair the TRVZB valves in Zigbee2MQTT. Jive Heating discovers them automatically.
 2. In the app, create a room and assign its valve (or valves).
@@ -159,7 +189,7 @@ in with the username and password, and can add other people under **Account → 
 
 Plugging in a Zigbee sensor that reports temperature lets you assign it to a room as the thermometer.
 
-### 5. Connect your boiler
+### 6. Connect your boiler
 
 The service publishes whether any room wants heat, retained, to the MQTT topic `heating/demand`:
 
@@ -186,7 +216,7 @@ automation:
 
 Any other way of acting on that message works too, such as a relay wired to the boiler.
 
-### 6. Put it on your phone
+### 7. Put it on your phone
 
 **Web app**: open the address in a phone browser and "Add to Home Screen". It installs like an app.
 
