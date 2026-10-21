@@ -1,0 +1,123 @@
+<svg viewBox="-10 -10 140 150" fill="none" xmlns="http://www.w3.org/2000/svg" width="180" height="180" role="img" aria-label="Jive Heating: a smiling fire elemental">
+  <style>
+    @keyframes sway {
+      0%, 100% { transform: rotate(-2deg); }
+      50% { transform: rotate(2deg); }
+    }
+    @keyframes flicker-tip {
+      0%, 100% { transform: scale(1, 1) skewX(0deg); }
+      35% { transform: scale(0.94, 1.08) skewX(-4deg); }
+      70% { transform: scale(1.04, 0.95) skewX(4deg); }
+    }
+    @keyframes flicker-left {
+      0%, 100% { transform: rotate(-4deg) scaleY(1); }
+      50% { transform: rotate(4deg) scaleY(1.12); }
+    }
+    @keyframes flicker-right {
+      0%, 100% { transform: rotate(4deg) scaleY(1.1); }
+      50% { transform: rotate(-4deg) scaleY(0.95); }
+    }
+    @keyframes glow {
+      0%, 100% { opacity: 0.85; }
+      50% { opacity: 1; }
+    }
+    @keyframes eye-blink {
+      0%, 90%, 100% { opacity: 1; }
+      95% { opacity: 0; }
+    }
+    @keyframes arm-wave-left {
+      0%, 100% { transform: rotate(0deg); }
+      50% { transform: rotate(-10deg); }
+    }
+    @keyframes arm-wave-right {
+      0%, 100% { transform: rotate(0deg); }
+      50% { transform: rotate(10deg); }
+    }
+    @keyframes spark-rise {
+      0% { transform: translateY(0); opacity: 0; }
+      15% { opacity: 1; }
+      100% { transform: translateY(-26px); opacity: 0; }
+    }
+    .fire-body {
+      transform-origin: 60px 116px;
+      animation: sway 3s ease-in-out infinite;
+    }
+    .fire-tip {
+      transform-origin: 60px 40px;
+      animation: flicker-tip 1.6s ease-in-out infinite;
+    }
+    .fire-lick-left {
+      transform-origin: 34px 70px;
+      animation: flicker-left 1.9s ease-in-out infinite;
+    }
+    .fire-lick-right {
+      transform-origin: 86px 70px;
+      animation: flicker-right 2.1s ease-in-out infinite 0.3s;
+    }
+    .fire-core {
+      animation: glow 1.8s ease-in-out infinite;
+    }
+    .fire-eye {
+      animation: eye-blink 4s ease-in-out infinite;
+    }
+    .fire-arm-left {
+      transform-origin: 24px 82px;
+      animation: arm-wave-left 2.5s ease-in-out infinite;
+    }
+    .fire-arm-right {
+      transform-origin: 96px 82px;
+      animation: arm-wave-right 2.5s ease-in-out infinite 0.4s;
+    }
+    .fire-spark {
+      animation: spark-rise 3s ease-in infinite;
+    }
+    .fire-spark-b { animation-delay: 1s; }
+    .fire-spark-c { animation-delay: 2s; }
+  </style>
+
+  <defs>
+    <linearGradient id="fire-gradient" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#fb923c" />
+      <stop offset="100%" stop-color="#ea580c" />
+    </linearGradient>
+    <linearGradient id="fire-core-gradient" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#fde68a" />
+      <stop offset="100%" stop-color="#fbbf24" />
+    </linearGradient>
+  </defs>
+
+  <!-- Embers -->
+  <circle class="fire-spark" cx="30" cy="22" r="2.4" fill="#fbbf24" />
+  <circle class="fire-spark fire-spark-b" cx="92" cy="18" r="2" fill="#fb923c" />
+  <circle class="fire-spark fire-spark-c" cx="62" cy="8" r="1.8" fill="#fde68a" />
+
+  <g class="fire-body">
+    <!-- Side flame licks -->
+    <path class="fire-lick-left" d="M34 74 C22 62 24 44 30 32 C34 44 44 48 44 62 Z" fill="url(#fire-gradient)" />
+    <path class="fire-lick-right" d="M86 74 C98 62 96 44 90 32 C86 44 76 48 76 62 Z" fill="url(#fire-gradient)" />
+
+    <!-- Tall flickering tip -->
+    <path class="fire-tip" d="M60 -6 C64 14 82 26 82 46 L38 46 C38 30 54 20 60 -6 Z" fill="url(#fire-gradient)" />
+
+    <!-- Body -->
+    <path d="M60 22 C68 40 94 48 94 80 C94 104 78 118 60 118 C42 118 26 104 26 80 C26 48 52 40 60 22 Z" fill="url(#fire-gradient)" />
+
+    <!-- Glowing core -->
+    <path class="fire-core" d="M60 52 C66 66 80 72 80 90 C80 104 70 112 60 112 C50 112 40 104 40 90 C40 72 54 66 60 52 Z" fill="url(#fire-core-gradient)" opacity="0.9" />
+
+    <!-- Arms -->
+    <g transform="rotate(25 24 92)"><ellipse class="fire-arm-left" cx="24" cy="92" rx="7" ry="11" fill="url(#fire-gradient)" /></g>
+    <g transform="rotate(-25 96 92)"><ellipse class="fire-arm-right" cx="96" cy="92" rx="7" ry="11" fill="url(#fire-gradient)" /></g>
+
+    <!-- Eyes - Happy ^ ^ -->
+    <path class="fire-eye" d="M43 82 Q48 75 53 82" stroke="#431407" stroke-width="3" stroke-linecap="round" fill="none" />
+    <path class="fire-eye" d="M67 82 Q72 75 77 82" stroke="#431407" stroke-width="3" stroke-linecap="round" fill="none" />
+
+    <!-- Cheeks -->
+    <ellipse cx="41" cy="92" rx="5" ry="3" fill="#ea580c" opacity="0.45" />
+    <ellipse cx="79" cy="92" rx="5" ry="3" fill="#ea580c" opacity="0.45" />
+
+    <!-- Smiling mouth -->
+    <path d="M52 92 Q60 101 68 92" stroke="#431407" stroke-width="2.5" stroke-linecap="round" fill="none" />
+  </g>
+</svg>

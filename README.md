@@ -1,4 +1,8 @@
-# Jive Heating
+<p align="center">
+  <img src="docs/logo.svg" alt="Jive Heating: a smiling fire elemental" width="180">
+</p>
+
+<h1 align="center">Jive Heating</h1>
 
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.1-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
 [![Ktor](https://img.shields.io/badge/Ktor-3.1-087CFA?logo=ktor&logoColor=white)](https://ktor.io)
