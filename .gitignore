@@ -1,0 +1,44 @@
+.gradle/
+build/
+*.db
+.env
+.idea/
+*.iml
+locks/
+sessions.jsonl
+agent_events*.jsonl
+__pycache__/
+BDD_SCENARIO.md
+PLAN.md
+QA_REPORT.md
+RETRY_NOTES.md
+.claude/
+# BAADD runtime output
+*.log
+integration_test.jsonl
+ISSUES_TODAY.md
+FAILED_PIPELINES.md
+merge_resolution.jsonl
+web/node_modules/
+web/dist/
+.playwright-mcp/
+android-dist/*
+!android-dist/.gitkeep
+# secrets and local machine config
+.env.*
+!.env.example
+local.properties
+*.jks
+*.keystore
+*.apk
+*.pem
+*.key
+android/app/google-services.json
+*firebase-adminsdk*.json
+/data/
+
+# private working notes
+HANDOFF.md
+JOURNAL.md
+JOURNAL_INDEX.md
+SMOKETEST.md

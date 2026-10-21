@@ -1,0 +1,765 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Home Heating API",
+    "version": "1.0.0",
+    "description": "Contract between the heating service and the Android app. Both sides build against this document; change it only by agreement. All times are ISO-8601 with offset in the service's time zone. Temperatures are °C in 0.5 steps. Live updates: WebSocket /ws (bearer token) sends JSON messages of type LiveEvent. Room access: admins (and the service token) use every route. A member sees and controls only the rooms an admin gave them (User.rooms); any /api/rooms/{id} or /api/zones/{zoneId} route on another room answers 404. Members get 403 on /api/house, /api/groups, /api/dashboard, GET /api/status, /api/holiday, /api/valves, /api/sensors, /api/meters, /api/settings/energy, /api/admin, and on creating, renaming, deleting rooms or assigning valves and sensors."
+  },
+  "components": {
+    "securitySchemes": { "bearer": { "type": "http", "scheme": "bearer", "description": "A session token from /api/auth/login or /api/auth/setup, or the HEATING_API_TOKEN service token (admin)." } },
+    "schemas": {
+      "User": {
+        "type": "object", "required": ["username", "admin"],
+        "properties": {
+          "id": { "type": "string", "nullable": true, "description": "Null for the service token" },
+          "username": { "type": "string" },
+          "admin": { "type": "boolean" },
+          "createdAt": { "type": "string", "format": "date-time", "nullable": true },
+          "rooms": { "type": "array", "items": { "type": "string" }, "description": "Ids of every room this user can see now; every room for an admin" }
+        }
+      },
+      "Session": {
+        "type": "object", "required": ["token", "user"],
+        "properties": {
+          "token": { "type": "string", "description": "Send as Authorization: Bearer <token>. Valid 180 days." },
+          "user": { "$ref": "#/components/schemas/User" }
+        }
+      },
+      "Error": {
+        "type": "object", "required": ["error"],
+        "properties": { "error": { "type": "string" } }
+      },
+      "Mode": { "type": "string", "enum": ["schedule", "manual", "off"] },
+      "Control": { "type": "string", "enum": ["grouped", "independent"] },
+      "Day": { "type": "string", "enum": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] },
+      "Boost": {
+        "type": "object", "required": ["target", "endsAt"],
+        "properties": {
+          "target": { "type": "number" },
+          "endsAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Override": {
+        "description": "Someone turned the valve knob; holds until the next schedule block.",
+        "type": "object", "required": ["target", "until"],
+        "properties": {
+          "target": { "type": "number" },
+          "until": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Zone": {
+        "description": "Grouped room: one zone whose id is the room id. Independent room: one zone per valve, id '<roomId>:<valve>'.",
+        "type": "object",
+        "required": ["id", "valves", "mode", "manualTarget", "target", "current", "heating", "callingForHeat"],
+        "properties": {
+          "id": { "type": "string" },
+          "valves": { "type": "array", "items": { "type": "string" } },
+          "mode": { "$ref": "#/components/schemas/Mode" },
+          "manualTarget": { "type": "number", "description": "Target used in manual mode" },
+          "target": { "type": "number", "nullable": true, "description": "Effective target now; null when off" },
+          "current": { "type": "number", "nullable": true, "description": "Average of online valves, 1 dp" },
+          "heating": { "type": "boolean", "description": "A valve reports running_state heat" },
+          "callingForHeat": { "type": "boolean" },
+          "nextChange": {
+            "type": "object", "nullable": true,
+            "description": "Next schedule block, for 'until 22:30' text",
+            "properties": { "at": { "type": "string", "format": "date-time" }, "target": { "type": "number" } }
+          },
+          "boost": { "$ref": "#/components/schemas/Boost", "nullable": true },
+          "override": { "$ref": "#/components/schemas/Override", "nullable": true }
+        }
+      },
+      "Room": {
+        "type": "object",
+        "required": ["id", "name", "control", "mode", "current", "target", "heating", "valves", "zones", "notices", "smartTemperatureControl"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "control": { "$ref": "#/components/schemas/Control" },
+          "mode": { "$ref": "#/components/schemas/Mode", "description": "Grouped: the zone's mode. Independent: first zone's mode." },
+          "current": { "type": "number", "nullable": true, "description": "The room sensor's temperature when it is online, else the average of all online valves in the room" },
+          "target": { "type": "number", "nullable": true, "description": "Grouped: zone target. Independent: null" },
+          "heating": { "type": "boolean", "description": "Any valve in the room heating" },
+          "valves": { "type": "array", "items": { "type": "string" } },
+          "zones": { "type": "array", "items": { "$ref": "#/components/schemas/Zone" } },
+          "notices": { "type": "array", "items": { "type": "string" } },
+          "smartTemperatureControl": { "type": "boolean" },
+          "sensor": { "type": "string", "nullable": true, "description": "Assigned sensor's friendly name" },
+          "temperatureSource": { "type": "string", "enum": ["valves", "sensor"], "description": "sensor while an online sensor measures the room" }
+        }
+      },
+      "Group": {
+        "type": "object", "required": ["id", "name", "rooms", "current", "target", "mode", "heating", "heatingRooms"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "rooms": { "type": "array", "items": { "type": "string" }, "description": "Room ids" },
+          "current": { "type": "number", "nullable": true, "description": "Average current temperature of its rooms that have one, 1 dp" },
+          "target": { "type": "number", "nullable": true, "description": "Shared target when every room agrees, else null" },
+          "mode": { "type": "string", "enum": ["schedule", "manual", "off", "mixed"], "description": "Shared mode, or mixed" },
+          "heating": { "type": "boolean", "description": "Every room in the group heating (false when it has no rooms)" },
+          "heatingRooms": { "type": "array", "items": { "type": "string" }, "description": "Ids of its rooms that are heating, in group order" }
+        }
+      },
+      "BoostSettings": {
+        "type": "object", "required": ["defaultTarget"],
+        "description": "What a boost heats to when no target is given, and where the apps start their boost picker. Default 22.0. PUT takes defaultTarget; 400 unless it is a number from 5.0 to 30.0 in 0.5 steps",
+        "properties": {
+          "defaultTarget": { "type": "number", "description": "°C, 5.0 to 30.0 in 0.5 steps" }
+        }
+      },
+      "EnergySettings": {
+        "type": "object", "required": ["gasPencePerKwh", "gasStandingPencePerDay", "boilerAverageKw", "electricityPencePerKwh", "electricityStandingPencePerDay", "electricityMeter", "currency", "notices"],
+        "description": "Prices in the currency's minor unit (pence). Defaults 11.0, 30.0, 12.0 kW, 27.0, 50.0, GBP. PUT takes any subset of the price fields, currency and electricityMeter (null clears it); 400 for a negative price, a boiler rate of 0 or over 100 kW, an unknown currency code, or a meter that is not discovered",
+        "properties": {
+          "gasPencePerKwh": { "type": "number" },
+          "gasStandingPencePerDay": { "type": "number" },
+          "boilerAverageKw": { "type": "number", "description": "Average burn rate; gas kWh is estimated as boiler hours times this" },
+          "electricityPencePerKwh": { "type": "number" },
+          "electricityStandingPencePerDay": { "type": "number" },
+          "electricityMeter": { "type": "string", "nullable": true, "description": "Friendly name of the house electricity meter" },
+          "currency": { "type": "string", "description": "ISO 4217 code every cost is in, e.g. GBP (default) or EUR" },
+          "notices": { "type": "array", "items": { "type": "string" }, "description": "e.g. 'Main Clamp was removed from Zigbee2MQTT'; cleared when a meter is chosen" }
+        }
+      },
+      "Meter": {
+        "type": "object", "required": ["name", "online", "energy", "power", "stale", "lastReading", "inUse"],
+        "description": "A Zigbee2MQTT device (clamp or smart plug) that exposes energy and power",
+        "properties": {
+          "name": { "type": "string" },
+          "online": { "type": "boolean" },
+          "energy": { "type": "number", "nullable": true, "description": "Running total, kWh" },
+          "power": { "type": "number", "nullable": true, "description": "Power now, W" },
+          "stale": { "type": "boolean", "description": "No reading for 30 minutes: its use is unknown, not zero" },
+          "lastReading": { "type": "string", "format": "date-time", "nullable": true },
+          "inUse": { "type": "boolean", "description": "It is the house electricity meter" },
+          "monitored": { "type": "boolean", "description": "Its use is monitored, as part of the house meter's, never added to it" },
+          "room": { "type": "string", "nullable": true, "description": "Id of the room this monitored device is in; null when in no room" }
+        }
+      },
+      "EnergyDay": {
+        "type": "object", "required": ["date", "boilerHours", "gasKwh", "gasCost", "electricityKwh", "electricityCost", "standingCost", "totalCost", "missingMinutes", "incomplete"],
+        "properties": {
+          "date": { "type": "string", "format": "date" },
+          "boilerHours": { "type": "number" },
+          "gasKwh": { "type": "number" },
+          "gasCost": { "type": "number", "description": "Pence" },
+          "electricityKwh": { "type": "number", "nullable": true, "description": "Null without a house meter" },
+          "electricityCost": { "type": "number", "nullable": true },
+          "standingCost": { "type": "number" },
+          "totalCost": { "type": "number" },
+          "missingMinutes": { "type": "integer", "description": "Minutes with no record (service down or meter stale)" },
+          "incomplete": { "type": "boolean" }
+        }
+      },
+      "EnergyDashboard": {
+        "type": "object",
+        "required": ["period", "from", "to", "boilerHours", "gasKwh", "gasCost", "electricityMeter", "electricityKwh", "electricityCost", "gasStandingCost", "electricityStandingCost", "standingCost", "totalCost", "missingMinutes", "incomplete", "days", "currency"],
+        "description": "Costs in the currency's minor unit (pence) at the current prices, worked out when read. Electricity fields are null without a house meter, and totalCost then counts gas only",
+        "properties": {
+          "period": { "type": "string", "enum": ["today", "yesterday", "week", "month"] },
+          "from": { "type": "string", "format": "date-time" },
+          "to": { "type": "string", "format": "date-time" },
+          "boilerHours": { "type": "number", "description": "Hours heating or cycling" },
+          "gasKwh": { "type": "number" },
+          "gasCost": { "type": "number" },
+          "electricityMeter": { "type": "string", "nullable": true },
+          "electricityKwh": { "type": "number", "nullable": true },
+          "electricityCost": { "type": "number", "nullable": true },
+          "gasStandingCost": { "type": "number" },
+          "electricityStandingCost": { "type": "number", "nullable": true },
+          "standingCost": { "type": "number" },
+          "totalCost": { "type": "number" },
+          "missingMinutes": { "type": "integer" },
+          "incomplete": { "type": "boolean" },
+          "days": { "type": "array", "items": { "$ref": "#/components/schemas/EnergyDay" } },
+          "currency": { "type": "string", "description": "ISO 4217 code the costs are in" },
+          "devices": { "type": "array", "items": { "$ref": "#/components/schemas/DeviceEnergy" }, "description": "Monitored devices, sorted by name. Already part of electricityKwh and totalCost: shown as \"of which\", never added" },
+          "rooms": { "type": "array", "items": { "$ref": "#/components/schemas/RoomEnergy" }, "description": "Rooms with plug use in the period, sorted by name: each plug's use counts in the room it was in when it was recorded, so moving a plug never moves its past use. Part of devices, so never added to electricityKwh or totalCost" },
+          "everythingElse": { "allOf": [{ "$ref": "#/components/schemas/EverythingElse" }], "nullable": true, "description": "House electricity no monitored plug accounts for. Null without a house meter" }
+        }
+      },
+      "EverythingElse": {
+        "type": "object", "required": ["kwh", "cost", "missingMinutes", "incomplete"],
+        "description": "electricityKwh minus all monitored plugs, in rooms or not, never below 0. Part of electricityKwh, so never added to totalCost",
+        "properties": {
+          "kwh": { "type": "number" },
+          "cost": { "type": "number", "description": "Minor units at the electricity price" },
+          "missingMinutes": { "type": "integer", "description": "The longer of the house meter's minutes with no reading and the minutes any monitored plug had none" },
+          "incomplete": { "type": "boolean", "description": "True when the house meter or any monitored plug is incomplete" }
+        }
+      },
+      "RoomEnergyHistory": {
+        "type": "object", "required": ["room", "from", "to", "points"],
+        "properties": {
+          "room": { "type": "string" },
+          "from": { "type": "string", "format": "date-time" },
+          "to": { "type": "string", "format": "date-time" },
+          "points": { "type": "array", "items": { "$ref": "#/components/schemas/EnergyBar" } }
+        }
+      },
+      "EnergyBar": {
+        "type": "object", "required": ["at", "kwh", "incomplete"],
+        "properties": {
+          "at": { "type": "string", "format": "date-time", "description": "Start of the bar's hour or day" },
+          "kwh": { "type": "number", "nullable": true, "description": "Use of the room's plugs recorded in the bar; null when none had a reading in it (no use known, not 0 kWh)" },
+          "incomplete": { "type": "boolean", "description": "A plug in the room had no reading for some of the bar, so kwh is only what was recorded" }
+        }
+      },
+      "RoomPlugs": {
+        "type": "object", "required": ["room", "currency", "kwh", "cost", "missingMinutes", "incomplete", "plugs"],
+        "description": "Today so far, from the plug samples recorded in this room (as Dashboard rooms), so a plug moved out today still counts here. Part of the house meter's use, so never added to anything",
+        "properties": {
+          "room": { "type": "string", "description": "Room id" },
+          "currency": { "type": "string", "description": "ISO 4217 code the costs are in" },
+          "kwh": { "type": "number" },
+          "cost": { "type": "number", "description": "Minor units at the electricity price; no standing charge" },
+          "missingMinutes": { "type": "integer", "description": "Minutes any of the room's plugs had no reading, counted once" },
+          "incomplete": { "type": "boolean" },
+          "plugs": { "type": "array", "items": { "$ref": "#/components/schemas/RoomPlug" }, "description": "The plugs in the room now, sorted by name, each with only its use recorded in this room" }
+        }
+      },
+      "RoomPlug": {
+        "type": "object", "required": ["meter", "power", "kwh", "cost", "missingMinutes", "incomplete", "offline", "offlineSince", "totalStuckSince"],
+        "properties": {
+          "meter": { "type": "string" },
+          "power": { "type": "number", "nullable": true, "description": "W now; null while offline or stale" },
+          "kwh": { "type": "number" },
+          "cost": { "type": "number", "description": "Minor units at the electricity price; no standing charge" },
+          "missingMinutes": { "type": "integer" },
+          "incomplete": { "type": "boolean", "description": "True when it had no reading at some point today, so kwh and cost are only so far" },
+          "offline": { "type": "array", "description": "When it had no reading today", "items": { "type": "object", "required": ["from", "to"], "properties": {
+            "from": { "type": "string", "format": "date-time" },
+            "to": { "type": "string", "format": "date-time" }
+          } } },
+          "offlineSince": { "type": "string", "format": "date-time", "nullable": true, "description": "Set while the plug is offline now (Zigbee2MQTT says so, or 30 minutes with no reading): when it went. It is then also incomplete" },
+          "totalStuckSince": { "type": "string", "format": "date-time", "nullable": true, "description": "Set while the plug's power readings say it should have used at least 0.05 kWh since its energy total last changed (the total moves in 0.01 kWh steps): when the total last changed. It is then also incomplete. Never set while offline now" }
+        }
+      },
+      "RoomEnergy": {
+        "type": "object", "required": ["room", "name", "kwh", "cost", "missingMinutes", "incomplete"],
+        "properties": {
+          "room": { "type": "string", "description": "Room id" },
+          "name": { "type": "string" },
+          "kwh": { "type": "number" },
+          "cost": { "type": "number", "description": "Minor units at the electricity price" },
+          "missingMinutes": { "type": "integer", "description": "Minutes any of the room's plugs had no reading, counted once when several were stale at the same time" },
+          "incomplete": { "type": "boolean", "description": "True when any of the room's plugs is incomplete" }
+        }
+      },
+      "DeviceEnergy": {
+        "type": "object", "required": ["meter", "kwh", "cost", "missingMinutes", "incomplete", "room", "offlineSince", "totalStuckSince"],
+        "properties": {
+          "meter": { "type": "string" },
+          "kwh": { "type": "number" },
+          "cost": { "type": "number", "description": "Minor units at the electricity price" },
+          "missingMinutes": { "type": "integer", "description": "Minutes the plug was stale: unknown, so kwh and cost are only so far" },
+          "incomplete": { "type": "boolean" },
+          "room": { "type": "string", "nullable": true, "description": "Id of the room the plug is in now, null when in no room. Its kwh may include use from rooms it was in before" },
+          "offlineSince": { "type": "string", "format": "date-time", "nullable": true, "description": "Set while the plug is offline now (Zigbee2MQTT says so, or 30 minutes with no reading): when it went. It is then also incomplete" },
+          "totalStuckSince": { "type": "string", "format": "date-time", "nullable": true, "description": "Set while the plug's power readings say it should have used at least 0.05 kWh since its energy total last changed (the total moves in 0.01 kWh steps): when the total last changed. It is then also incomplete. Never set while offline now" }
+        }
+      },
+      "Sensor": {
+        "type": "object", "required": ["name", "room", "online", "temperature", "battery", "lowBattery"],
+        "properties": {
+          "name": { "type": "string" },
+          "room": { "type": "string", "nullable": true, "description": "Room name, null when unassigned" },
+          "online": { "type": "boolean" },
+          "temperature": { "type": "number", "nullable": true },
+          "battery": { "type": "integer", "nullable": true },
+          "lowBattery": { "type": "boolean", "description": "battery <= 20" }
+        }
+      },
+      "Valve": {
+        "type": "object",
+        "required": ["name", "room", "online", "currentTemperature", "reportedSetpoint", "runningState", "battery", "lowBattery", "openWindow", "childLock"],
+        "properties": {
+          "name": { "type": "string" },
+          "room": { "type": "string", "nullable": true, "description": "Room name, null when unassigned" },
+          "online": { "type": "boolean" },
+          "currentTemperature": { "type": "number", "nullable": true },
+          "reportedSetpoint": { "type": "number", "nullable": true },
+          "runningState": { "type": "string", "nullable": true, "enum": ["idle", "heat", null] },
+          "battery": { "type": "integer", "nullable": true },
+          "lowBattery": { "type": "boolean", "description": "battery <= 20" },
+          "openWindow": { "type": "boolean" },
+          "childLock": { "type": "boolean" }
+        }
+      },
+      "Block": {
+        "type": "object", "required": ["start", "target"],
+        "properties": {
+          "start": { "type": "string", "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$" },
+          "target": { "type": "number" }
+        }
+      },
+      "DaySchedule": {
+        "type": "object", "required": ["blocks"],
+        "description": "1-6 blocks, first at 00:00, increasing start times",
+        "properties": { "blocks": { "type": "array", "minItems": 1, "maxItems": 6, "items": { "$ref": "#/components/schemas/Block" } } }
+      },
+      "WeekSchedule": {
+        "type": "object",
+        "required": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
+        "additionalProperties": false,
+        "properties": {
+          "monday": { "$ref": "#/components/schemas/DaySchedule" },
+          "tuesday": { "$ref": "#/components/schemas/DaySchedule" },
+          "wednesday": { "$ref": "#/components/schemas/DaySchedule" },
+          "thursday": { "$ref": "#/components/schemas/DaySchedule" },
+          "friday": { "$ref": "#/components/schemas/DaySchedule" },
+          "saturday": { "$ref": "#/components/schemas/DaySchedule" },
+          "sunday": { "$ref": "#/components/schemas/DaySchedule" }
+        }
+      },
+      "Holiday": {
+        "type": "object", "required": ["from", "until", "target", "active"],
+        "properties": {
+          "from": { "type": "string", "format": "date-time" },
+          "until": { "type": "string", "format": "date-time" },
+          "target": { "type": "number" },
+          "active": { "type": "boolean", "description": "false while waiting for a future start" }
+        }
+      },
+      "Status": {
+        "type": "object", "required": ["heatDemand", "holiday", "serverTime", "timezone"],
+        "properties": {
+          "heatDemand": { "type": "boolean" },
+          "boiler": { "$ref": "#/components/schemas/BoilerState" },
+          "holiday": { "$ref": "#/components/schemas/Holiday", "nullable": true },
+          "serverTime": { "type": "string", "format": "date-time" },
+          "timezone": { "type": "string" }
+        }
+      },
+      "BoilerState": {
+        "description": "What the boiler is doing. heating: a zone calls and demand is on. cycling: no zone calls but demand stays on until its minimum run ends. resting: a zone calls but demand stays off until its minimum rest ends. idle: nothing calls and demand is off.",
+        "type": "object", "required": ["state", "until"],
+        "properties": {
+          "state": { "type": "string", "enum": ["heating", "cycling", "resting", "idle"] },
+          "until": { "type": "string", "format": "date-time", "nullable": true, "description": "When cycling or resting ends; null otherwise" }
+        }
+      },
+      "HistoryPoint": {
+        "type": "object", "required": ["at", "current"],
+        "properties": {
+          "at": { "type": "string", "format": "date-time" },
+          "current": { "type": "number", "nullable": true },
+          "target": { "type": "number", "nullable": true, "description": "Effective target; absent on whole-house points" }
+        }
+      },
+      "RoomHistory": {
+        "type": "object", "required": ["id", "name", "points"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "points": { "type": "array", "items": { "$ref": "#/components/schemas/HistoryPoint" } }
+        }
+      },
+      "BoilerPeriod": {
+        "type": "object", "required": ["state", "from", "to"],
+        "properties": {
+          "state": { "type": "string", "enum": ["heating", "cycling", "resting", "idle"] },
+          "from": { "type": "string", "format": "date-time" },
+          "to": { "type": "string", "format": "date-time", "nullable": true, "description": "null for the state the boiler is in now" }
+        }
+      },
+      "History": {
+        "type": "object", "required": ["from", "to", "rooms", "house", "boiler"],
+        "properties": {
+          "from": { "type": "string", "format": "date-time" },
+          "to": { "type": "string", "format": "date-time" },
+          "rooms": { "type": "array", "items": { "$ref": "#/components/schemas/RoomHistory" } },
+          "house": { "type": "array", "description": "Median of the rooms' temperatures at each time", "items": { "$ref": "#/components/schemas/HistoryPoint" } },
+          "boiler": { "type": "array", "description": "Boiler states overlapping from..to, oldest first", "items": { "$ref": "#/components/schemas/BoilerPeriod" } }
+        }
+      },
+      "LiveEvent": {
+        "description": "WebSocket message. room.updated carries the full Room; room.deleted carries roomId; status.updated carries Status; valve.updated carries Valve; groups.updated carries every Group; sensor.updated carries Sensor; access.updated (no payload) tells a user an admin changed their rooms or admin rights, so the app fetches /api/auth/me and /api/rooms again. Members get room.updated and room.deleted only for rooms they can see, and no status, valve, groups or sensor events.",
+        "type": "object", "required": ["type"],
+        "properties": {
+          "type": { "type": "string", "enum": ["room.updated", "room.deleted", "status.updated", "valve.updated", "groups.updated", "sensor.updated", "access.updated"] },
+          "room": { "$ref": "#/components/schemas/Room" },
+          "roomId": { "type": "string" },
+          "status": { "$ref": "#/components/schemas/Status" },
+          "valve": { "$ref": "#/components/schemas/Valve" },
+          "groups": { "type": "array", "items": { "$ref": "#/components/schemas/Group" } },
+          "sensor": { "$ref": "#/components/schemas/Sensor" }
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": { "description": "Invalid input", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "NotFound": { "description": "Not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "Conflict": { "description": "Conflict", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "Room": { "description": "The room", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Room" } } } }
+    },
+    "parameters": {
+      "roomId": { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
+      "zoneId": { "name": "zoneId", "in": "path", "required": true, "schema": { "type": "string" } },
+      "valve": { "name": "valve", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Valve friendly name, URL-encoded" },
+      "groupId": { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
+      "sensor": { "name": "sensor", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Sensor friendly name, URL-encoded" },
+      "day": { "name": "day", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/Day" } }
+    }
+  },
+  "security": [{ "bearer": [] }],
+  "paths": {
+    "/health": {
+      "get": { "security": [], "summary": "Liveness check, no token", "responses": { "200": { "description": "{\"status\":\"ok\"}" } } }
+    },
+    "/api/status": {
+      "get": { "summary": "Heat demand, holiday, server time", "responses": { "200": { "description": "status", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Status" } } } } } }
+    },
+    "/api/rooms": {
+      "get": { "summary": "List rooms", "responses": { "200": { "description": "rooms", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Room" } } } } } } },
+      "post": {
+        "summary": "Create a room (grouped, schedule mode, default schedule)",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["name"], "properties": { "name": { "type": "string" } } } } } },
+        "responses": { "201": { "$ref": "#/components/responses/Room" }, "400": { "$ref": "#/components/responses/BadRequest" }, "409": { "$ref": "#/components/responses/Conflict" } }
+      }
+    },
+    "/api/rooms/{id}": {
+      "parameters": [{ "$ref": "#/components/parameters/roomId" }],
+      "get": { "summary": "Get a room", "responses": { "200": { "$ref": "#/components/responses/Room" }, "404": { "$ref": "#/components/responses/NotFound" } } },
+      "patch": {
+        "summary": "Rename, switch control, or toggle smart temperature control",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": {
+          "name": { "type": "string" },
+          "control": { "$ref": "#/components/schemas/Control" },
+          "sourceValve": { "type": "string", "description": "Required when switching independent -> grouped" },
+          "smartTemperatureControl": { "type": "boolean" }
+        } } } } },
+        "responses": { "200": { "$ref": "#/components/responses/Room" }, "400": { "$ref": "#/components/responses/BadRequest" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "$ref": "#/components/responses/Conflict" } }
+      },
+      "delete": { "summary": "Delete room; its valves become unassigned and off", "responses": { "204": { "description": "deleted" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/api/rooms/{id}/valves/{valve}": {
+      "parameters": [{ "$ref": "#/components/parameters/roomId" }, { "$ref": "#/components/parameters/valve" }],
+      "put": { "summary": "Assign a valve to the room", "responses": { "200": { "$ref": "#/components/responses/Room" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "$ref": "#/components/responses/Conflict" } } },
+      "delete": { "summary": "Remove a valve from the room (valve turns off)", "responses": { "200": { "$ref": "#/components/responses/Room" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/api/rooms/{id}/plugs": {
+      "parameters": [{ "$ref": "#/components/parameters/roomId" }],
+      "get": { "summary": "The room's monitored plugs with power now and use and cost today, the room's sum above them (admin only)", "responses": { "200": { "description": "room plugs", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RoomPlugs" } } } }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/api/rooms/{id}/plugs/history": {
+      "parameters": [{ "$ref": "#/components/parameters/roomId" }, { "name": "range", "in": "query", "required": false, "schema": { "type": "string", "enum": ["24h", "7d", "30d"], "default": "24h" }, "description": "24h: one bar per hour; 7d and 30d: one bar per day from the household's midnight" }],
+      "get": { "summary": "The room's electricity use over time as bars, from the plug use recorded in it (admin only); no points when it has no plug use in the range", "responses": { "200": { "description": "room energy history", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RoomEnergyHistory" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/api/rooms/{id}/meters/{meter}": {
+      "parameters": [{ "$ref": "#/components/parameters/roomId" }, { "name": "meter", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Meter friendly name, URL-encoded" }],
+      "put": { "summary": "Put a monitored device in the room, taking it out of any other; a room holds any number of devices (admin only); 409 if the device is not monitored", "responses": { "200": { "description": "meter", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Meter" } } } }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "$ref": "#/components/responses/Conflict" } } },
+      "delete": { "summary": "Take a device out of the room; it stays monitored (admin only); 404 if it is not in this room", "responses": { "204": { "description": "taken out of the room" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/api/zones/{zoneId}/mode": {
+      "parameters": [{ "$ref": "#/components/parameters/zoneId" }],
+      "put": {
+        "summary": "Set mode; manual takes a target (5.0-30.0, rounded to 0.5)",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["mode"], "properties": {
+          "mode": { "$ref": "#/components/schemas/Mode" },
+          "target": { "type": "number", "description": "Manual target; required for manual unless already set" }
+        } } } } },
+        "responses": { "200": { "$ref": "#/components/responses/Room" }, "400": { "$ref": "#/components/responses/BadRequest" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/api/zones/{zoneId}/boost": {
+      "parameters": [{ "$ref": "#/components/parameters/zoneId" }],
+      "post": {
+        "summary": "Boost for 30-180 minutes in 30-minute steps",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["minutes"], "properties": {
+          "target": { "type": "number", "description": "Defaults to the household's BoostSettings.defaultTarget (22.0 on a new install)" },
+          "minutes": { "type": "integer", "enum": [30, 60, 90, 120, 150, 180] }
+        } } } } },
+        "responses": { "200": { "$ref": "#/components/responses/Room" }, "400": { "$ref": "#/components/responses/BadRequest" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "description": "cannot boost during a holiday", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } } }
+      },
+      "delete": { "summary": "Cancel boost", "responses": { "200": { "$ref": "#/components/responses/Room" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/api/zones/{zoneId}/schedule": {
+      "parameters": [{ "$ref": "#/components/parameters/zoneId" }],
+      "get": { "summary": "Week schedule", "responses": { "200": { "description": "schedule", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/WeekSchedule" } } } }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/api/zones/{zoneId}/schedule/{day}": {
+      "parameters": [{ "$ref": "#/components/parameters/zoneId" }, { "$ref": "#/components/parameters/day" }],
+      "put": {
+        "summary": "Replace one day",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DaySchedule" } } } },
+        "responses": { "200": { "description": "schedule", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/WeekSchedule" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/api/zones/{zoneId}/schedule/copy": {
+      "parameters": [{ "$ref": "#/components/parameters/zoneId" }],
+      "post": {
+        "summary": "Copy one day to other days",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["from", "to"], "properties": {
+          "from": { "$ref": "#/components/schemas/Day" },
+          "to": { "type": "array", "items": { "$ref": "#/components/schemas/Day" } }
+        } } } } },
+        "responses": { "200": { "description": "schedule", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/WeekSchedule" } } } }, "400": { "$ref": "#/components/responses/BadRequest" } }
+      }
+    },
+    "/api/holiday": {
+      "put": {
+        "summary": "Start (or schedule) a holiday",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["until"], "properties": {
+          "from": { "type": "string", "format": "date-time", "description": "Omit to start now" },
+          "until": { "type": "string", "format": "date-time" },
+          "target": { "type": "number", "default": 12.0 }
+        } } } } },
+        "responses": { "200": { "description": "status", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Status" } } } }, "400": { "$ref": "#/components/responses/BadRequest" } }
+      },
+      "delete": { "summary": "End holiday now", "responses": { "200": { "description": "status", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Status" } } } } } }
+    },
+    "/api/valves": {
+      "get": {
+        "summary": "List valves",
+        "parameters": [{ "name": "unassigned", "in": "query", "schema": { "type": "boolean" } }],
+        "responses": { "200": { "description": "valves", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Valve" } } } } } }
+      }
+    },
+    "/api/valves/{valve}": {
+      "parameters": [{ "$ref": "#/components/parameters/valve" }],
+      "patch": {
+        "summary": "Valve settings",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": {
+          "openWindow": { "type": "boolean" },
+          "childLock": { "type": "boolean" }
+        } } } } },
+        "responses": { "200": { "description": "valve", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Valve" } } } }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/api/house": {
+      "post": {
+        "summary": "Whole house: every room with valves to one mode (manual needs a target), or boost every room. Back to schedule also cancels boosts and knob overrides",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": {
+          "mode": { "$ref": "#/components/schemas/Mode" },
+          "target": { "type": "number", "description": "Manual target, or boost target (default BoostSettings.defaultTarget)" },
+          "boost": { "type": "integer", "enum": [30, 60, 90, 120, 150, 180], "description": "Boost minutes; send this or mode, not both" }
+        } } } } },
+        "responses": { "200": { "description": "every room", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Room" } } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "409": { "description": "boost during a holiday" } }
+      }
+    },
+    "/api/house/boost": {
+      "delete": {
+        "summary": "Cancel every boost",
+        "responses": { "200": { "description": "every room", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Room" } } } } } }
+      }
+    },
+    "/api/groups": {
+      "get": {
+        "summary": "List groups",
+        "responses": { "200": { "description": "groups", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Group" } } } } } }
+      },
+      "post": {
+        "summary": "Create a group of rooms (name required)",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": {
+          "name": { "type": "string" },
+          "rooms": { "type": "array", "items": { "type": "string" }, "description": "Room ids" }
+        } } } } },
+        "responses": { "201": { "description": "The group", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Group" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "409": { "$ref": "#/components/responses/Conflict" } }
+      }
+    },
+    "/api/groups/{id}": {
+      "parameters": [{ "$ref": "#/components/parameters/groupId" }],
+      "patch": {
+        "summary": "Rename a group and/or replace its rooms",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": {
+          "name": { "type": "string" },
+          "rooms": { "type": "array", "items": { "type": "string" }, "description": "Room ids" }
+        } } } } },
+        "responses": { "200": { "description": "The group", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Group" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "$ref": "#/components/responses/Conflict" } }
+      },
+      "delete": {
+        "summary": "Delete a group; its rooms are untouched",
+        "responses": { "204": { "description": "deleted" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/api/groups/{id}/control": {
+      "parameters": [{ "$ref": "#/components/parameters/groupId" }],
+      "post": {
+        "summary": "Same body and rules as /api/house, applied only to the group's rooms",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": {
+          "mode": { "$ref": "#/components/schemas/Mode" },
+          "target": { "type": "number", "description": "Manual target, or boost target (default BoostSettings.defaultTarget)" },
+          "boost": { "type": "integer", "enum": [30, 60, 90, 120, 150, 180], "description": "Boost minutes; send this or mode, not both" }
+        } } } } },
+        "responses": { "200": { "description": "The group", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Group" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "description": "boost during a holiday" } }
+      }
+    },
+    "/api/groups/{id}/boost": {
+      "parameters": [{ "$ref": "#/components/parameters/groupId" }],
+      "delete": {
+        "summary": "Cancel every boost in the group's rooms",
+        "responses": { "200": { "description": "The group", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Group" } } } }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/api/sensors": {
+      "get": {
+        "summary": "List temperature sensors (Zigbee2MQTT devices other than TRVZB that expose temperature)",
+        "parameters": [{ "name": "unassigned", "in": "query", "schema": { "type": "boolean" } }],
+        "responses": { "200": { "description": "sensors", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Sensor" } } } } } }
+      }
+    },
+    "/api/rooms/{id}/sensor/{sensor}": {
+      "parameters": [{ "$ref": "#/components/parameters/roomId" }, { "$ref": "#/components/parameters/sensor" }],
+      "put": {
+        "summary": "Make this the room's sensor, replacing any previous one; the room's valves switch to it",
+        "responses": { "200": { "$ref": "#/components/responses/Room" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "$ref": "#/components/responses/Conflict" } }
+      },
+      "delete": {
+        "summary": "Remove the room's sensor; its valves go back to their internal sensor",
+        "responses": { "200": { "$ref": "#/components/responses/Room" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/api/settings/energy": {
+      "get": { "summary": "Energy prices and the house electricity meter (admin only)", "responses": { "200": { "description": "settings", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EnergySettings" } } } } } },
+      "put": {
+        "summary": "Change any of the prices or the meter; fields left out are unchanged (admin only)",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EnergySettings" } } } },
+        "responses": { "200": { "description": "settings", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EnergySettings" } } } }, "400": { "$ref": "#/components/responses/BadRequest" } }
+      }
+    },
+    "/api/settings/boost": {
+      "get": { "summary": "The household's default boost temperature (any signed-in user)", "responses": { "200": { "description": "settings", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BoostSettings" } } } } } },
+      "put": {
+        "summary": "Change the default boost temperature (admin only)",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BoostSettings" } } } },
+        "responses": { "200": { "description": "settings", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BoostSettings" } } } }, "400": { "$ref": "#/components/responses/BadRequest" } }
+      }
+    },
+    "/api/meters": {
+      "get": {
+        "summary": "Electricity meters from the Zigbee2MQTT bridge device list (admin only); unassigned=true leaves out the house meter",
+        "parameters": [{ "name": "unassigned", "in": "query", "schema": { "type": "boolean" } }],
+        "responses": { "200": { "description": "meters", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Meter" } } } } } }
+      }
+    },
+    "/api/meters/{meter}/house": {
+      "parameters": [{ "name": "meter", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Meter friendly name, URL-encoded" }],
+      "put": { "summary": "Make this the house electricity meter, replacing any other (admin only)", "responses": { "200": { "description": "settings", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EnergySettings" } } } }, "404": { "$ref": "#/components/responses/NotFound" } } },
+      "delete": { "summary": "Stop using this meter for the house (admin only); 404 if it is not the house meter", "responses": { "200": { "description": "settings", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EnergySettings" } } } }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/api/meters/{meter}/monitored": {
+      "parameters": [{ "name": "meter", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Meter friendly name, URL-encoded" }],
+      "put": { "summary": "Monitor a device's use, such as a smart plug: it is part of the house meter's, never added to it, and it leaves the unassigned meter list (admin only); 409 for the house meter, 422 for a device with no energy counter", "responses": { "200": { "description": "meter", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Meter" } } } }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "$ref": "#/components/responses/Conflict" }, "422": { "description": "This device does not report energy", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } } } },
+      "delete": { "summary": "Stop monitoring this device (admin only); 404 if it is not monitored", "responses": { "204": { "description": "no longer monitored" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/api/devices/ignored": {
+      "get": { "summary": "Names of the devices an admin ignored, sorted (admin only)", "responses": { "200": { "description": "names", "content": { "application/json": { "schema": { "type": "array", "items": { "type": "string" } } } } } } }
+    },
+    "/api/devices/{device}/ignored": {
+      "parameters": [{ "name": "device", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Valve, sensor or meter friendly name, URL-encoded" }],
+      "put": { "summary": "Ignore a device that needs no setting up: it is left out of the unassigned valve, sensor and meter lists, and stays ignored after a restart (admin only)", "responses": { "204": { "description": "ignored" }, "404": { "$ref": "#/components/responses/NotFound" } } },
+      "delete": { "summary": "Show an ignored device again: it is waiting to be set up (admin only); 404 if it is not ignored", "responses": { "204": { "description": "shown again" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/api/dashboard": {
+      "get": {
+        "summary": "Gas (estimated from boiler hours) and electricity use and cost, standing charges and a day list for today, the last 7 or the last 30 days (admin only)",
+        "parameters": [{ "name": "period", "in": "query", "required": false, "schema": { "type": "string", "enum": ["today", "yesterday", "week", "month"], "default": "today" }, "description": "yesterday runs from midnight to midnight; the others run up to now" }],
+        "responses": { "200": { "description": "dashboard", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EnergyDashboard" } } } }, "400": { "$ref": "#/components/responses/BadRequest" } }
+      }
+    },
+    "/api/history": {
+      "get": {
+        "summary": "Room temperatures, the whole-house median and boiler states over the last 24h (5-minute points), 7d (30-minute averages) or 30d (2-hour averages). Members get only the rooms they can see, with no whole-house median and no boiler states (both empty); so does anyone asking for one room",
+        "parameters": [
+          { "name": "range", "in": "query", "required": false, "schema": { "type": "string", "enum": ["24h", "7d", "30d"], "default": "24h" } },
+          { "name": "room", "in": "query", "required": false, "description": "Only this room's history; 404 for a room the caller cannot see", "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "history", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/History" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/api/auth/status": {
+      "get": {
+        "security": [],
+        "summary": "Whether first-run setup is needed (no users yet)",
+        "responses": { "200": { "description": "{\"setupRequired\":bool}", "content": { "application/json": { "schema": { "type": "object", "properties": { "setupRequired": { "type": "boolean" } } } } } } }
+      }
+    },
+    "/api/auth/setup": {
+      "post": {
+        "security": [],
+        "summary": "Create the first admin. Needs the service token; only while no users exist",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["serviceToken", "username", "password"], "properties": {
+          "serviceToken": { "type": "string" },
+          "username": { "type": "string", "pattern": "^[A-Za-z0-9 ._-]{1,32}$" },
+          "password": { "type": "string", "minLength": 10, "maxLength": 256 }
+        } } } } },
+        "responses": { "201": { "description": "session", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Session" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "description": "wrong service token" }, "409": { "description": "setup already done" } }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "security": [],
+        "summary": "Sign in. Throttled per username (5th failure locks 1 min, doubling to 1 h) and per address (20 failures)",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["username", "password"], "properties": {
+          "username": { "type": "string", "description": "Case-insensitive" },
+          "password": { "type": "string" }
+        } } } } },
+        "responses": { "200": { "description": "session", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Session" } } } }, "401": { "description": "{\"error\":\"wrong username or password\"}" }, "429": { "description": "locked; the Retry-After header gives seconds" } }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "summary": "The signed-in caller",
+        "responses": { "200": { "description": "user", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/User" } } } } }
+      }
+    },
+    "/api/auth/password": {
+      "post": {
+        "summary": "Change own password. Ends the caller's other sessions and returns a fresh token for this one",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["current", "new"], "properties": {
+          "current": { "type": "string" },
+          "new": { "type": "string", "minLength": 10, "maxLength": 256 }
+        } } } } },
+        "responses": { "200": { "description": "session", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Session" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "description": "wrong current password" } }
+      }
+    },
+    "/api/auth/logout-all": {
+      "post": {
+        "summary": "End every session of the caller",
+        "responses": { "204": { "description": "done" } }
+      }
+    },
+    "/api/admin/users": {
+      "get": {
+        "summary": "List users (admin only)",
+        "responses": { "200": { "description": "users", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/User" } } } } }, "403": { "description": "not an admin" } }
+      },
+      "post": {
+        "summary": "Create a user (admin only)",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["username", "password"], "properties": {
+          "username": { "type": "string", "pattern": "^[A-Za-z0-9 ._-]{1,32}$" },
+          "password": { "type": "string", "minLength": 10, "maxLength": 256 },
+          "admin": { "type": "boolean", "default": false }
+        } } } } },
+        "responses": { "201": { "description": "user", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/User" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "403": { "description": "not an admin" }, "409": { "description": "username taken" } }
+      }
+    },
+    "/api/admin/users/{id}": {
+      "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+      "patch": {
+        "summary": "Reset password and/or set admin (admin only). A new password ends that user's sessions",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": {
+          "password": { "type": "string", "minLength": 10, "maxLength": 256 },
+          "admin": { "type": "boolean" }
+        } } } } },
+        "responses": { "200": { "description": "user", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/User" } } } }, "403": { "description": "not an admin" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "description": "cannot demote the last admin" } }
+      },
+      "delete": {
+        "summary": "Delete a user and end their sessions (admin only)",
+        "responses": { "204": { "description": "deleted" }, "403": { "description": "not an admin" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "description": "cannot delete the last admin" } }
+      }
+    },
+    "/api/admin/users/{id}/rooms": {
+      "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+      "put": {
+        "summary": "Set the rooms a member can see (admin only). Replaces the whole list; an empty list takes every room away",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["rooms"], "properties": {
+          "rooms": { "type": "array", "items": { "type": "string" }, "description": "Room ids" }
+        } } } } },
+        "responses": { "200": { "description": "user", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/User" } } } }, "400": { "description": "unknown room id" }, "403": { "description": "not an admin" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "description": "the user is an admin and sees every room" } }
+      }
+    }
+  }
+}

@@ -1,0 +1,38 @@
+# poppins.yml — Framework configuration
+# BDD.md defines WHAT to build. This file defines HOW to build it.
+
+orchestration:
+  # Parallel worker agents (each gets its own worktree). LM Studio must allow this many
+  # concurrent predictions, each with >= 64k context (hermes minimum).
+  max_parallel_agents: 4
+  max_rounds: 30
+  # One scenario per feature per round so parallel agents do not collide
+  spread_features: true
+  provider: custom   # endpoint from CUSTOM_BASE_URL in .env (gitignored)
+  model_orchestrator: gemma-4-26b-a4b-it
+
+agent:
+  # hermes-agent runs each session; endpoint comes from ~/.hermes/config.yaml providers.local-llm
+  harness: hermes
+  hermes_provider: local-llm
+  hermes_reasoning: none          # Gemma thinking stalls 10+ min per turn
+  hermes_toolsets: file,terminal,todo
+  provider: custom   # endpoint from CUSTOM_BASE_URL in .env (gitignored)
+  default_model: gemma-4-26b-a4b-it
+
+  max_iterations: 75
+  wrap_up_at: 70
+  max_tokens_per_response: 8192
+  tool_output_limit: 12000
+  session_timeout: 3600
+  context_window_limit: 60000
+
+  protected_paths:
+    - .github/
+    - IDENTITY.md
+    - BDD.md
+    - CONTEXT.md
+    - src/main/resources/openapi.json
+    - scripts/
+    - src/test/kotlin/heating/testing/
+    - android/
