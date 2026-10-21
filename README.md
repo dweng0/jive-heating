@@ -44,6 +44,31 @@ subscription.
 - **Activity feed** of who changed what, and when
 - **Live updates** over WebSocket; SQLite storage that survives restarts
 
+## Screenshots
+
+**Web app**
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/web-rooms.png" alt="Rooms: whole-house boost, groups and a card per room"><br><sub><b>Rooms.</b> Whole-house boost, groups, and a live card per room.</sub></td>
+    <td width="50%"><img src="docs/screenshots/web-dashboard.png" alt="Dashboard: temperature history for every room, boiler runs and energy costs"><br><sub><b>Dashboard.</b> Every room's temperature, when the boiler ran, and what it cost.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/web-room-schedule.png" alt="A room with its target dial, weekly schedule and history"><br><sub><b>A room.</b> Target dial, boost, a weekly schedule and history.</sub></td>
+    <td width="50%"><img src="docs/screenshots/web-room-electricity.png" alt="Room settings: valves, temperature sensor, monitored plugs and electricity use"><br><sub><b>Room settings.</b> Valves, a room thermometer, monitored plugs and electricity use.</sub></td>
+  </tr>
+</table>
+
+**Android app**
+
+<table>
+  <tr>
+    <td width="33%"><img src="docs/screenshots/mobile-rooms.png" alt="Android: rooms"><br><sub><b>Rooms</b></sub></td>
+    <td width="33%"><img src="docs/screenshots/mobile-room.png" alt="Android: a room's target dial and boost"><br><sub><b>A room</b></sub></td>
+    <td width="33%"><img src="docs/screenshots/mobile-charts.png" alt="Android: charts and the holiday sheet"><br><sub><b>Charts and holiday mode</b></sub></td>
+  </tr>
+</table>
+
 ## What you need
 
 | | |
@@ -53,6 +78,22 @@ subscription.
 | [Zigbee2MQTT](https://www.zigbee2mqtt.io) | With a Zigbee coordinator, and your TRVZB valves paired |
 | [Home Assistant](https://www.home-assistant.io) | Only to switch the boiler. It listens for the demand message and sets your thermostat |
 | An Android 13+ phone | Optional. The web app works on any phone or computer |
+
+## Zigbee and MQTT compatibility
+
+Jive Heating talks to your valves through **[Zigbee2MQTT](https://www.zigbee2mqtt.io)** over MQTT, and
+that is the only setup it has been tried with.
+
+- **How it finds your devices:** it connects to the broker in `MQTT_URL`, reads the device list that
+  Zigbee2MQTT publishes on `<Z2M_BASE_TOPIC>/bridge/devices`, and picks out the TRVZB valves, temperature
+  sensors and energy-metering plugs. If your Zigbee2MQTT uses a different base topic, set `Z2M_BASE_TOPIC`.
+- **ZHA is not supported.** ZHA runs inside Home Assistant and does not use MQTT, so there is nothing for
+  Jive Heating to subscribe to. Moving to Zigbee2MQTT is the way to use it. Supporting ZHA would need a
+  separate Home Assistant adapter, which doesn't exist yet.
+- **Valve friendly names** must not contain `/`.
+- **Current limitation:** the service connects to the broker without a username or password, so the
+  broker needs a listener that allows that (for example one bound to your LAN or a Docker network).
+  MQTT credentials are not configurable yet.
 
 ## Quick start
 
