@@ -1602,9 +1602,17 @@ Engineering rules (apply to every scenario):
 
         Scenario: The house meter is recorded every five minutes
             Given "Main Clamp" is the house meter
-            When it reports energy 1523.4, then 1523.9 five minutes later
-            Then history records 0.5 kWh for that five minutes
-            And when its counter drops to 0.2 (a reset), the next reading counts on from 0.2 instead of going negative
+            When it reports 1200 W for five minutes
+            Then history records 0.1 kWh and an average of 1200 W for that five minutes
+            And its energy total is not used: some clamps' totals jump up and down, which undercounts the house
+
+        Scenario: The house meter's use is counted from its power
+            Given "Main Clamp" is the house meter
+            When it reports 600 W, then 1800 W two and a half minutes later, while its energy total goes 0.56, 0.25, 0.17
+            Then the five minutes record 0.1 kWh: each power reading holds until the next one
+            And a gap of 30 minutes or more with no reading is unknown, never counted at the last power
+            And after a restart the house is counted again from the first reading, without a jump
+            And samples recorded before this change keep their kWh: past costs are not recalculated
 
         Scenario: A meter that stops reporting is shown as stale, not as zero use
             Given "Main Clamp" is the house meter and last reported 40 minutes ago
@@ -2059,7 +2067,7 @@ Engineering rules (apply to every scenario):
             And it does not swing past 3000 W first
 
         Scenario: The dial colours follow the household's own use
-            Given the last 7 days of house readings
+            Given the last 7 days of house readings (the five-minute average power of each sample)
             Then green runs up to the typical overnight load (the median from 00:00 to 05:00)
             And red starts at the 90th percentile of all readings
             And amber is between
@@ -2088,6 +2096,11 @@ Engineering rules (apply to every scenario):
             And it shows the live dial first, then the energy totals for today, week or month
             And the Dashboard shows only heating
             And members have no Energy tab
+
+        Scenario: The dial colours come only from recorded power
+            Given house samples recorded before their average power was kept
+            Then they are not used for the dial's colours
+            And the dial is one neutral colour until a day of samples with average power is recorded
 
 # Deferred (not to be built yet)
 # - Mirror schedules to the valve weekly_schedule as a fallback when the service is down
