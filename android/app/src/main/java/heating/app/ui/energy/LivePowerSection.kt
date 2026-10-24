@@ -37,6 +37,8 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -143,8 +145,8 @@ private fun DrawScope.arc(color: Color, from: Float, to: Float, r: Float, width:
 @Composable
 private fun PowerDial(watts: Double?, bands: PowerBands?, connected: Boolean, dark: Boolean) {
     // The scale only grows while the screen is open, so a big reading does not shrink everything after it.
-    var max by remember { mutableStateOf(dialMax(bands, watts)) }
-    val wanted = dialMax(bands, watts)
+    var max by remember { mutableStateOf(dialMax(watts)) }
+    val wanted = dialMax(watts)
     if (wanted > max) max = wanted
 
     val needle = remember { Animatable((watts ?: 0.0).toFloat()) }
@@ -154,13 +156,23 @@ private fun PowerDial(watts: Double?, bands: PowerBands?, connected: Boolean, da
     val color by animateColorAsState(zone?.let { zoneColor(it, dark) } ?: MaterialTheme.colorScheme.outline, tween(700), label = "dial colour")
     val track = MaterialTheme.colorScheme.surfaceVariant
     val ink = MaterialTheme.colorScheme.onSurface
+    val tickColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val tickPaint = remember(tickColor, density) {
+        android.graphics.Paint().apply {
+            isAntiAlias = true
+            textAlign = android.graphics.Paint.Align.CENTER
+            textSize = with(density) { 11.dp.toPx() }
+            this.color = tickColor.toArgb()
+        }
+    }
     val needleAlpha by animateFloatAsState(if (watts == null) 0.3f else 1f, label = "needle")
     val label = when {
         watts != null -> dialReading(shown)
         connected -> "No reading"
         else -> "Connecting…"
     }
-    fun angle(w: Double) = START + SWEEP * (w.coerceIn(0.0, max) / max).toFloat()
+    fun angle(w: Double) = START + SWEEP * dialFraction(w, max).toFloat()
 
     Box(Modifier.widthIn(max = 320.dp).fillMaxWidth().aspectRatio(1f).semantics { contentDescription = "Electricity now: $label" }, contentAlignment = Alignment.Center) {
         Canvas(Modifier.fillMaxWidth().aspectRatio(1f)) {
@@ -175,6 +187,10 @@ private fun PowerDial(watts: Double?, bands: PowerBands?, connected: Boolean, da
                 arc(zoneColor(PowerZone.HIGH, dark), angle(b.red), START + SWEEP, outer, thin, StrokeCap.Butt)
             }
             if (watts != null && shown > 0) arc(color, START, maxOf(START + 0.5f, angle(shown)), r, thick, StrokeCap.Round)
+            dialTicks(max).forEach { t ->
+                val a = point(angle(t), r * 0.72f)
+                drawContext.canvas.nativeCanvas.drawText(tickLabel(t), a.x, a.y + tickPaint.textSize / 3, tickPaint)
+            }
             val tip = point(angle(shown), r * 0.8f)
             drawLine(ink.copy(alpha = needleAlpha), center, tip, strokeWidth = size.minDimension * 0.013f, cap = StrokeCap.Round)
             drawCircle(ink, radius = size.minDimension * 0.028f, center = center)

@@ -1,6 +1,6 @@
 # BDD Status
 
-Checked 321 scenario(s) across 87 test file(s).
+Checked 322 scenario(s) across 87 test file(s).
 
 
 ## Feature: Service foundation
@@ -424,7 +424,8 @@ Checked 321 scenario(s) across 87 test file(s).
 - [x] Room cards show live and daily use
 - [x] Everything else is the unattributed remainder
 - [x] Energy has its own tab
+- [x] The dial's scale fits the household's biggest appliances
 - [x] The dial colours come only from recorded power
 
 ---
-**321/321 scenarios covered.**
+**322/322 scenarios covered.**

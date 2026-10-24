@@ -235,3 +235,23 @@ test('members have no energy tab', async ({ page }) => {
   await page.goto('/energy')
   await expect(page).toHaveURL(/\/$/)
 })
+
+// BDD: The dial's scale fits the household's biggest appliances
+test('the dial runs to 8 kW on a square-root scale', async ({ page }) => {
+  const { push } = await serve(page, { first: live(500) })
+  await page.goto('/energy')
+  const dial = page.getByTestId('power-dial')
+  await expect(dial).toHaveAttribute('data-max', '8000')
+  await expect(dial.getByTestId('dial-tick')).toHaveText(['0', '0.5', '1', '2', '4', '6', '8'])
+  await expect.poll(() => shown(page)).toBe(500)
+  await expect(dial).toHaveAttribute('data-fraction', '0.250')
+  push(live(2000))
+  await expect(dial).toHaveAttribute('data-fraction', '0.500')
+  push(live(7000))
+  await expect.poll(() => shown(page)).toBe(7000)
+  await expect(dial).toHaveAttribute('data-max', '8000')
+  // Above 8 kW the scale grows instead of pinning the needle.
+  push(live(9000))
+  await expect(dial).toHaveAttribute('data-max', '10000')
+  await expect(dial.getByTestId('dial-tick').last()).toHaveText('10')
+})

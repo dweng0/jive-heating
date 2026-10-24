@@ -10,6 +10,7 @@ import java.util.Locale
 import kotlin.math.ceil
 import kotlin.math.pow
 import kotlin.math.roundToInt
+import kotlin.math.sqrt
 
 /** Below the overnight load, normal, the household's top tenth, and no bands yet (under a day of readings). */
 enum class PowerZone { LOW, MID, HIGH, NEUTRAL }
@@ -34,11 +35,19 @@ fun sweep(from: Double, to: Double, elapsedMs: Double): Double {
     return from + (to - from) * (1 - (1 - t).pow(3))
 }
 
-/** The dial's full scale: a whole kW, well above the household's red band and what it shows now. */
-fun dialMax(bands: PowerBands?, watts: Double?): Double {
-    val wanted = maxOf(3000.0, (bands?.red ?: 0.0) * 1.25, (watts ?: 0.0) * 1.1)
-    return ceil(wanted / 1000) * 1000
-}
+/** The dial's full scale: 8 kW, room for an oven, shower or tumble dryer; above that, the next whole 2 kW. */
+fun dialMax(watts: Double?): Double = maxOf(DIAL_MAX, ceil((watts ?: 0.0) / 2000) * 2000)
+
+private const val DIAL_MAX = 8000.0
+
+/** How far round the dial [watts] is (0..1): a square-root scale, so 500 W is a quarter of the way and low use still moves. */
+fun dialFraction(watts: Double, max: Double): Double = sqrt(watts.coerceIn(0.0, max) / max)
+
+/** The dial's marks: 0, 0.5, 1, 2 kW, then every 2 kW to [max]. */
+fun dialTicks(max: Double): List<Double> = listOf(0.0, 500.0, 1000.0) + (2000..max.toInt() step 2000).map { it.toDouble() }
+
+/** A mark's label in kW: "0", "0.5", "8". */
+fun tickLabel(watts: Double): String = if (watts % 1000 == 0.0) "${(watts / 1000).toInt()}" else String.format(Locale.UK, "%.1f", watts / 1000)
 
 /** The big number on the dial: "850 W", "2.35 kW"; "No reading" while the house reading is stale. */
 fun dialReading(watts: Double?): String = when {

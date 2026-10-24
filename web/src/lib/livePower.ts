@@ -107,10 +107,23 @@ export function sweep(from: number, to: number, elapsed: number): number {
   return from + (to - from) * eased
 }
 
-/** The dial's full scale: a whole kW, well above the household's red band and what it shows now. */
-export function dialMax(bands: PowerBands | null, watts: number | null): number {
-  const wanted = Math.max(3000, (bands?.red ?? 0) * 1.25, (watts ?? 0) * 1.1)
-  return Math.ceil(wanted / 1000) * 1000
+const DIAL_MAX = 8000
+
+/** The dial's full scale: 8 kW, room for an oven, shower or tumble dryer; above that, the next whole 2 kW. */
+export function dialMax(watts: number | null): number {
+  return Math.max(DIAL_MAX, Math.ceil((watts ?? 0) / 2000) * 2000)
+}
+
+/** How far round the dial [watts] is (0..1): a square-root scale, so 500 W is a quarter of the way and low use still moves. */
+export function dialFraction(watts: number, max: number): number {
+  return Math.sqrt(Math.min(max, Math.max(0, watts)) / max)
+}
+
+/** The dial's marks: 0, 0.5, 1, 2 kW, then every 2 kW to [max]. */
+export function dialTicks(max: number): number[] {
+  const ticks = [0, 500, 1000]
+  for (let w = 2000; w <= max; w += 2000) ticks.push(w)
+  return ticks
 }
 
 /** "850 W" below a kilowatt, "5.45 kW" from one. */

@@ -55,10 +55,6 @@ class LivePowerFormatTest {
         // Under a day of readings: one neutral colour.
         assertEquals(PowerZone.NEUTRAL, powerZone(300.0, null))
         assertEquals(PowerZone.NEUTRAL, powerZone(4500.0, null))
-        // The scale is a whole kW well above the red band and the reading.
-        assertEquals(5000.0, dialMax(bands, 2000.0))
-        assertEquals(3000.0, dialMax(null, 500.0))
-        assertEquals(9000.0, dialMax(null, 8000.0))
     }
 
     // BDD: The dial shows today's use
@@ -107,5 +103,25 @@ class LivePowerFormatTest {
         assertEquals("–", cards.first().now)
         assertEquals(null, cards.first().share)
         assertEquals("", cards.first().shareText)
+    }
+
+    // BDD: The dial's scale fits the household's biggest appliances
+    @Test
+    fun theDialRunsTo8KwOnASquareRootScale() {
+        assertEquals(8000.0, dialMax(500.0))
+        assertEquals(8000.0, dialMax(null))
+        assertEquals(8000.0, dialMax(8000.0))
+        // Above 8 kW the scale grows in whole 2 kW steps.
+        assertEquals(10000.0, dialMax(8100.0))
+        assertEquals(12000.0, dialMax(11000.0))
+        assertEquals(listOf(0.0, 500.0, 1000.0, 2000.0, 4000.0, 6000.0, 8000.0), dialTicks(8000.0))
+        assertEquals(listOf(0.0, 500.0, 1000.0, 2000.0, 4000.0, 6000.0, 8000.0, 10000.0), dialTicks(10000.0))
+        assertEquals(listOf("0", "0.5", "1", "2", "4", "6", "8"), dialTicks(8000.0).map(::tickLabel))
+        assertEquals(0.25, dialFraction(500.0, 8000.0), 1e-9)
+        assertEquals(0.5, dialFraction(2000.0, 8000.0), 1e-9)
+        assertEquals(0.75, dialFraction(4500.0, 8000.0), 1e-9)
+        assertEquals(1.0, dialFraction(8000.0, 8000.0), 1e-9)
+        assertEquals(0.0, dialFraction(-5.0, 8000.0), 1e-9)
+        assertEquals(1.0, dialFraction(9000.0, 8000.0), 1e-9)
     }
 }

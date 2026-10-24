@@ -3,7 +3,9 @@ import { Card, CardContent } from '@/components/ui/card'
 import { energyApi, formatCost, formatKwh, type EnergyDashboard } from '@/lib/energy'
 import {
   SWEEP_MS,
+  dialFraction,
   dialMax,
+  dialTicks,
   followPower,
   formatWatts,
   powerApi,
@@ -165,18 +167,16 @@ export function LivePowerSection() {
 /** The gauge: a coloured arc up to the needle, the household's bands as a thin outer ring, big watts in the middle. */
 function PowerDial({ watts, bands, connected }: { watts: number | null; bands: PowerBands | null; connected: boolean }) {
   // The scale only grows while the page is open, so a big reading does not shrink everything after it.
-  const [max, setMax] = useState(() => dialMax(bands, watts))
-  const wanted = dialMax(bands, watts)
+  const [max, setMax] = useState(() => dialMax(watts))
+  const wanted = dialMax(watts)
   if (wanted > max) setMax(wanted)
 
   const shown = useSwept(watts ?? 0)
-  const angle = (w: number) => START + (SWEEP * Math.min(max, Math.max(0, w))) / max
+  const angle = (w: number) => START + SWEEP * dialFraction(w, max)
   const zone = watts == null ? null : powerZone(shown, bands)
   const color = zone ? ZONE_COLOR[zone] : 'var(--muted-foreground)'
   const tip = point(angle(shown), 64)
-  // A label per kW, or per 2 kW on a big scale.
-  const tickStep = max > 6000 ? 2000 : 1000
-  const ticks = Array.from({ length: max / tickStep + 1 }, (_, i) => i * tickStep)
+  const ticks = dialTicks(max)
   const label = watts == null ? (connected ? 'No reading' : 'Connecting…') : formatWatts(watts)
 
   return (
@@ -189,6 +189,8 @@ function PowerDial({ watts, bands, connected }: { watts: number | null; bands: P
         data-testid="power-dial"
         data-shown={shown.toFixed(1)}
         data-zone={zone ?? 'none'}
+        data-max={max}
+        data-fraction={dialFraction(shown, max).toFixed(3)}
       >
         <path d={arc(START, START + SWEEP, 80)} fill="none" stroke="var(--secondary)" strokeWidth="14" strokeLinecap="round" />
         {bands && (
@@ -204,7 +206,7 @@ function PowerDial({ watts, bands, connected }: { watts: number | null; bands: P
         {ticks.map((t) => {
           const a = point(angle(t), 66)
           return (
-            <text key={t} x={a.x} y={a.y} textAnchor="middle" dominantBaseline="middle" className="fill-muted-foreground text-[7px] tabular-nums">
+            <text key={t} data-testid="dial-tick" x={a.x} y={a.y} textAnchor="middle" dominantBaseline="middle" className="fill-muted-foreground text-[7px] tabular-nums">
               {t / 1000}
             </text>
           )
