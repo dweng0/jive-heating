@@ -3,7 +3,7 @@
   "info": {
     "title": "Home Heating API",
     "version": "1.0.0",
-    "description": "Contract between the heating service and the Android app. Both sides build against this document; change it only by agreement. All times are ISO-8601 with offset in the service's time zone. Temperatures are °C in 0.5 steps. Live updates: WebSocket /ws (bearer token) sends JSON messages of type LiveEvent. Room access: admins (and the service token) use every route. A member sees and controls only the rooms an admin gave them (User.rooms); any /api/rooms/{id} or /api/zones/{zoneId} route on another room answers 404. Members get 403 on /api/house, /api/groups, /api/dashboard, GET /api/status, /api/holiday, /api/valves, /api/sensors, /api/meters, /api/settings/energy, /api/admin, and on creating, renaming, deleting rooms or assigning valves and sensors."
+    "description": "Contract between the heating service and the Android app. Both sides build against this document; change it only by agreement. All times are ISO-8601 with offset in the service's time zone. Temperatures are °C in 0.5 steps. Live updates: WebSocket /ws (bearer token) sends JSON messages of type LiveEvent; WebSocket /ws/power (admins only) sends LivePower. Room access: admins (and the service token) use every route. A member sees and controls only the rooms an admin gave them (User.rooms); any /api/rooms/{id} or /api/zones/{zoneId} route on another room answers 404. Members get 403 on /api/house, /api/groups, /api/dashboard, GET /api/status, /api/holiday, /api/valves, /api/sensors, /api/meters, /api/settings/energy, /api/power, /ws/power, /api/admin, and on creating, renaming, deleting rooms or assigning valves and sensors."
   },
   "components": {
     "securitySchemes": { "bearer": { "type": "http", "scheme": "bearer", "description": "A session token from /api/auth/login or /api/auth/setup, or the HEATING_API_TOKEN service token (admin)." } },
@@ -374,6 +374,32 @@
           "boiler": { "type": "array", "description": "Boiler states overlapping from..to, oldest first", "items": { "$ref": "#/components/schemas/BoilerPeriod" } }
         }
       },
+      "PowerSummary": {
+        "description": "What the live power dial needs besides the live readings (GET /api/power).",
+        "type": "object", "required": ["recent"],
+        "properties": {
+          "bands": {
+            "type": "object", "nullable": true, "required": ["green", "red"],
+            "description": "Null with under a day of readings in the last 7 days: show one neutral colour",
+            "properties": {
+              "green": { "type": "number", "description": "W. Green up to here: the median house reading 00:00-05:00" },
+              "red": { "type": "number", "description": "W. Red from here: the 90th percentile of all house readings; amber between" }
+            }
+          },
+          "recent": { "type": "array", "description": "House readings of the last 30 minutes, oldest first", "items": { "type": "object", "required": ["at", "watts"], "properties": { "at": { "type": "string", "format": "date-time" }, "watts": { "type": "number", "nullable": true } } } }
+        }
+      },
+      "LivePower": {
+        "description": "Message on the WebSocket /ws/power (bearer token, admin only): one on connect and one on every house or monitored plug reading, plus one when the house reading goes stale.",
+        "type": "object", "required": ["rooms", "devices"],
+        "properties": {
+          "watts": { "type": "number", "nullable": true, "description": "House W; null with no reading in the last 2 minutes" },
+          "at": { "type": "string", "format": "date-time", "nullable": true, "description": "When the house meter was last read" },
+          "rooms": { "type": "array", "description": "Rooms with monitored plugs, by name", "items": { "type": "object", "required": ["room", "name", "watts"], "properties": { "room": { "type": "string" }, "name": { "type": "string" }, "watts": { "type": "number", "nullable": true, "description": "Sum of its plugs reporting now; null when none is" } } } },
+          "devices": { "type": "array", "description": "Monitored devices in no room", "items": { "type": "object", "required": ["meter", "watts"], "properties": { "meter": { "type": "string" }, "watts": { "type": "number", "nullable": true } } } },
+          "elseWatts": { "type": "number", "nullable": true, "description": "House W no room or device accounts for, never below 0; null while watts is" }
+        }
+      },
       "LiveEvent": {
         "description": "WebSocket message. room.updated carries the full Room; room.deleted carries roomId; status.updated carries Status; valve.updated carries Valve; groups.updated carries every Group; sensor.updated carries Sensor; access.updated (no payload) tells a user an admin changed their rooms or admin rights, so the app fetches /api/auth/me and /api/rooms again. Members get room.updated and room.deleted only for rooms they can see, and no status, valve, groups or sensor events.",
         "type": "object", "required": ["type"],
@@ -651,6 +677,14 @@
       "parameters": [{ "name": "device", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Valve, sensor or meter friendly name, URL-encoded" }],
       "put": { "summary": "Ignore a device that needs no setting up: it is left out of the unassigned valve, sensor and meter lists, and stays ignored after a restart (admin only)", "responses": { "204": { "description": "ignored" }, "404": { "$ref": "#/components/responses/NotFound" } } },
       "delete": { "summary": "Show an ignored device again: it is waiting to be set up (admin only); 404 if it is not ignored", "responses": { "204": { "description": "shown again" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/api/power": {
+      "get": {
+        "summary": "Colour bands and the last 30 minutes of house readings for the live power dial (admin only). Live readings stream on the WebSocket /ws/power as LivePower messages",
+        "responses": {
+          "200": { "description": "power summary", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PowerSummary" } } } }
+        }
+      }
     },
     "/api/dashboard": {
       "get": {

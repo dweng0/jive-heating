@@ -60,6 +60,11 @@
 }
 
 :root {
+    /* Live power dial: below the overnight load, normal, the household's top tenth, and no bands yet. */
+    --power-low: #1baf7a;
+    --power-mid: #eda100;
+    --power-high: #e34948;
+    --power-neutral: #2a78d6;
     /* Chart series: the validated categorical order (blue, orange, aqua, yellow, magenta, green, violet, red). */
     --series-1: #2a78d6;
     --series-2: #eb6834;
@@ -116,6 +121,10 @@
 }
 
 .dark {
+    --power-low: #199e70;
+    --power-mid: #c98500;
+    --power-high: #e66767;
+    --power-neutral: #3987e5;
     --series-1: #3987e5;
     --series-2: #d95926;
     --series-3: #199e70;

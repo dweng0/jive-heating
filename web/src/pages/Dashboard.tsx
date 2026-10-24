@@ -3,7 +3,6 @@ import { Flame, House, Info } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Skeleton } from '@/components/ui/skeleton'
-import { EnergySection } from '@/components/heating/EnergySection'
 import { HistoryChart, NoHistoryCard, RangePicker } from '@/components/heating/HistoryChart'
 import { RANGES, useHistory } from '@/lib/history'
 import type { History, HistoryRange } from '@/lib/api'
@@ -109,9 +108,6 @@ export function DashboardPage() {
           </Card>
         </>
       )}
-
-      {/* Below the temperature chart: what the heating and the house used and cost. */}
-      <EnergySection />
     </div>
   )
 }

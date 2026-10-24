@@ -285,7 +285,7 @@ class EnergyStoreTest {
         missingMinutes = if (incomplete) 120 else 0, incomplete = incomplete,
     )
 
-    // BDD: The Dashboard shows energy use and cost under the temperature chart
+    // BDD: The Energy tab shows energy use and cost
     @Test
     fun `the dashboard shows gas, electricity, standing charges and total with a bar per day`() = runTest {
         api.dashboards["today"] = EnergyDashboard(
@@ -318,7 +318,7 @@ class EnergyStoreTest {
         assertEquals("£48.44", energyLines(store.state.value.dashboard!!).last().cost)
     }
 
-    // BDD: The Dashboard shows each monitored device
+    // BDD: The Energy tab shows each monitored device
     @Test
     fun `the dashboard shows each monitored device under electricity`() {
         val d = EnergyDashboard(
@@ -377,7 +377,7 @@ class EnergyStoreTest {
         assertEquals(true, heater.tapToRead)
     }
 
-    // BDD: The Dashboard shows each room's electricity
+    // BDD: The Energy tab shows each room's electricity
     @Test
     fun `the dashboard shows each room's electricity under electricity`() {
         val d = EnergyDashboard(

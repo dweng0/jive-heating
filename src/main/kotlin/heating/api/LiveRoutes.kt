@@ -50,6 +50,7 @@ private fun HeatingApp.liveEvents(change: Change): List<LiveEvent> =
         }
         Change.StatusChanged -> listOf(LiveEvent("status.updated", status = statusView()))
         Change.GroupsChanged -> listOf(groupsEvent())
+        Change.LivePowerChanged -> emptyList()
         is Change.AccessChanged -> listOf(LiveEvent(ACCESS_UPDATED))
         is Change.ActivityAdded -> listOf(LiveEvent("activity.added", activity = change.activity.view(this)))
     }

@@ -166,6 +166,11 @@ class FakeHeatingApi : HeatingApi {
     override suspend fun patchValve(name: String, patch: PatchValveRequest): Valve { call("patchValve $name"); error("not used") }
     override fun liveEvents(): Flow<LiveEvent> = live.receiveAsFlow()
 
+    val power = Channel<LivePower>(Channel.UNLIMITED)
+    var summary = PowerSummary()
+    override suspend fun powerSummary(): PowerSummary { call("powerSummary"); return summary }
+    override fun livePower(): Flow<LivePower> = power.receiveAsFlow()
+
     var boost = BoostSettings()
     override suspend fun boostSettings(): BoostSettings { call("boostSettings"); return boost }
     override suspend fun saveBoostSettings(settings: BoostSettings): BoostSettings {

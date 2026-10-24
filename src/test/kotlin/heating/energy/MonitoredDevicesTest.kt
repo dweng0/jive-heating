@@ -337,7 +337,7 @@ class MonitoredDevicesTest {
         assertEquals(null, t.app.monitoredMeters.roomOf("Fridge Plug"))
     }
 
-    // BDD: The Dashboard shows each room's electricity
+    // BDD: The Energy tab shows each room's electricity
     @Test
     fun `each monitored device says which room it is in, so plugs in no room can be grouped`() {
         val t = TestHeating(clock = MutableClock(Instant.parse("2026-10-11T23:00:00Z")))
@@ -353,7 +353,7 @@ class MonitoredDevicesTest {
         }
     }
 
-    // BDD: The Dashboard shows each monitored device
+    // BDD: The Energy tab shows each monitored device
     @Test
     fun `each monitored device says whether its readings are incomplete`() {
         val start = Instant.parse("2026-10-11T23:00:00Z")

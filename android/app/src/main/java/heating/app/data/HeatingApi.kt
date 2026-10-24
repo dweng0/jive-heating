@@ -106,8 +106,14 @@ interface HeatingApi {
     /** [period] is today, week or month. */
     suspend fun energyDashboard(period: String): EnergyDashboard
 
+    /** Colour bands and the last 30 minutes of house readings for the live power dial. */
+    suspend fun powerSummary(): PowerSummary
+
     /** Live events from /ws until the connection drops. */
     fun liveEvents(): Flow<LiveEvent>
+
+    /** The house's power from /ws/power until the connection drops: one on connect, then one per reading. */
+    fun livePower(): Flow<LivePower>
 }
 
 val apiJson = Json {
@@ -318,6 +324,20 @@ class KtorHeatingApi(
 
     override suspend fun energyDashboard(period: String): EnergyDashboard =
         client.get("api/dashboard") { parameter("period", period) }.body()
+
+    override suspend fun powerSummary(): PowerSummary = client.get("api/power").body()
+
+    override fun livePower(): Flow<LivePower> = flow {
+        val wsUrl = config.baseUrl.trimEnd('/').replaceFirst("http", "ws") + "/ws/power"
+        client.webSocket(urlString = wsUrl, request = { bearerAuth(config.token) }) {
+            for (frame in incoming) {
+                if (frame is Frame.Text) {
+                    runCatching { apiJson.decodeFromString<LivePower>(frame.readText()) }
+                        .onSuccess { emit(it) }
+                }
+            }
+        }
+    }
 
     override fun liveEvents(): Flow<LiveEvent> = flow {
         val wsUrl = config.baseUrl.trimEnd('/').replaceFirst("http", "ws") + "/ws"

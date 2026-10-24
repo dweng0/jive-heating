@@ -39,7 +39,7 @@ export function EnergySection() {
     <section data-testid="energy" className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight">Energy</h2>
+          <h2 className="text-2xl font-bold tracking-tight">Use and cost</h2>
           <p className="text-sm text-muted-foreground">Gas is estimated from the boiler's hours. Costs use today's prices.</p>
         </div>
         <div role="group" aria-label="Energy period" className="flex rounded-xl bg-secondary p-1">

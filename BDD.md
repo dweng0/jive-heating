@@ -935,7 +935,7 @@ Engineering rules (apply to every scenario):
             Given member "sam" can see "Bedroom"
             When "sam" opens the web app or the Android app
             Then the Rooms screen shows only "Bedroom"
-            And there is no whole-house control, Groups, Dashboard or boiler state
+            And there is no whole-house control, Groups, Dashboard, Energy tab or boiler state
             And a member with no rooms sees "No rooms yet. Ask an admin to give you access."
 
     Feature: Web app
@@ -1515,7 +1515,7 @@ Engineering rules (apply to every scenario):
 
         Scenario: Money is shown in the household's currency
             Given energy settings have currency "GBP" (the default), or an admin sets another such as "EUR"
-            When any cost is shown on the web app or the Android app (Dashboard, devices, rooms, plugs)
+            When any cost is shown on the web app or the Android app (Energy tab, devices, rooms, plugs)
             Then it is the currency symbol and two decimals, such as "£1.25" or "£0.11", never "11p"
             And prices are still entered per kWh in the currency's minor unit, such as "27.0p per kWh" or "27.0c per kWh"
             And totals are worked out before rounding, so a total may differ from its parts by £0.01
@@ -1684,9 +1684,9 @@ Engineering rules (apply to every scenario):
             When "sam" sends GET /api/dashboard
             Then the response status is 403
 
-        Scenario: The Dashboard shows energy use and cost under the temperature chart
-            Given admin "jane" opens the Dashboard on the web app or the Android app
-            Then below the temperature chart it shows gas, electricity, standing charges and total for today, week or month
+        Scenario: The Energy tab shows energy use and cost
+            Given admin "jane" opens the Energy tab on the web app or the Android app
+            Then below the live dial and its cards it shows gas, electricity, standing charges and total for today, week or month
             And a bar per day for week and month, with incomplete days marked
             And without a house meter it says "Choose an electricity meter to see electricity use"
 
@@ -1880,9 +1880,9 @@ Engineering rules (apply to every scenario):
             Then "devices" lists "Fridge Plug" with 1.2 kWh and 32p
             And electricityKwh is still 8.0 and totalCost does not add the device again
 
-        Scenario: The Dashboard shows each monitored device
+        Scenario: The Energy tab shows each monitored device
             Given "Fridge Plug" and "Garage Plug" are monitored
-            When admin "jane" opens the Dashboard on the web app or the Android app
+            When admin "jane" opens the Energy tab on the web app or the Android app
             Then under electricity it shows "of which" with each device's use and cost for the chosen period
             And a device with incomplete readings shows its cost so far with the warning triangle used in a room's Plugs section
 
@@ -1955,9 +1955,9 @@ Engineering rules (apply to every scenario):
             Then the plug is no longer in any room, and "Kitchen" no longer lists it
             And energy already recorded for the plug is kept
 
-        Scenario: The Dashboard shows each room's electricity
+        Scenario: The Energy tab shows each room's electricity
             Given "Fridge Plug" is in "Kitchen" and "Lamp Plug" is in "Lounge"
-            When admin "jane" opens the Dashboard on the web app or the Android app
+            When admin "jane" opens the Energy tab on the web app or the Android app
             Then under electricity it shows "of which" per room with its use and cost for the chosen period
             And monitored plugs in no room are grouped under "Not in a room"
             And "Everything else" is shown last, for use no plug accounts for
@@ -1988,7 +1988,7 @@ Engineering rules (apply to every scenario):
 
         Scenario: A plug that is offline now says so
             Given "TV Plug" in "Bedroom 1" went offline at 14:20, by Zigbee2MQTT availability or 30 minutes of silence
-            When admin "jane" opens "Bedroom 1" settings or the Dashboard
+            When admin "jane" opens "Bedroom 1" settings or the Energy tab
             Then its power shows "Offline", never its last power
             And its cost so far today shows with the warning triangle
             And tapping the triangle says "Offline since 14:20. Cost will update when it's back."
@@ -2005,7 +2005,7 @@ Engineering rules (apply to every scenario):
         Scenario: A plug whose energy total stops going up is flagged
             Given "TV Plug" reports enough power to have used at least 0.05 kWh while its energy total did not change
                 (the total moves in 0.01 kWh steps, so a 5 W lamp may rightly show no change for hours)
-            When admin "jane" opens "Bedroom 1" settings or the Dashboard
+            When admin "jane" opens "Bedroom 1" settings or the Energy tab
             Then it shows the warning triangle, saying "Using power but its energy total isn't going up. Cost may be too low."
             And the triangle goes once the total goes up again
 
@@ -2026,6 +2026,68 @@ Engineering rules (apply to every scenario):
             And a plug in no room has room null
             And repeated offline reports add nothing, and no push notification is sent
             And members never see plug events, whichever rooms they can access
+
+    Feature: Live power
+        As the household admin
+        I want to see how much electricity the house is using right now
+        So that I can tell at a glance what is switched on
+
+        Live power is admin only and has its own WebSocket channel, /ws/power, apart from the
+        change events on /ws: clamp readings arrive every few seconds and only the open Energy tab needs them.
+        The dial, the room cards and the "Everything else" card are on the web app and the Android app.
+        Gas has no whole-house reading, so it is not shown.
+
+        Scenario: The house power streams live
+            Given the house meter reports 1200 W
+            When admin "jane" opens the live power channel at /ws/power
+            Then the first message is the house watts, 1200, and when it was read
+            And every later house meter reading is sent as a new message
+
+        Scenario: The live power channel is admin only
+            When a member, or a caller who is not signed in, connects to /ws/power
+            Then the connection is refused
+
+        Scenario: A stale house reading is not shown as live
+            Given the house meter has not reported for 2 minutes
+            Then the live power message has watts null
+            And the dial reads "No reading" and the room cards show no live watts
+
+        Scenario: The dial moves smoothly
+            Given the dial shows 500 W
+            When a reading of 3000 W arrives
+            Then the needle sweeps to 3000 W over about a second instead of jumping
+            And it does not swing past 3000 W first
+
+        Scenario: The dial colours follow the household's own use
+            Given the last 7 days of house readings
+            Then green runs up to the typical overnight load (the median from 00:00 to 05:00)
+            And red starts at the 90th percentile of all readings
+            And amber is between
+            And with under 24 hours of readings the dial is one neutral colour
+
+        Scenario: The dial shows today's use
+            When admin "jane" views the live dial
+            Then under it are today's kWh, today's cost (in the household's currency) and a sparkline of the last 30 minutes of watts
+
+        Scenario: Room cards show live and daily use
+            Given "Lounge" has 2 monitored plugs
+            When admin "jane" views the live dial
+            Then the "Lounge" card shows its live watts, today's kWh, today's cost and its share of the house load
+            And a room with no monitored plugs has no card
+
+        Scenario: Everything else is the unattributed remainder
+            Given the house uses 2000 W and the rooms and unassigned monitored devices account for 1200 W
+            When admin "jane" views the live dial
+            Then an "Everything else" card shows 800 W
+            And it never shows below 0 W
+            And it is not shown while the house reading is stale
+
+        Scenario: Energy has its own tab
+            When admin "jane" opens the web app or the Android app
+            Then there is an Energy tab beside the Dashboard
+            And it shows the live dial first, then the energy totals for today, week or month
+            And the Dashboard shows only heating
+            And members have no Energy tab
 
 # Deferred (not to be built yet)
 # - Mirror schedules to the valve weekly_schedule as a fallback when the service is down

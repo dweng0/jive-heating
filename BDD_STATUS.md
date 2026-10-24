@@ -1,6 +1,6 @@
 # BDD Status
 
-Checked 309 scenario(s) across 83 test file(s).
+Checked 318 scenario(s) across 87 test file(s).
 
 
 ## Feature: Service foundation
@@ -353,7 +353,7 @@ Checked 309 scenario(s) across 83 test file(s).
 - [x] Days with gaps in history are marked incomplete
 - [x] Gas-only totals when no meter is chosen
 - [x] Only admins see the energy dashboard
-- [x] The Dashboard shows energy use and cost under the temperature chart
+- [x] The Energy tab shows energy use and cost
 
 ## Feature: Activity feed
 
@@ -390,7 +390,7 @@ Checked 309 scenario(s) across 83 test file(s).
 - [x] An admin monitors a plug
 - [x] Monitored devices are recorded every five minutes
 - [x] The energy dashboard lists monitored devices without double counting
-- [x] The Dashboard shows each monitored device
+- [x] The Energy tab shows each monitored device
 
 ## Feature: Room energy
 
@@ -402,7 +402,7 @@ Checked 309 scenario(s) across 83 test file(s).
 - [x] The energy dashboard shows everything else
 - [x] A room with an incomplete plug reading is marked incomplete
 - [x] Removing a room or a plug leaves no stray room use
-- [x] The Dashboard shows each room's electricity
+- [x] The Energy tab shows each room's electricity
 - [x] A plug is put in a room from the room's settings
 - [x] A plug is put in a room straight after monitoring it
 - [x] A plug that is offline now says so
@@ -411,5 +411,17 @@ Checked 309 scenario(s) across 83 test file(s).
 - [x] A room's electricity is charted over time
 - [x] A plug losing contact is in the activity feed
 
+## Feature: Live power
+
+- [x] The house power streams live
+- [x] The live power channel is admin only
+- [x] A stale house reading is not shown as live
+- [x] The dial moves smoothly
+- [x] The dial colours follow the household's own use
+- [x] The dial shows today's use
+- [x] Room cards show live and daily use
+- [x] Everything else is the unattributed remainder
+- [x] Energy has its own tab
+
 ---
-**309/309 scenarios covered.**
+**318/318 scenarios covered.**

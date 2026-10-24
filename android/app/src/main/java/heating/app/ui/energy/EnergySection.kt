@@ -53,7 +53,7 @@ private val PERIODS = listOf("today" to "Today", "week" to "Week", "month" to "M
 fun EnergySection(state: EnergyState, onPeriod: (String) -> Unit) {
     LaunchedEffect(Unit) { onPeriod(state.period) }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("Energy", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
+        Text("Use and cost", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
         Text(
             "Gas is estimated from the boiler's hours. Costs use today's prices.",
             style = MaterialTheme.typography.bodySmall,

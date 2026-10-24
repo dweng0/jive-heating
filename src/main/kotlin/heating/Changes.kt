@@ -14,6 +14,9 @@ sealed interface Change {
     /** An event was added to the activity feed. */
     data class ActivityAdded(val activity: heating.activity.Activity) : Change
 
+    /** The house meter or a monitored plug sent a reading. Heard only by the live power channel, never by /ws. */
+    data object LivePowerChanged : Change
+
     /** An admin changed which rooms user [userId] can see, or whether they are an admin, or deleted them. */
     data class AccessChanged(val userId: String) : Change
 }

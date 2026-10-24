@@ -49,6 +49,7 @@ class MeterRegistry(
     private var devices = emptySet<String>()
     private val removedListeners = CopyOnWriteArrayList<(String) -> Unit>()
     private val onlineListeners = CopyOnWriteArrayList<(Meter) -> Unit>()
+    private val readingListeners = CopyOnWriteArrayList<(Meter) -> Unit>()
 
     fun start() {
         bus.subscribe(topics.bridgeDevices) { _, payload -> onDevices(payload) }
@@ -102,6 +103,11 @@ class MeterRegistry(
         onlineListeners += listener
     }
 
+    /** Called with a meter each time it sends a state message, after its latest reading is kept. */
+    fun onReading(listener: (Meter) -> Unit) {
+        readingListeners += listener
+    }
+
     private fun onDevices(payload: String) {
         val devices = parse(payload) as? JsonArray ?: return
         val all = devices.mapNotNull { ((it as? JsonObject)?.get("friendly_name") as? JsonPrimitive)?.content }.toSet()
@@ -132,14 +138,19 @@ class MeterRegistry(
         else -> emptySet()
     }
 
-    private fun onState(name: String, payload: String) = update(name) { current ->
-        val state = parse(payload) as? JsonObject ?: return@update null
+    private fun onState(name: String, payload: String) {
+        val meter = update(name) { current -> withReading(current, payload) } ?: return
+        readingListeners.forEach { runCatching { it(meter) } }
+    }
+
+    private fun withReading(current: Meter, payload: String): Meter? {
+        val state = parse(payload) as? JsonObject ?: return null
         val now = clock.instant()
         val energy = (state["energy"] as? JsonPrimitive)?.doubleOrNull ?: current.energy
         // The power last reported is taken to hold until this message.
         val used = current.lastReading?.let { used(current.power, it, now) } ?: 0.0
         val changed = energy != current.energy
-        current.copy(
+        return current.copy(
             online = true,
             wentOffline = null,
             energy = energy,
@@ -163,14 +174,15 @@ class MeterRegistry(
     }
 
     /** Replaces meter [name] with [change] of it (null: no change), then tells listeners if it went on or offline. */
-    private fun update(name: String, change: (Meter) -> Meter?) {
+    private fun update(name: String, change: (Meter) -> Meter?): Meter? {
         val (before, after) = synchronized(this) {
-            val current = meters[name] ?: return
-            val next = change(current) ?: return
+            val current = meters[name] ?: return null
+            val next = change(current) ?: return null
             meters[name] = next
             current to next
         }
         if (before.online != after.online) onlineListeners.forEach { runCatching { it(after) } }
+        return after
     }
 
     /** kWh used at [watts] from [from] to [to]. */

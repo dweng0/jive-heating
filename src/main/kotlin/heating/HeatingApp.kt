@@ -98,6 +98,10 @@ class HeatingApp(
     val monitoredMeters = heating.energy.MonitoredMeters(store)
     val meters = heating.energy.MeterRegistry(bus, topics, clock)
     val energyHistory = heating.energy.EnergyHistory(config.dbPath)
+    val livePower = heating.energy.LivePower(
+        meters, energySettings, monitoredMeters, { id -> runCatching { rooms.get(id).name }.getOrNull() },
+        energyHistory, config.timezone, changes, clock,
+    )
     val meterRecorder = heating.energy.MeterRecorder(energyHistory, meters, energySettings, monitoredMeters, clock::instant)
     val energyDashboards = heating.energy.EnergyDashboards(history, energyHistory, energySettings, monitoredMeters, meters, rooms::list, ::now)
     val roomPlugs = heating.energy.RoomPlugsReport(energyHistory, energySettings, monitoredMeters, meters, ::now)
@@ -144,6 +148,7 @@ class HeatingApp(
             energySettings.meterRemoved(meter)
             monitoredMeters.meterRemoved(meter)
         }
+        livePower.start()
         meters.start()
         meterRecorder.start()
         // After the registries, which hear the same message first: a device that left Zigbee2MQTT is no longer ignored.
@@ -153,6 +158,7 @@ class HeatingApp(
             }
         }
         periodic += meterRecorder.tick
+        periodic += livePower.tick
         periodic += Periodic { sensors.markSilent(SENSOR_SILENCE_LIMIT) }
         periodic += roomSensors.resend
         config.kumaPushUrl?.let { periodic += KumaReporter(it, valves, httpGet, ::offlineRoomSensors).heartbeat }

@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.BeachAccess
+import androidx.compose.material.icons.rounded.ElectricBolt
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.ShowChart
 import androidx.compose.material.icons.rounded.AccountCircle
@@ -70,7 +71,7 @@ import heating.app.ui.dashboard.DashboardScreen
 import heating.app.data.EnergyStore
 import heating.app.ui.energy.EnergyPricesCard
 import heating.app.ui.account.BoostSettingsCard
-import heating.app.ui.energy.EnergySection
+import heating.app.ui.energy.EnergyScreen
 import heating.app.ui.energy.IgnoredDevicesCard
 import heating.app.ui.energy.plugsWithNoRoom
 import heating.app.ui.energy.MonitoredDevicesCard
@@ -175,21 +176,33 @@ private fun Connected(connection: Connection, onSignOut: () -> Unit, onPasswordC
             }
         },
         bottomBar = {
-            if (route == "rooms" || route == "dashboard" || route == null) {
-                val onRooms = route != "dashboard"
+            if (route == null || route in TAB_SCREENS) {
+                val current = route ?: "rooms"
                 NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
-                    NavigationBarItem(selected = onRooms, onClick = { if (!onRooms) nav.popBackStack("rooms", inclusive = false) }, icon = { Icon(Icons.Rounded.Home, null) }, label = { Text("Rooms") })
-                    // The charts and holiday are the whole house's: admins only.
-                    if (state.admin) {
+                    bottomTabs(state.admin).forEach { tab ->
+                        val icon = when (tab.route) {
+                            "rooms" -> Icons.Rounded.Home
+                            "dashboard" -> Icons.Rounded.ShowChart
+                            "energy" -> Icons.Rounded.ElectricBolt
+                            "account" -> Icons.Rounded.AccountCircle
+                            else -> Icons.Rounded.BeachAccess
+                        }
                         NavigationBarItem(
-                            selected = !onRooms,
-                            onClick = { if (onRooms) nav.navigate("dashboard") { launchSingleTop = true } },
-                            icon = { Icon(Icons.Rounded.ShowChart, null) },
-                            label = { Text("Charts") },
+                            selected = tab.route == current,
+                            onClick = {
+                                when (tab.route) {
+                                    null -> holidaySheet = true
+                                    current -> {}
+                                    "rooms" -> nav.popBackStack("rooms", inclusive = false)
+                                    "account" -> nav.navigate("account")
+                                    // Tab to tab: back goes to Rooms, not through every tab visited.
+                                    else -> nav.navigate(tab.route) { popUpTo("rooms"); launchSingleTop = true }
+                                }
+                            },
+                            icon = { Icon(icon, null) },
+                            label = { Text(tab.label) },
                         )
-                        NavigationBarItem(selected = false, onClick = { holidaySheet = true }, icon = { Icon(Icons.Rounded.BeachAccess, null) }, label = { Text("Holiday") })
                     }
-                    NavigationBarItem(selected = false, onClick = { nav.navigate("account") }, icon = { Icon(Icons.Rounded.AccountCircle, null) }, label = { Text("Account") })
                 }
             }
         },
@@ -220,8 +233,11 @@ private fun Connected(connection: Connection, onSignOut: () -> Unit, onPasswordC
             }
             composable("dashboard") {
                 if (state.admin) {
-                    DashboardScreen(connection.api, contentPadding = padding, energy = { EnergySection(energyState, energy::loadDashboard) })
+                    DashboardScreen(connection.api, contentPadding = padding)
                 }
+            }
+            composable("energy") {
+                if (state.admin) EnergyScreen(connection.api, energyState, energy::loadDashboard, contentPadding = padding)
             }
             composable("group/{id}") {
                 roomId?.let { state.group(it) }?.let { g ->

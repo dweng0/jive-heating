@@ -488,18 +488,18 @@ test('ignored devices can be brought back', async ({ page }) => {
   await expect(page.getByTestId('meter-Garage Plug')).toBeVisible()
 })
 
-// BDD: The Dashboard shows energy use and cost under the temperature chart
-test('the dashboard shows energy use and cost under the temperature chart', async ({ page }) => {
+// BDD: The Energy tab shows energy use and cost
+test('the energy tab shows use and cost under the live dial', async ({ page }) => {
   const { dashboards, settings } = await serve(page, { ...jane }, [CLAMP])
   settings.electricityMeter = 'Main Clamp'
-  await page.goto('/dashboard')
+  await page.goto('/energy')
 
   const energy = page.getByTestId('energy')
-  await expect(energy.getByRole('heading', { name: 'Energy' })).toBeVisible()
-  // Below the temperature chart.
-  const chart = await page.locator('.house-line').first().boundingBox()
+  await expect(energy.getByRole('heading', { name: 'Use and cost' })).toBeVisible()
+  // Below the live dial.
+  const dial = await page.getByTestId('live-power').boundingBox()
   const section = await energy.boundingBox()
-  expect(section!.y).toBeGreaterThan(chart!.y)
+  expect(section!.y).toBeGreaterThan(dial!.y)
 
   // Today: gas, electricity, standing charges and the total.
   await expect(energy.getByTestId('energy-gas')).toContainText('£3.96')
@@ -518,15 +518,17 @@ test('the dashboard shows energy use and cost under the temperature chart', asyn
   await expect(energy).toContainText('Incomplete')
   await energy.getByRole('button', { name: 'Month' }).click()
   await expect(energy.getByTestId('energy-day')).toHaveCount(30)
-  expect(dashboards).toEqual(['today', 'week', 'month'])
+  // The live power dial asks for today's figures too.
+  expect(dashboards.filter((p) => p !== 'today')).toEqual(['week', 'month'])
+  expect(dashboards).toContain('today')
 })
 
-// BDD: The Dashboard shows each monitored device
+// BDD: The Energy tab shows each monitored device
 test('the dashboard shows each monitored device under electricity', async ({ page }) => {
   const { settings, monitored } = await serve(page, { ...jane }, [CLAMP])
   settings.electricityMeter = 'Main Clamp'
   monitored.add('Fridge Plug').add('Garage Plug')
-  await page.goto('/dashboard')
+  await page.goto('/energy')
 
   const energy = page.getByTestId('energy')
   const devices = energy.getByTestId('energy-devices')
@@ -550,7 +552,7 @@ test('a plug that is offline now says so on the dashboard', async ({ page }) => 
   const { settings, monitored } = await serve(page, { ...jane }, [CLAMP])
   settings.electricityMeter = 'Main Clamp'
   monitored.add('Fridge Plug').add('TV Plug')
-  await page.goto('/dashboard')
+  await page.goto('/energy')
 
   const devices = page.getByTestId('energy-devices')
   const tv = devices.getByTestId('device-TV Plug')
@@ -568,7 +570,7 @@ test('a plug whose energy total stops going up is flagged on the dashboard', asy
   const { settings, monitored } = await serve(page, { ...jane }, [CLAMP])
   settings.electricityMeter = 'Main Clamp'
   monitored.add('Fridge Plug').add('Heater Plug')
-  await page.goto('/dashboard')
+  await page.goto('/energy')
 
   const stuck = "Using power but its energy total isn't going up. Cost may be too low."
   const devices = page.getByTestId('energy-devices')
@@ -582,13 +584,13 @@ test('a plug whose energy total stops going up is flagged on the dashboard', asy
   await expect(devices.getByTestId('device-Fridge Plug').getByTestId('incomplete-warning')).toHaveCount(0)
 })
 
-// BDD: The Dashboard shows each room's electricity
+// BDD: The Energy tab shows each room's electricity
 test("the dashboard shows each room's electricity under electricity", async ({ page }) => {
   const { settings, monitored, meterRooms } = await serve(page, { ...jane }, [CLAMP], [LOUNGE, KITCHEN])
   settings.electricityMeter = 'Main Clamp'
   monitored.add('Fridge Plug').add('Lamp Plug').add('Garage Plug').add('Charger Plug')
   meterRooms.set('Fridge Plug', 'kitchen').set('Lamp Plug', 'lounge')
-  await page.goto('/dashboard')
+  await page.goto('/energy')
 
   const energy = page.getByTestId('energy')
   const rooms = energy.getByTestId('energy-rooms')
@@ -621,7 +623,7 @@ test("the dashboard shows each room's electricity under electricity", async ({ p
 
   // In money of the household's currency.
   settings.currency = 'EUR'
-  await page.goto('/dashboard')
+  await page.goto('/energy')
   await expect(page.getByTestId('energy-room-kitchen')).toContainText('€0.32')
 })
 
@@ -629,14 +631,14 @@ test('without plugs in rooms there is no rooms card', async ({ page }) => {
   const { settings, monitored } = await serve(page, { ...jane }, [CLAMP])
   settings.electricityMeter = 'Main Clamp'
   monitored.add('Fridge Plug')
-  await page.goto('/dashboard')
+  await page.goto('/energy')
   await expect(page.getByTestId('energy-devices')).toBeVisible()
   await expect(page.getByTestId('energy-rooms')).toHaveCount(0)
 })
 
 test('members do not see rooms, devices or energy', async ({ page }) => {
   const { forbidden } = await serve(page, { ...sam }, [CLAMP])
-  await page.goto('/dashboard')
+  await page.goto('/energy')
   await expect(page.getByTestId('room-tile')).toHaveCount(1)
   await expect(page.getByTestId('energy')).toHaveCount(0)
   expect(forbidden).toEqual([])
@@ -645,14 +647,14 @@ test('members do not see rooms, devices or energy', async ({ page }) => {
 test('without monitored devices there is no "of which"', async ({ page }) => {
   const { settings } = await serve(page, { ...jane }, [CLAMP])
   settings.electricityMeter = 'Main Clamp'
-  await page.goto('/dashboard')
+  await page.goto('/energy')
   await expect(page.getByTestId('energy-total')).toContainText('£6.92')
   await expect(page.getByTestId('energy-devices')).toHaveCount(0)
 })
 
 test('without a house meter the dashboard asks for one', async ({ page }) => {
   await serve(page, { ...jane })
-  await page.goto('/dashboard')
+  await page.goto('/energy')
   const energy = page.getByTestId('energy')
   await expect(energy).toContainText('Choose an electricity meter to see electricity use')
   await expect(energy.getByTestId('energy-gas')).toContainText('£3.96')
@@ -663,14 +665,14 @@ test('without a house meter the dashboard asks for one', async ({ page }) => {
 test("money is shown in the household's currency", async ({ page }) => {
   const { settings } = await serve(page, { ...jane }, [CLAMP])
   settings.electricityMeter = 'Main Clamp'
-  await page.goto('/dashboard')
+  await page.goto('/energy')
   const energy = page.getByTestId('energy')
   // Under a pound is still pounds and two decimals, never "80p".
   await expect(energy.getByTestId('energy-standing')).toContainText('£0.80')
   await expect(energy.getByTestId('energy-total')).toContainText('£6.92')
 
   settings.currency = 'EUR'
-  await page.goto('/dashboard')
+  await page.goto('/energy')
   await expect(energy.getByTestId('energy-gas')).toContainText('€3.96')
   await expect(energy.getByTestId('energy-standing')).toContainText('€0.80')
 

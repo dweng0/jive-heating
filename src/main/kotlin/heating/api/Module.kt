@@ -79,6 +79,7 @@ fun Application.heatingModule(heating: HeatingApp) {
                 boostSettingsAdminRoutes(heating)
                 deviceRoutes(heating)
                 dashboardRoutes(heating)
+                livePowerRoutes(heating)
             }
             boostSettingsRoutes(heating)
             liveRoutes(heating)

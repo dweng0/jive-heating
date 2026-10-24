@@ -77,8 +77,6 @@ internal fun ms(iso: String) = OffsetDateTime.parse(iso).toInstant().toEpochMill
 fun DashboardScreen(
     api: HeatingApi,
     contentPadding: PaddingValues,
-    /** Below the temperature chart: energy use and cost. */
-    energy: (@Composable () -> Unit)? = null,
 ) {
     var range by rememberSaveable { mutableStateOf("24h") }
     var history by remember { mutableStateOf<History?>(null) }
@@ -123,7 +121,6 @@ fun DashboardScreen(
                 ChartPager(h, range, house, rooms)
             }
         }
-        energy?.invoke()
     }
 }
 
