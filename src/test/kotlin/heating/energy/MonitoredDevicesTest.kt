@@ -274,6 +274,43 @@ class MonitoredDevicesTest {
         assertEquals(listOf(kitchen, kitchen, lounge, lounge), samples.map { it.room })
     }
 
+    // BDD: A plug that leaves Zigbee2MQTT is no longer monitored
+    @Test
+    fun `a plug that leaves zigbee2mqtt is no longer monitored`() {
+        val t = TestHeating()
+        t.discover(meters = listOf("Fridge Plug", "Lamp Plug"))
+        assertEquals(HttpStatusCode.OK, call(t, HttpMethod.Put, "/api/meters/Fridge Plug/monitored").status)
+        assertEquals(HttpStatusCode.OK, call(t, HttpMethod.Put, "/api/meters/Lamp Plug/monitored").status)
+        val kitchen = t.app.rooms.create("Kitchen").id
+        assertEquals(HttpStatusCode.OK, call(t, HttpMethod.Put, "/api/rooms/$kitchen/meters/Fridge Plug").status)
+        t.meterState("Fridge Plug", """{"energy":1.0,"power":100}""")
+        t.clock.advance(Duration.ofMinutes(5))
+        t.app.tick()
+        t.meterState("Fridge Plug", """{"energy":1.2,"power":100}""")
+        t.clock.advance(Duration.ofMinutes(5))
+        t.app.tick()
+        val recorded = t.app.energyHistory.deviceSamples("Fridge Plug", Instant.EPOCH, t.clock.instant())
+        assertEquals(0.2, recorded.sumOf { it.kwh ?: 0.0 }, 1e-9)
+
+        // Renamed in Zigbee2MQTT: the old name goes, the new one waits to be set up.
+        t.discover(meters = listOf("Tumble Dryer", "Lamp Plug"))
+        assertEquals(listOf("Lamp Plug"), t.app.monitoredMeters.all())
+        assertEquals(null, t.app.monitoredMeters.roomOf("Fridge Plug"))
+        assertEquals(listOf("Lamp Plug"), monitored(t))
+        assertEquals(listOf("Tumble Dryer"), names(meters(t, "?unassigned=true")))
+        t.api { client ->
+            val today = heatingJson.parseToJsonElement(client.get("/api/dashboard?period=today").bodyAsText()).jsonObject
+            assertEquals(listOf("Lamp Plug"), today["devices"]!!.jsonArray.map { it.jsonObject["meter"]!!.jsonPrimitive.content })
+        }
+        // What it used is kept.
+        assertEquals(recorded, t.app.energyHistory.deviceSamples("Fridge Plug", Instant.EPOCH, t.clock.instant()))
+
+        // One that left while the service was down goes when the device list arrives.
+        t.app.monitoredMeters.monitor("Oil Radiator")
+        t.restart()
+        assertEquals(listOf("Lamp Plug"), t.app.monitoredMeters.all())
+    }
+
     // BDD: Removing a room or a plug leaves no stray room use
     @Test
     fun `removing a room or a plug leaves no stray room use`() {
@@ -327,7 +364,8 @@ class MonitoredDevicesTest {
         t.discover(meters = emptyList())
         assertEquals(null, t.app.monitoredMeters.roomOf("Fridge Plug"))
         assertEquals(emptyList(), plugsIn(newKitchen))
-        assertEquals(0.2, fridgeKwh(), 1e-9)
+        // No longer monitored, but what it used is kept.
+        assertEquals(0.2, t.app.energyHistory.deviceSamples("Fridge Plug", start, t.clock.instant()).sumOf { it.kwh ?: 0.0 }, 1e-9)
         assertEquals(3, t.app.energyHistory.deviceSamples("Fridge Plug", start, t.clock.instant()).size)
 
         // Paired again, it is still in no room.

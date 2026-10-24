@@ -151,10 +151,12 @@ class HeatingApp(
         livePower.start()
         meters.start()
         meterRecorder.start()
-        // After the registries, which hear the same message first: a device that left Zigbee2MQTT is no longer ignored.
+        // After the registries, which hear the same message first: a device that left Zigbee2MQTT is no longer ignored,
+        // nor monitored (one that left while the service was down is not in the registry to be removed).
         bus.subscribe(topics.bridgeDevices) { _, payload ->
             if (runCatching { Json.parseToJsonElement(payload) }.getOrNull() is JsonArray) {
                 ignoredDevices.prune { valves[it] != null || sensors[it] != null || meters[it] != null }
+                monitoredMeters.prune { meters[it] != null }
             }
         }
         periodic += meterRecorder.tick

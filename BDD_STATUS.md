@@ -1,6 +1,6 @@
 # BDD Status
 
-Checked 320 scenario(s) across 87 test file(s).
+Checked 321 scenario(s) across 87 test file(s).
 
 
 ## Feature: Service foundation
@@ -402,6 +402,7 @@ Checked 320 scenario(s) across 87 test file(s).
 - [x] Moving a plug does not move its past use
 - [x] The energy dashboard shows everything else
 - [x] A room with an incomplete plug reading is marked incomplete
+- [x] A plug that leaves Zigbee2MQTT is no longer monitored
 - [x] Removing a room or a plug leaves no stray room use
 - [x] The Energy tab shows each room's electricity
 - [x] A plug is put in a room from the room's settings
@@ -426,4 +427,4 @@ Checked 320 scenario(s) across 87 test file(s).
 - [x] The dial colours come only from recorded power
 
 ---
-**320/320 scenarios covered.**
+**321/321 scenarios covered.**

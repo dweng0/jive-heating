@@ -58,10 +58,19 @@ class MonitoredMeters(private val store: Store) {
         if (rooms.values.removeAll { it == room }) saveRooms()
     }
 
-    /** Takes [name], which left Zigbee2MQTT, out of its room. It stays monitored and its recorded use is kept. */
+    /**
+     * [name] left Zigbee2MQTT (unpaired, or renamed there): it is no longer monitored or in a room. Its recorded use is
+     * kept. A renamed plug comes back under its new name, waiting to be set up.
+     */
     @Synchronized
     fun meterRemoved(name: String) {
-        if (rooms.remove(name) != null) saveRooms()
+        stop(name)
+    }
+
+    /** Stops monitoring every meter for which [known] is false, such as one that left Zigbee2MQTT while the service was down. */
+    @Synchronized
+    fun prune(known: (String) -> Boolean) {
+        names.filterNot(known).forEach(::stop)
     }
 
     private fun save() = store.put(KEY, heatingJson.encodeToString(ListSerializer(String.serializer()), names.sorted()))
