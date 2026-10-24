@@ -33,6 +33,12 @@ data class Meter(
     val energyChanged: Instant? = null,
     /** kWh the power readings say the meter used since [energyChanged], up to [lastReading]. */
     val usedSinceEnergyChanged: Double = 0.0,
+    /**
+     * kWh the power readings say the meter used since its first reading this run ([powerSince]), up to
+     * [lastReading]: each power holds until the next reading; a gap of [MeterRegistry.STALE_AFTER] counts nothing.
+     */
+    val powerKwh: Double = 0.0,
+    val powerSince: Instant? = null,
 )
 
 /**
@@ -93,6 +99,16 @@ class MeterRegistry(
     /** The running kWh total of [name] if it is reporting; null while it is unknown, offline or stale. */
     fun reading(name: String): Double? = get(name)?.takeIf { it.online && !isStale(it) }?.energy
 
+    /**
+     * [name]'s [Meter.powerKwh] up to now, its last power holding since its last reading; null while it is
+     * offline or stale. Clamps whose energy total jumps up and down are counted by this instead.
+     */
+    fun powerTotal(name: String): Double? {
+        val meter = get(name)?.takeIf { it.online && !isStale(it) } ?: return null
+        val read = meter.lastReading ?: return null
+        return meter.powerKwh + used(meter.power, read, clock.instant())
+    }
+
     /** Called with the name of a meter that disappeared from Zigbee2MQTT. */
     fun onRemoved(listener: (String) -> Unit) {
         removedListeners += listener
@@ -150,7 +166,12 @@ class MeterRegistry(
         // The power last reported is taken to hold until this message.
         val used = current.lastReading?.let { used(current.power, it, now) } ?: 0.0
         val changed = energy != current.energy
+        // A long silence is unknown use, not the last power held all that time.
+        val counted = current.lastReading?.takeIf { current.online && Duration.between(it, now) < STALE_AFTER }
+            ?.let { used(current.power, it, now) } ?: 0.0
         return current.copy(
+            powerKwh = current.powerKwh + counted,
+            powerSince = current.powerSince ?: now,
             online = true,
             wentOffline = null,
             energy = energy,

@@ -7,8 +7,9 @@ import java.time.Instant
 import java.time.ZoneId
 
 /**
- * Records the house meter and every monitored device every five minutes: the kWh used since the previous sample, worked out
- * from the meter's running total. A total that drops (the device reset it) counts on from the new
+ * Records the house meter and every monitored device every five minutes: the kWh used since the previous sample. The house
+ * meter's is counted from its power readings ([MeterRegistry.powerTotal]), with its average power, since some clamps' energy
+ * totals jump up and down; a device's is worked out from its running total. A total that drops (the device reset it) counts on from the new
  * total rather than going negative. A stale or offline meter is recorded as unknown, not as 0 kWh;
  * when it reports again the use since its last reading is counted (a catch-up). A catch-up on the day the device went
  * stale covers its stale samples, so nothing is missing; a device back with a lower total (reset) loses the use while
@@ -35,8 +36,9 @@ class MeterRecorder(
     val tick = Periodic { time ->
         val at = time.toInstant()
         if (due(lastSample, at, SAMPLE_INTERVAL)) {
+            val previous = lastSample
             lastSample = at
-            safely { record(at, time.zone) }
+            safely { record(at, previous, time.zone) }
         }
         if (due(lastCleanup, at, CLEANUP_INTERVAL)) {
             lastCleanup = at
@@ -51,13 +53,17 @@ class MeterRecorder(
     }
 
     @Synchronized
-    private fun record(at: Instant, zone: ZoneId) {
+    private fun record(at: Instant, previousSample: Instant?, zone: ZoneId) {
         val meter = settings.get().electricityMeter
-        val counter = meter?.let(meters::reading)
+        val counter = meter?.let(meters::powerTotal)
         val kwh = if (meter == null || counter == null) null else {
-            used(counter, last?.takeIf { it.first == meter }?.second ?: history.lastCounter(meter))
+            // The power total starts at 0 with this run. Its first reading since the last sample is all new use; a meter read
+            // for longer (just made the house meter) starts counting from now.
+            val fresh = meters[meter]?.powerSince?.let { previousSample == null || !it.isBefore(previousSample) } == true
+            used(counter, last?.takeIf { it.first == meter }?.second ?: if (fresh) 0.0 else null)
         }
-        history.add(MeterSample(at, meter, counter, kwh))
+        val hours = Duration.between(previousSample ?: at.minus(SAMPLE_INTERVAL), at).toMillis() / 3_600_000.0
+        history.add(MeterSample(at, meter, counter, kwh, watts = kwh?.takeIf { hours > 0 }?.let { it * 1000 / hours }))
         last = if (meter != null && counter != null) meter to counter else last?.takeIf { it.first == meter }
 
         for (device in monitored.all()) {

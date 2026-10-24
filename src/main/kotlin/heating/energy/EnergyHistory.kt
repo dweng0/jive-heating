@@ -14,7 +14,8 @@ import java.time.Instant
  * known, which the dashboard shows as missing rather than as 0 kWh). For a monitored device's sample, [room] is
  * the id of the room the plug was in when it was recorded (null: no room), so moving a plug never moves its past use.
  */
-data class MeterSample(val at: Instant, val meter: String?, val counter: Double?, val kwh: Double?, val room: String? = null)
+/** [watts] is the house meter's average power over the five minutes; null on samples from before it was kept. */
+data class MeterSample(val at: Instant, val meter: String?, val counter: Double?, val kwh: Double?, val room: String? = null, val watts: Double? = null)
 
 /**
  * Meter samples, in their own table of the service's SQLite file next to the room history. Monitored devices
@@ -33,15 +34,20 @@ class EnergyHistory(path: String) {
             s.executeQuery("PRAGMA table_info(device_samples)").use { rs -> generateSequence { if (rs.next()) rs.getString("name") else null }.any { name -> name == "room" } }
         }
         if (!hasRoom) it.createStatement().use { s -> s.execute("ALTER TABLE device_samples ADD COLUMN room TEXT") }
+        val hasWatts = it.createStatement().use { s ->
+            s.executeQuery("PRAGMA table_info(meter_samples)").use { rs -> generateSequence { if (rs.next()) rs.getString("name") else null }.any { name -> name == "watts" } }
+        }
+        if (!hasWatts) it.createStatement().use { s -> s.execute("ALTER TABLE meter_samples ADD COLUMN watts REAL") }
     }
 
     @Synchronized
     fun add(sample: MeterSample) {
-        connection.prepareStatement("INSERT INTO meter_samples (at, meter, counter, kwh) VALUES (?, ?, ?, ?)").use { s ->
+        connection.prepareStatement("INSERT INTO meter_samples (at, meter, counter, kwh, watts) VALUES (?, ?, ?, ?, ?)").use { s ->
             s.setLong(1, sample.at.toEpochMilli())
             if (sample.meter == null) s.setNull(2, Types.VARCHAR) else s.setString(2, sample.meter)
             s.setNullableDouble(3, sample.counter)
             s.setNullableDouble(4, sample.kwh)
+            s.setNullableDouble(5, sample.watts)
             s.executeUpdate()
         }
     }
@@ -49,13 +55,13 @@ class EnergyHistory(path: String) {
     /** Samples with [from] <= at <= [to], oldest first. */
     @Synchronized
     fun samples(from: Instant, to: Instant): List<MeterSample> =
-        connection.prepareStatement("SELECT at, meter, counter, kwh FROM meter_samples WHERE at >= ? AND at <= ? ORDER BY at").use { s ->
+        connection.prepareStatement("SELECT at, meter, counter, kwh, watts FROM meter_samples WHERE at >= ? AND at <= ? ORDER BY at").use { s ->
             s.setLong(1, from.toEpochMilli())
             s.setLong(2, to.toEpochMilli())
             s.executeQuery().use { rs ->
                 buildList {
                     while (rs.next()) {
-                        add(MeterSample(Instant.ofEpochMilli(rs.getLong(1)), rs.getString(2), rs.getNullableDouble(3), rs.getNullableDouble(4)))
+                        add(MeterSample(Instant.ofEpochMilli(rs.getLong(1)), rs.getString(2), rs.getNullableDouble(3), rs.getNullableDouble(4), watts = rs.getNullableDouble(5)))
                     }
                 }
             }

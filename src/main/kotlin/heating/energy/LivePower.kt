@@ -123,10 +123,11 @@ class LivePower(
 
     private fun bands(): PowerBands? {
         val now = clock.instant()
-        val samples = history.samples(now.minus(BANDS_FROM), now)
+        // Only samples with average power: older ones have kWh from clamp totals that jump up and down.
+        val samples = history.samples(now.minus(BANDS_FROM), now).filter { it.watts != null }
         // Under a day of readings says little about the household: one neutral colour.
         if (samples.isEmpty() || samples.first().at.isAfter(now.minus(Duration.ofDays(1)))) return null
-        val known = samples.mapNotNull { s -> s.kwh?.let { s.at to it * 60_000 / MeterRecorder.SAMPLE_INTERVAL.toMinutes() } }
+        val known = samples.map { it.at to it.watts!! }
         val nights = known.filter { it.first.atZone(timezone).hour < OVERNIGHT_UNTIL }.map { it.second }.sorted()
         if (nights.isEmpty()) return null
         val all = known.map { it.second }.sorted()

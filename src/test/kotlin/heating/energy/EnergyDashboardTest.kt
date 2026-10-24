@@ -53,11 +53,12 @@ class EnergyDashboardTest {
         t.discover(meters = listOf("Main Clamp"))
         t.api { client -> assertEquals(HttpStatusCode.OK, client.put("/api/meters/Main%20Clamp/house").status) }
         t.app.history.boilerChanged("heating", t.clock.instant())
-        t.meterState("Main Clamp", """{"energy":100.0,"power":400}""")
+        // 48 kW for ten minutes is 8.0 kWh, counted from power.
+        t.meterState("Main Clamp", """{"energy":100.0,"power":48000}""")
         minutes(t, 5)
-        t.meterState("Main Clamp", """{"energy":104.0,"power":400}""")
+        t.meterState("Main Clamp", """{"energy":104.0,"power":48000}""")
         minutes(t, 5)
-        t.meterState("Main Clamp", """{"energy":108.0,"power":400}""")
+        t.meterState("Main Clamp", """{"energy":108.0,"power":0}""")
         minutes(t, 5)
         t.clock.advance(Duration.ofMinutes(105))
         t.app.history.boilerChanged("cycling", t.clock.instant())

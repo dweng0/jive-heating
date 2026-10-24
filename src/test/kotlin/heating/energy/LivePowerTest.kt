@@ -166,7 +166,7 @@ class LivePowerTest {
         put(t, "/api/meters/Main Clamp/house")
         val history = t.app.energyHistory
         // kWh in five minutes for an average of [watts].
-        fun sample(at: Instant, watts: Double?) = history.add(MeterSample(at, "Main Clamp", 1.0, watts?.let { it * 5 / 60_000 }))
+        fun sample(at: Instant, watts: Double?) = history.add(MeterSample(at, "Main Clamp", 1.0, watts?.let { it * 5 / 60_000 }, watts = watts))
 
         // Under a day of readings: one neutral colour.
         (1..12).forEach { sample(start.plus(Duration.ofMinutes(5L * it)), 300.0) }
@@ -296,5 +296,32 @@ class LivePowerTest {
         // Not shown while the house reading is stale.
         t.clock.advance(Duration.ofMinutes(3))
         live(t) { client -> assertEquals(JsonNull, client.connect().nextMessage()["elseWatts"]) }
+    }
+
+    // BDD: The dial colours come only from recorded power
+    @Test
+    fun `the dial colours come only from recorded power`() {
+        val start = Instant.parse("2026-10-11T23:00:00Z")
+        val t = TestHeating(clock = MutableClock(start))
+        t.discover(meters = listOf("Main Clamp"))
+        put(t, "/api/meters/Main Clamp/house")
+        val history = t.app.energyHistory
+        // Three days of samples from before average power was kept: kWh only.
+        (1..3 * 288).forEach { i -> history.add(MeterSample(start.plus(Duration.ofMinutes(5L * i)), "Main Clamp", 1.0, 0.0)) }
+        t.clock.advance(Duration.ofDays(3))
+        assertEquals(JsonNull, power(t)["bands"])
+
+        // Half a day with average power: still neutral.
+        val from = t.clock.instant()
+        (0..144).forEach { i -> history.add(MeterSample(from.plus(Duration.ofMinutes(5L * i)), "Main Clamp", 1.0, 0.05, watts = 600.0)) }
+        t.clock.advance(Duration.ofHours(12))
+        assertEquals(JsonNull, power(t)["bands"])
+
+        // A full day: the bands come from the power samples only, never the old zeros.
+        (145..288).forEach { i -> history.add(MeterSample(from.plus(Duration.ofMinutes(5L * i)), "Main Clamp", 1.0, 0.05, watts = 600.0)) }
+        t.clock.advance(Duration.ofHours(12))
+        val bands = power(t)["bands"]!!.jsonObject
+        assertEquals(600.0, bands["green"]!!.jsonPrimitive.double, 1e-6)
+        assertEquals(600.0, bands["red"]!!.jsonPrimitive.double, 1e-6)
     }
 }

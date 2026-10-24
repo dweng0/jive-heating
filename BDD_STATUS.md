@@ -1,6 +1,6 @@
 # BDD Status
 
-Checked 318 scenario(s) across 87 test file(s).
+Checked 320 scenario(s) across 87 test file(s).
 
 
 ## Feature: Service foundation
@@ -338,6 +338,7 @@ Checked 318 scenario(s) across 87 test file(s).
 - [x] New meters are listed as unassigned
 - [x] An admin chooses the house electricity meter
 - [x] The house meter is recorded every five minutes
+- [x] The house meter's use is counted from its power
 - [x] A meter that stops reporting is shown as stale, not as zero use
 - [x] Unpairing the house meter clears it
 - [x] New meters are offered in the app like new valves and sensors
@@ -422,6 +423,7 @@ Checked 318 scenario(s) across 87 test file(s).
 - [x] Room cards show live and daily use
 - [x] Everything else is the unattributed remainder
 - [x] Energy has its own tab
+- [x] The dial colours come only from recorded power
 
 ---
-**318/318 scenarios covered.**
+**320/320 scenarios covered.**
