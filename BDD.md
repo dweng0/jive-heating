@@ -2105,6 +2105,12 @@ Engineering rules (apply to every scenario):
             And the Dashboard shows only heating
             And members have no Energy tab
 
+        Scenario: The dial's scale fits the household's biggest appliances
+            Given the oven, shower or tumble dryer can take the house to 6 or 7 kW
+            Then the dial runs from 0 to 8 kW, marked at 0, 0.5, 1, 2, 4, 6 and 8 kW
+            And the needle moves along a square-root scale: 500 W is a quarter of the way, 2 kW half, 8 kW the end
+            And a reading above 8 kW extends the scale in whole 2 kW steps instead of pinning the needle
+
         Scenario: The dial colours come only from recorded power
             Given house samples recorded before their average power was kept
             Then they are not used for the dial's colours
