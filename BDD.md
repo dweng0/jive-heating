@@ -1957,6 +1957,14 @@ Engineering rules (apply to every scenario):
             When an admin sends GET /api/dashboard?period=today
             Then "Kitchen" is marked incomplete, with the missing minutes, instead of counting them as 0 kWh
 
+        Scenario: A plug that leaves Zigbee2MQTT is no longer monitored
+            Given "Fridge Plug" is monitored and in "Kitchen"
+            When it is renamed to "Tumble Dryer" in Zigbee2MQTT, or unpaired
+            Then "Fridge Plug" is no longer monitored, in no room, and not on the Energy tab
+            And energy already recorded for "Fridge Plug" is kept
+            And "Tumble Dryer" waits to be set up like any new plug
+            And a plug that left while the service was down is dropped when the device list next arrives
+
         Scenario: Removing a room or a plug leaves no stray room use
             Given "Fridge Plug" is in "Kitchen"
             When "Kitchen" is deleted, or "Fridge Plug" leaves Zigbee2MQTT
