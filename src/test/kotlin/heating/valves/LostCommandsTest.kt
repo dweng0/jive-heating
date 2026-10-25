@@ -34,27 +34,33 @@ class LostCommandsTest {
     @Test
     fun `a setpoint the valve did not take is sent again`() {
         val t = TestHeating()
-        utility(t, 22.0)
-        val first = setpoints(t, 22.0)
-        assertEquals(1, first)
+        val room = utility(t, 22.0)
+        var count = setpoints(t, 22.0)
+        assertEquals(1, count)
 
-        t.clock.advance(Duration.ofMinutes(2))
-        t.valveState("Utility TRV", stale)
-        t.app.tick()
-        assertEquals(first + 1, setpoints(t, 22.0))
-
-        t.clock.advance(Duration.ofMinutes(1))
-        t.app.tick()
-        assertEquals(first + 1, setpoints(t, 22.0), "no more than once every 5 minutes")
-
-        t.clock.advance(Duration.ofMinutes(5))
-        t.app.tick()
-        assertEquals(first + 2, setpoints(t, 22.0))
+        val waits = listOf(10L, 20, 60, 180, 300, 300)
+        waits.forEach { seconds ->
+            t.clock.advance(Duration.ofSeconds(seconds - 1))
+            t.valveState("Utility TRV", stale)
+            t.app.tick()
+            assertEquals(count, setpoints(t, 22.0), "not before ${seconds}s")
+            t.clock.advance(Duration.ofSeconds(1))
+            t.app.tick()
+            count += 1
+            assertEquals(count, setpoints(t, 22.0), "again after ${seconds}s")
+        }
 
         t.valveState("Utility TRV", """{"occupied_heating_setpoint":22.0}""")
         t.clock.advance(Duration.ofMinutes(10))
         t.app.tick()
-        assertEquals(first + 2, setpoints(t, 22.0), "stops once the valve reports it")
+        assertEquals(count, setpoints(t, 22.0), "stops once the valve reports it")
+
+        // a person's new change starts the waits again
+        t.valveState("Utility TRV", stale)
+        t.app.zones.setMode(room, Mode.MANUAL, 23.0)
+        t.clock.advance(Duration.ofSeconds(10))
+        t.app.tick()
+        assertEquals(2, setpoints(t, 23.0))
     }
 
     // BDD: A valve told to turn off that keeps heating is told again
@@ -65,14 +71,20 @@ class LostCommandsTest {
         val first = offs(t)
         assertTrue(first >= 1)
 
-        t.clock.advance(Duration.ofMinutes(2))
+        t.clock.advance(Duration.ofSeconds(9))
         t.valveState("Utility TRV", stale)
+        t.app.tick()
+        assertEquals(first, offs(t))
+        t.clock.advance(Duration.ofSeconds(1))
         t.app.tick()
         assertEquals(first + 1, offs(t))
 
-        t.clock.advance(Duration.ofMinutes(1))
+        t.clock.advance(Duration.ofSeconds(19))
         t.app.tick()
-        assertEquals(first + 1, offs(t), "at most once every 5 minutes")
+        assertEquals(first + 1, offs(t), "the second wait is 20 seconds")
+        t.clock.advance(Duration.ofSeconds(1))
+        t.app.tick()
+        assertEquals(first + 2, offs(t))
     }
 
     // BDD: A knob turn is not mistaken for a lost command

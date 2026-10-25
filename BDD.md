@@ -2129,17 +2129,18 @@ Engineering rules (apply to every scenario):
 
         Scenario: A setpoint the valve did not take is sent again
             Given zone "Utility" has manual target 22.0 and its valve was sent 22.0
-            And two minutes later the valve still reports setpoint 21.0
+            And the valve still reports setpoint 21.0 and has reported nothing new
             When the tick runs
-            Then the service sends "Utility TRV" a setpoint of 22.0 again
-            And it does not send it more often than once every 5 minutes
+            Then the service sends "Utility TRV" a setpoint of 22.0 again after 10 seconds
+            And then again after a further 20 seconds, 1 minute, 3 minutes and 5 minutes, and every 5 minutes after that
             And it stops sending as soon as the valve reports 22.0
+            And a new change from a person starts the waits again from 10 seconds
 
         Scenario: A valve told to turn off that keeps heating is told again
             Given zone "Utility" is off and its valve was sent system_mode off
-            And two minutes later the valve still reports system_mode "heat"
+            And the valve still reports system_mode "heat" and has reported nothing new
             When the tick runs
-            Then the service sends "Utility TRV" system_mode off again, at most once every 5 minutes
+            Then the service sends "Utility TRV" system_mode off again, with the same waits
 
         Scenario: A knob turn is not mistaken for a lost command
             Given zone "Utility" has manual target 22.0 and its valve was sent 22.0
