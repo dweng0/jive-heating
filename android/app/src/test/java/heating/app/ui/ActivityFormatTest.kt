@@ -58,6 +58,15 @@ class ActivityFormatTest {
         assertEquals("The boost in Bedroom ended", activityText(event(5, "boost", room = "Bedroom"), false))
     }
 
+    @Test
+    fun `an unresponsive valve is named with its room`() {
+        val stuck = event(1, "unresponsive", JsonPrimitive("unresponsive"), room = "Utility")
+        val fine = event(2, "unresponsive", JsonPrimitive("responding"), room = "Utility")
+        assertEquals("Utility is not responding to commands", activityText(stuck, false))
+        assertEquals("Utility is responding again", activityText(fine, false))
+        assertEquals("Utility not responding", activityText(stuck, true))
+    }
+
     // BDD: A plug losing contact is in the activity feed
     @Test
     fun `a plug losing contact is named with its room`() {

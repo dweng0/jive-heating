@@ -68,6 +68,10 @@ export function activityLine(e: ActivityEvent): ActivityLine {
       return e.value === 'offline'
         ? { wide: `${room} went offline`, narrow: `${short} offline` }
         : { wide: `${room} is back online`, narrow: `${short} online` }
+    case 'unresponsive':
+      return e.value === 'unresponsive'
+        ? { wide: `${room} is not responding to commands`, narrow: `${short} not responding` }
+        : { wide: `${room} is responding again`, narrow: `${short} responding` }
     default:
       return { wide: `${who ?? 'Something'} changed ${room || 'the heating'}`, narrow: `${short || 'Heating'} changed` }
   }

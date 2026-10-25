@@ -63,6 +63,9 @@ fun activityText(e: ActivityEvent, brief: Boolean): String {
             } else if (state == "offline") pick("$room went offline", "$short offline")
             else pick("$room is back online", "$short online")
         }
+        "unresponsive" ->
+            if (state == "unresponsive") pick("$room is not responding to commands", "$short not responding")
+            else pick("$room is responding again", "$short responding")
         else -> pick("${who ?: "Something"} changed ${room.ifBlank { "the heating" }}", "${short.ifBlank { "Heating" }} changed")
     }
 }

@@ -3,6 +3,7 @@ package heating.valves
 import heating.rooms.Mode
 import heating.testing.TestHeating
 import java.time.Duration
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -144,5 +145,41 @@ class LostCommandsTest {
         t.clock.advance(Duration.ofMinutes(11))
         t.app.tick()
         assertEquals(first + 2, pushes(), "the last reading is still sent again after 10 minutes")
+    }
+
+    private fun unresponsive(t: TestHeating) =
+        t.app.activity.recent(100).filter { it.kind == "unresponsive" }.map { it.value }
+
+    // BDD: A valve that keeps missing commands is flagged in the feed
+    @Test
+    fun `a valve that keeps missing commands is flagged in the feed`() {
+        val t = TestHeating()
+        utility(t, 22.0)
+        listOf(10L, 20, 60).forEachIndexed { i, seconds ->
+            assertEquals(emptyList(), unresponsive(t), "not yet after ${i} re-sends")
+            t.clock.advance(Duration.ofSeconds(seconds))
+            t.valveState("Utility TRV", stale)
+            t.app.tick()
+        }
+        assertEquals(listOf(JsonPrimitive("unresponsive")), unresponsive(t))
+        assertEquals("Utility", t.app.activity.recent(100).first { it.kind == "unresponsive" }.room)
+
+        t.clock.advance(Duration.ofSeconds(180))
+        t.app.tick()
+        assertEquals(1, unresponsive(t).size, "once per episode")
+    }
+
+    // BDD: A valve that takes the command again is marked responding
+    @Test
+    fun `a valve that takes the command again is marked responding`() {
+        val t = TestHeating()
+        utility(t, 22.0)
+        listOf(10L, 20, 60).forEach { seconds ->
+            t.clock.advance(Duration.ofSeconds(seconds))
+            t.valveState("Utility TRV", stale)
+            t.app.tick()
+        }
+        t.valveState("Utility TRV", """{"occupied_heating_setpoint":22.0}""")
+        assertEquals(listOf(JsonPrimitive("unresponsive"), JsonPrimitive("responding")), unresponsive(t).reversed())
     }
 }

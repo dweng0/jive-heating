@@ -2162,6 +2162,17 @@ Engineering rules (apply to every scenario):
             And a reading 0.5 degrees or more from the last one sent is sent at once
             And the last reading is sent again after 10 minutes, as before
 
+        Scenario: A valve that keeps missing commands is flagged in the feed
+            Given zone "Utility" has manual target 22.0 and its valve keeps reporting 21.0
+            When the service has sent 22.0 again three times without the valve taking it
+            Then the feed lists an "unresponsive" event with room "Utility" and value "unresponsive"
+            And further re-sends add nothing to the feed, and no push notification is sent
+
+        Scenario: A valve that takes the command again is marked responding
+            Given the feed says the valve in "Utility" is unresponsive
+            When the valve reports the target it was sent
+            Then the feed lists an "unresponsive" event with room "Utility" and value "responding"
+
 # Deferred (not to be built yet)
 # - Mirror schedules to the valve weekly_schedule as a fallback when the service is down
 # - Open-window alerts (TRVZB exposes the setting, not a state; needs inference)
@@ -2172,4 +2183,4 @@ Engineering rules (apply to every scenario):
 # - Gas from the smart meter (Octopus API or Glow/Hildebrand), to replace the boiler-rate estimate
 # - Prices that change over time (the dashboard uses the current prices for the whole period)
 # - Room electricity beside room heating hours (tag a plug as a heater: portable heaters, towel rails)
-# - Valve not responding: a state on the zone view and a feed event after repeated lost commands (needs an openapi change)
+# - Valve not responding: a state on the zone view beside the feed event (needs an openapi change)

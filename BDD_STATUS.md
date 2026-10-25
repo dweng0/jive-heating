@@ -1,6 +1,6 @@
 # BDD Status
 
-Checked 327 scenario(s) across 88 test file(s).
+Checked 329 scenario(s) across 88 test file(s).
 
 
 ## Feature: Service foundation
@@ -434,6 +434,8 @@ Checked 327 scenario(s) across 88 test file(s).
 - [x] A knob turn is not mistaken for a lost command
 - [x] A valve that is offline is not sent commands again
 - [x] A room sensor reading is passed to the valves only when it matters
+- [x] A valve that keeps missing commands is flagged in the feed
+- [x] A valve that takes the command again is marked responding
 
 ---
-**327/327 scenarios covered.**
+**329/329 scenarios covered.**
