@@ -38,6 +38,9 @@ class ValveCommander(
         return sent.any { (setpoint, at) -> setpoint == reported && Duration.between(at, time) <= ECHO_MEMORY }
     }
 
+    /** When [valve] was last sent a setpoint (or off) command, or null if none since startup. */
+    fun lastCommandAt(valve: String): Instant? = recent[valve]?.let { synchronized(it) { it.lastOrNull() } }?.second
+
     /** Whether [valve] got a setpoint command less than [SETTLE] ago and may still be catching up. */
     fun settling(valve: String): Boolean {
         val last = recent[valve]?.let { synchronized(it) { it.lastOrNull() } }?.second ?: return false

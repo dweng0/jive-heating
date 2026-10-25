@@ -83,6 +83,7 @@ class HeatingApp(
     val boosts = BoostControl(rooms, zones, commander, holidays, ::now, actions, activity) { boostSettings.get().defaultTarget }
     val holiday = HolidayControl(holidays, boosts, zones, changes, config.timezone, ::now, activity)
     val schedules = ScheduleControl(rooms, zones, valves, commander, ::now, actions, activity)
+    val reconciler = heating.valves.ValveReconciler(valves, rooms, zones, commander, clock::instant)
     val house = HouseControl(rooms, zones, boosts, activity)
     val groups = GroupService(store, rooms, changes)
     val sensors = SensorRegistry(bus, topics, changes, clock)
@@ -135,7 +136,9 @@ class HeatingApp(
         groups.start()
         valves.start()
         schedules.start()
+        reconciler.start()
         periodic += schedules.blockChanges
+        periodic += reconciler.tick
         periodic += schedules.settledKnobs
         periodic += holiday.transitions
         periodic += boosts.expiry

@@ -1,6 +1,6 @@
 # BDD Status
 
-Checked 322 scenario(s) across 87 test file(s).
+Checked 327 scenario(s) across 88 test file(s).
 
 
 ## Feature: Service foundation
@@ -254,7 +254,7 @@ Checked 322 scenario(s) across 87 test file(s).
 - [x] A room with a sensor shows the sensor's temperature
 - [x] Heat demand uses the sensor's temperature
 - [x] Independent rooms use the sensor for every zone
-- [x] Each sensor reading is passed on to the room's valves
+- [x] A sensor reading that moved is passed on to the room's valves
 - [x] The sensor reading is re-sent to the valves every ten minutes
 - [x] A valve added to a room with a sensor is switched to it
 - [x] Unassigned valves return to their internal sensor
@@ -427,5 +427,13 @@ Checked 322 scenario(s) across 87 test file(s).
 - [x] The dial's scale fits the household's biggest appliances
 - [x] The dial colours come only from recorded power
 
+## Feature: Valves that miss commands
+
+- [x] A setpoint the valve did not take is sent again
+- [x] A valve told to turn off that keeps heating is told again
+- [x] A knob turn is not mistaken for a lost command
+- [x] A valve that is offline is not sent commands again
+- [x] A room sensor reading is passed to the valves only when it matters
+
 ---
-**322/322 scenarios covered.**
+**327/327 scenarios covered.**

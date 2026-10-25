@@ -13,6 +13,7 @@ import java.math.RoundingMode
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.math.abs
 
 /**
  * Room sensors: which room a sensor measures, and keeping that room's valves on the sensor
@@ -33,6 +34,9 @@ class SensorControl(
     /** When each room's valves were last sent a sensor reading. */
     private val lastSent = ConcurrentHashMap<String, Instant>()
 
+    /** The reading each room's valves were last sent. */
+    private val lastPushed = ConcurrentHashMap<String, Double>()
+
     /** Re-sends the last reading every [RESEND_INTERVAL], so valves never act on a stale input. */
     val resend = Periodic { _ ->
         val time = now()
@@ -43,6 +47,7 @@ class SensorControl(
             if (Duration.between(last, time) >= RESEND_INTERVAL) {
                 room.valves.forEach { commander.externalTemperature(it, reading) }
                 lastSent[room.id] = time
+                lastPushed[room.id] = reading
             }
         }
     }
@@ -127,14 +132,20 @@ class SensorControl(
                 useInternal(room)
             }
             source[room.id] == Source.EXTERNAL -> {
-                room.valves.forEach { commander.externalTemperature(it, temperature) }
-                lastSent[room.id] = now()
+                // Every write wakes a sleeping valve's queue: pass a reading on only when it moved, else wait for the resend.
+                val pushed = lastPushed[room.id]
+                if (pushed == null || abs(temperature - pushed) >= MIN_CHANGE) {
+                    room.valves.forEach { commander.externalTemperature(it, temperature) }
+                    lastSent[room.id] = now()
+                    lastPushed[room.id] = temperature
+                }
             }
             else -> {
                 actionLog.info("sensor {} online, {} on sensor at {}", room.sensor, room.name, temperature.logged())
                 room.valves.forEach { commander.useExternalSensor(it, temperature) }
                 source[room.id] = Source.EXTERNAL
                 lastSent[room.id] = now()
+                lastPushed[room.id] = temperature
             }
         }
     }
@@ -143,6 +154,7 @@ class SensorControl(
         room.valves.forEach(commander::useInternalSensor)
         source[room.id] = Source.INTERNAL
         lastSent.remove(room.id)
+        lastPushed.remove(room.id)
     }
 
     private fun offlineNotice(sensor: String?) = "$sensor is offline"
@@ -151,5 +163,8 @@ class SensorControl(
 
     companion object {
         val RESEND_INTERVAL: Duration = Duration.ofMinutes(10)
+
+        /** A reading closer than this to the last one sent waits for the next resend. */
+        const val MIN_CHANGE = 0.5
     }
 }

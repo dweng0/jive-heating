@@ -181,13 +181,13 @@ class RoomSensorsTest {
         assertEquals(external(20.0), t.sentTo("K2").last())
     }
 
-    // BDD: Each sensor reading is passed on to the room's valves
+    // BDD: A sensor reading that moved is passed on to the room's valves
     @Test
-    fun `each sensor reading is passed on to the room's valves`() {
+    fun `a sensor reading that moved is passed on to the room's valves`() {
         val t = TestHeating()
         bedroom3(t)
-        t.sensorState("Landing Smoke", """{"temperature":21.3}""")
-        assertEquals(input(21.3), t.sentTo("Bedroom 3 TRV").last())
+        t.sensorState("Landing Smoke", """{"temperature":21.5}""")
+        assertEquals(input(21.5), t.sentTo("Bedroom 3 TRV").last())
     }
 
     // BDD: The sensor reading is re-sent to the valves every ten minutes

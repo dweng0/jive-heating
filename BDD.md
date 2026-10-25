@@ -1225,10 +1225,11 @@ Engineering rules (apply to every scenario):
             Then zones "K1" and "K2" both call for heat
             And both valves are sent {"temperature_sensor_select":"external","external_temperature_input":20.0}
 
-        Scenario: Each sensor reading is passed on to the room's valves
+        Scenario: A sensor reading that moved is passed on to the room's valves
             Given sensor "Landing Smoke" is in room "Bedroom 3" with valve "Bedroom 3 TRV"
-            When the sensor reports 21.3
-            Then "Bedroom 3 TRV" is sent {"external_temperature_input":21.3}
+            And the valve was last sent 20.9
+            When the sensor reports 21.5
+            Then "Bedroom 3 TRV" is sent {"external_temperature_input":21.5}
 
         Scenario: The sensor reading is re-sent to the valves every ten minutes
             Given sensor "Landing Smoke" in room "Bedroom 3" last reported 20.9
@@ -2116,6 +2117,50 @@ Engineering rules (apply to every scenario):
             Then they are not used for the dial's colours
             And the dial is one neutral colour until a day of samples with average power is recorded
 
+    Feature: Valves that miss commands
+        As a household member
+        I want a setpoint I choose to reach the valve even over a weak Zigbee link
+        So that a room never heats, or stays hot, on a target I already changed
+
+        Battery valves sleep and Zigbee2MQTT drops a write when the valve is not listening, so a
+        command can be lost without any error reaching the service. The service compares what a
+        valve reports with what it was last told and sends it again. Re-sends are quiet: they
+        log nothing and add nothing to the feed.
+
+        Scenario: A setpoint the valve did not take is sent again
+            Given zone "Utility" has manual target 22.0 and its valve was sent 22.0
+            And two minutes later the valve still reports setpoint 21.0
+            When the tick runs
+            Then the service sends "Utility TRV" a setpoint of 22.0 again
+            And it does not send it more often than once every 5 minutes
+            And it stops sending as soon as the valve reports 22.0
+
+        Scenario: A valve told to turn off that keeps heating is told again
+            Given zone "Utility" is off and its valve was sent system_mode off
+            And two minutes later the valve still reports system_mode "heat"
+            When the tick runs
+            Then the service sends "Utility TRV" system_mode off again, at most once every 5 minutes
+
+        Scenario: A knob turn is not mistaken for a lost command
+            Given zone "Utility" has manual target 22.0 and its valve was sent 22.0
+            When the valve reports setpoint 19.0 more than a minute after the command, a value the service never sent
+            Then it is handled as a knob turn, as before
+            And the service does not send 22.0 again
+
+        Scenario: A valve that is offline is not sent commands again
+            Given zone "Utility" has manual target 22.0 and its valve reports setpoint 21.0
+            And the valve is offline
+            When the tick runs
+            Then nothing is sent to "Utility TRV"
+            And when the valve comes back online the service sends it 22.0 at once
+
+        Scenario: A room sensor reading is passed to the valves only when it matters
+            Given room "Utility" uses an external temperature sensor
+            When the sensor reports 20.8, then 20.9, then 21.0
+            Then the valves are sent 20.8 only
+            And a reading 0.5 degrees or more from the last one sent is sent at once
+            And the last reading is sent again after 10 minutes, as before
+
 # Deferred (not to be built yet)
 # - Mirror schedules to the valve weekly_schedule as a fallback when the service is down
 # - Open-window alerts (TRVZB exposes the setting, not a state; needs inference)
@@ -2126,3 +2171,4 @@ Engineering rules (apply to every scenario):
 # - Gas from the smart meter (Octopus API or Glow/Hildebrand), to replace the boiler-rate estimate
 # - Prices that change over time (the dashboard uses the current prices for the whole period)
 # - Room electricity beside room heating hours (tag a plug as a heater: portable heaters, towel rails)
+# - Valve not responding: a state on the zone view and a feed event after repeated lost commands (needs an openapi change)
