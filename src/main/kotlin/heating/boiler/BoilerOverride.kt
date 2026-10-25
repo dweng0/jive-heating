@@ -83,6 +83,7 @@ class BoilerControl(
         activity?.record(OVERRIDE, displayName(by), null, JsonPrimitive("off"))
         alerts?.boilerOverride(on = false, by = Actor.name, rooms = roomNames())
         changes.emit(Change.StatusChanged)
+        changes.emit(Change.BoilerOverrideChanged)
     }
 
     /** Let the zones heat again: every valve gets its zone's own target. Demand follows on the next tick. */
@@ -94,5 +95,6 @@ class BoilerControl(
         activity?.record(OVERRIDE, displayName(by), null, JsonPrimitive("on"))
         alerts?.boilerOverride(on = true, by = Actor.name, rooms = roomNames())
         changes.emit(Change.StatusChanged)
+        changes.emit(Change.BoilerOverrideChanged)
     }
 }

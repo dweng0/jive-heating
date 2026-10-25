@@ -26,6 +26,7 @@ data class LiveEvent(
     val groups: List<GroupView>? = null,
     val sensor: SensorView? = null,
     val activity: ActivityView? = null,
+    val boilerOverride: BoilerOverrideStatus? = null,
 )
 
 /** The events a [Change] turns into, in order, before filtering for who is listening. */
@@ -49,6 +50,7 @@ private fun HeatingApp.liveEvents(change: Change): List<LiveEvent> =
             listOfNotNull(sensorEvent, roomEvent)
         }
         Change.StatusChanged -> listOf(LiveEvent("status.updated", status = statusView()))
+        Change.BoilerOverrideChanged -> listOf(LiveEvent("boiler.override", boilerOverride = boilerOverrideStatus()))
         Change.GroupsChanged -> listOf(groupsEvent())
         Change.LivePowerChanged -> emptyList()
         is Change.AccessChanged -> listOf(LiveEvent(ACCESS_UPDATED))
@@ -68,6 +70,7 @@ private class Viewer(val admin: Boolean, val rooms: Set<String>?) {
     fun sees(event: LiveEvent): Boolean = when (event.type) {
         "room.updated" -> canSee(event.room!!.id)
         "room.deleted" -> canSee(event.roomId!!)
+        "boiler.override" -> true
         else -> admin
     }
 }

@@ -138,7 +138,15 @@ data class Status(
     val timezone: String,
     /** Boiler state; absent from an older service (fall back to [heatDemand]). */
     val boiler: Boiler? = null,
+    val boilerOverride: BoilerOverride? = null,
 )
+
+/** An admin forced the boiler off: no room heats until an admin turns it back on. */
+@Serializable
+data class BoilerOverride(val by: String, val since: String)
+
+@Serializable
+data class BoilerOverrideStatus(val override: BoilerOverride? = null)
 
 /**
  * [state] is heating, cycling (finishing its minimum run), resting (minimum rest before it may
@@ -195,8 +203,12 @@ data class LiveEvent(
     val groups: List<Group>? = null,
     val sensor: Sensor? = null,
     val activity: ActivityEvent? = null,
+    val boilerOverride: BoilerOverrideStatus? = null,
 ) {
     companion object {
+        /** The boiler was forced off or let go; sent to every signed-in user. */
+        const val BOILER_OVERRIDE = "boiler.override"
+
         /** Made by the app itself when the live connection opens; the service never sends it. */
         const val CONNECTED = "connected"
 

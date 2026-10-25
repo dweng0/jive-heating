@@ -1,12 +1,15 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
-import { api, followLive, type ActivityEvent, type Group, type LiveEvent, type Room, type Status, type User } from './api'
+import { api, followLive, type ActivityEvent, type BoilerOverride, type Group, type LiveEvent, type Room, type Status, type User } from './api'
 
 interface Home {
   me: User
   rooms: Room[]
   groups: Group[]
   status: Status | null
+  /** Set while an admin has forced the boiler off. Every user is told. */
+  boilerOverride: BoilerOverride | null
+  setBoilerOverride: (override: BoilerOverride | null) => void
   loading: boolean
   live: boolean
   /** The newest event pushed on /ws, for the activity tray to add to its list. */
@@ -37,6 +40,7 @@ export function HomeProvider({ me, onMe, children }: { me: User; onMe: (me: User
   const [rooms, setRooms] = useState<Room[]>([])
   const [groups, setGroups] = useState<Group[]>([])
   const [status, setStatus] = useState<Status | null>(null)
+  const [boilerOverride, setBoilerOverride] = useState<BoilerOverride | null>(null)
   const [loading, setLoading] = useState(true)
   const [live, setLive] = useState(false)
   const [latestActivity, setLatestActivity] = useState<ActivityEvent | null>(null)
@@ -47,6 +51,7 @@ export function HomeProvider({ me, onMe, children }: { me: User; onMe: (me: User
   const refresh = useCallback(async () => {
     // Every user can read it. If it can't be loaded, boosts still start at the old default.
     api.boostSettings().then((s) => setBoostTarget(s.defaultTarget), () => undefined)
+    api.boiler().then((s) => setBoilerOverride(s.override), () => undefined)
     try {
       if (!admin) {
         setRooms(await api.rooms())
@@ -84,6 +89,7 @@ export function HomeProvider({ me, onMe, children }: { me: User; onMe: (me: User
       }
       else if (e.type === 'room.deleted' && e.roomId) setRooms((rs) => rs.filter((r) => r.id !== e.roomId))
       else if (e.type === 'status.updated' && e.status && admin) setStatus(e.status)
+      else if (e.type === 'boiler.override' && e.boilerOverride) setBoilerOverride(e.boilerOverride.override)
       else if (e.type === 'groups.updated' && e.groups && admin) setGroups(e.groups)
       else if (e.type === 'activity.added' && e.activity) setLatestActivity(e.activity)
       else if (e.type === 'access.updated') {
@@ -109,8 +115,8 @@ export function HomeProvider({ me, onMe, children }: { me: User; onMe: (me: User
   }, [])
 
   const value = useMemo(
-    () => ({ me, rooms, groups, status, loading, live, latestActivity, boostTarget, setBoostTarget, refresh, putRoom, setStatus, putGroup, removeGroup, run }),
-    [me, rooms, groups, status, loading, live, latestActivity, boostTarget, refresh, putRoom, putGroup, removeGroup, run],
+    () => ({ me, rooms, groups, status, boilerOverride, setBoilerOverride, loading, live, latestActivity, boostTarget, setBoostTarget, refresh, putRoom, setStatus, putGroup, removeGroup, run }),
+    [me, rooms, groups, status, boilerOverride, loading, live, latestActivity, boostTarget, refresh, putRoom, putGroup, removeGroup, run],
   )
   return <HomeContext.Provider value={value}>{children}</HomeContext.Provider>
 }

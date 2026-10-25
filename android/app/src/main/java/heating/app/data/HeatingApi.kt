@@ -38,6 +38,11 @@ interface HeatingApi {
     /** Who is signed in: whether they are an admin, and which rooms they can see. */
     suspend fun me(): AccountUser
     suspend fun status(): Status
+
+    /** Whether an admin has forced the boiler off. Every user may read it; only admins may change it. */
+    suspend fun boiler(): BoilerOverrideStatus
+    suspend fun boilerOff(): BoilerOverrideStatus
+    suspend fun boilerOn(): BoilerOverrideStatus
     suspend fun rooms(): List<Room>
     suspend fun room(id: String): Room
     suspend fun createRoom(name: String): Room
@@ -154,6 +159,12 @@ class KtorHeatingApi(
     override suspend fun me(): AccountUser = client.get("api/auth/me").body()
 
     override suspend fun status(): Status = client.get("api/status").body()
+
+    override suspend fun boiler(): BoilerOverrideStatus = client.get("api/boiler").body()
+
+    override suspend fun boilerOff(): BoilerOverrideStatus = client.post("api/boiler/off").body()
+
+    override suspend fun boilerOn(): BoilerOverrideStatus = client.post("api/boiler/on").body()
 
     override suspend fun rooms(): List<Room> = client.get("api/rooms").body()
 

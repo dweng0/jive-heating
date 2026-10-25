@@ -411,16 +411,17 @@
         }
       },
       "LiveEvent": {
-        "description": "WebSocket message. room.updated carries the full Room; room.deleted carries roomId; status.updated carries Status; valve.updated carries Valve; groups.updated carries every Group; sensor.updated carries Sensor; access.updated (no payload) tells a user an admin changed their rooms or admin rights, so the app fetches /api/auth/me and /api/rooms again. Members get room.updated and room.deleted only for rooms they can see, and no status, valve, groups or sensor events.",
+        "description": "WebSocket message. room.updated carries the full Room; room.deleted carries roomId; status.updated carries Status; valve.updated carries Valve; groups.updated carries every Group; sensor.updated carries Sensor; access.updated (no payload) tells a user an admin changed their rooms or admin rights, so the app fetches /api/auth/me and /api/rooms again; boiler.override carries BoilerOverrideStatus whenever an admin turns the boiler off or back on. Members get room.updated and room.deleted only for rooms they can see, boiler.override, and no status, valve, groups or sensor events.",
         "type": "object", "required": ["type"],
         "properties": {
-          "type": { "type": "string", "enum": ["room.updated", "room.deleted", "status.updated", "valve.updated", "groups.updated", "sensor.updated", "access.updated"] },
+          "type": { "type": "string", "enum": ["room.updated", "room.deleted", "status.updated", "valve.updated", "groups.updated", "sensor.updated", "access.updated", "boiler.override"] },
           "room": { "$ref": "#/components/schemas/Room" },
           "roomId": { "type": "string" },
           "status": { "$ref": "#/components/schemas/Status" },
           "valve": { "$ref": "#/components/schemas/Valve" },
           "groups": { "type": "array", "items": { "$ref": "#/components/schemas/Group" } },
-          "sensor": { "$ref": "#/components/schemas/Sensor" }
+          "sensor": { "$ref": "#/components/schemas/Sensor" },
+          "boilerOverride": { "$ref": "#/components/schemas/BoilerOverrideStatus", "description": "With boiler.override" }
         }
       }
     },

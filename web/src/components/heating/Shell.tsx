@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { BoilerChip } from '@/components/heating/BoilerChip'
+import { BoilerOverrideNotice } from '@/components/heating/BoilerOverrideNotice'
 import { HolidayDialog } from '@/components/heating/HolidayDialog'
 import { useHome } from '@/lib/home'
 import { dateTime, formatTemp } from '@/lib/format'
@@ -41,6 +42,7 @@ export function Shell({ children, onSignOut }: { children: ReactNode; onSignOut:
 
           <div className="ml-auto flex items-center gap-2">
             {/* The boiler and holiday are the whole house's: admins only. */}
+            <BoilerOverrideNotice />
             {me.admin && (
               <>
                 <BoilerChip />

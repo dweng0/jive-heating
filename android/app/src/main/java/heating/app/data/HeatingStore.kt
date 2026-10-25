@@ -15,6 +15,8 @@ data class HomeState(
     val rooms: List<Room> = emptyList(),
     val groups: List<Group> = emptyList(),
     val status: Status? = null,
+    /** Set while an admin has forced the boiler off. Every user is told. */
+    val boilerOverride: BoilerOverride? = null,
     val loading: Boolean = true,
     val connection: ConnectionState = ConnectionState.CONNECTING,
     /** Why the service can't be reached, in plain words (never raw exception text). */
@@ -57,6 +59,8 @@ class HeatingStore(private val api: HeatingApi, private val scope: CoroutineScop
             val rooms = api.rooms()
             // An older service has no boost settings; boosts then start at the old default.
             runCatching { api.boostSettings() }.onSuccess { boost -> _state.update { it.copy(boostTarget = boost.defaultTarget) } }
+            // An older service has no boiler override; treat that as not set.
+            runCatching { api.boiler() }.onSuccess { b -> _state.update { it.copy(boilerOverride = b.override) } }
             if (!admin) {
                 // The house status and groups are admin only: a member never asks for them.
                 _state.update { it.copy(admin = false, rooms = rooms, groups = emptyList(), status = null, loading = false) }
@@ -112,6 +116,7 @@ class HeatingStore(private val api: HeatingApi, private val scope: CoroutineScop
             "room.updated" -> event.room?.takeIf { s.admin || s.room(it.id) != null }?.let { s.copy(rooms = s.rooms.upsert(it)) } ?: s
             "room.deleted" -> s.copy(rooms = s.rooms.filterNot { it.id == event.roomId })
             "status.updated" -> event.status?.takeIf { s.admin }?.let { s.copy(status = it) } ?: s
+            LiveEvent.BOILER_OVERRIDE -> event.boilerOverride?.let { s.copy(boilerOverride = it.override) } ?: s
             "groups.updated" -> event.groups?.takeIf { s.admin }?.let { s.copy(groups = it) } ?: s
             "activity.added" -> event.activity?.let { s.copy(latestActivity = it) } ?: s
             else -> s
@@ -129,6 +134,17 @@ class HeatingStore(private val api: HeatingApi, private val scope: CoroutineScop
     fun startHoliday(until: String, target: Double?) = scope.launch {
         runCatching { api.startHoliday(until, target = target) }
             .onSuccess { status -> _state.update { it.copy(status = status) } }
+            .onFailure(::showError)
+    }
+
+    /** Admins: force the boiler off, or let it heat again. */
+    fun boilerOff() = boilerAct { api.boilerOff() }
+
+    fun boilerOn() = boilerAct { api.boilerOn() }
+
+    private fun boilerAct(call: suspend () -> BoilerOverrideStatus) = scope.launch {
+        runCatching { call() }
+            .onSuccess { result -> _state.update { it.copy(boilerOverride = result.override) } }
             .onFailure(::showError)
     }
 

@@ -9,6 +9,8 @@ sealed interface Change {
     data class ValveChanged(val valve: String) : Change
     data class SensorChanged(val sensor: String) : Change
     data object StatusChanged : Change
+    /** An admin turned the boiler off or back on; every signed-in user is told. */
+    data object BoilerOverrideChanged : Change
     data object GroupsChanged : Change
 
     /** An event was added to the activity feed. */

@@ -168,6 +168,9 @@ private fun NotificationSwitches(account: AccountApi, onError: (String) -> Unit)
         SwitchRow("Heating finished", "When rooms someone turned on have warmed up", current.heatingFinished) {
             save(current.copy(heatingFinished = it))
         }
+        SwitchRow("Boiler turned off or on by an admin", "When an admin forces the boiler off, or lets it heat again", current.boilerOverride) {
+            save(current.copy(boilerOverride = it))
+        }
     }
     if (!canNotify(context)) {
         Text(

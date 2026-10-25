@@ -68,6 +68,10 @@ export function activityLine(e: ActivityEvent): ActivityLine {
       return e.value === 'offline'
         ? { wide: `${room} went offline`, narrow: `${short} offline` }
         : { wide: `${room} is back online`, narrow: `${short} online` }
+    case 'override':
+      return e.value === 'off'
+        ? { wide: `${who ?? 'An admin'} turned the boiler off`, narrow: 'Boiler turned off' }
+        : { wide: `${who ?? 'An admin'} turned the boiler back on`, narrow: 'Boiler back on' }
     case 'unresponsive':
       return e.value === 'unresponsive'
         ? { wide: `${room} is not responding to commands`, narrow: `${short} not responding` }

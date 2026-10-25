@@ -93,6 +93,7 @@ export interface Status {
   holiday: Holiday | null
   serverTime: string
   timezone: string
+  boilerOverride?: BoilerOverride | null
 }
 
 /** Recorded temperatures: raw 5-minute points for 24h, 30-minute averages for 7d, 2-hour for 30d. */
@@ -167,6 +168,8 @@ export interface LiveEvent {
   sensor?: Sensor
   /** activity.added */
   activity?: ActivityEvent
+  /** boiler.override: sent to every signed-in user */
+  boilerOverride?: BoilerOverrideStatus
 }
 
 export class ApiError extends Error {
@@ -232,6 +235,16 @@ export interface BoostSettings {
 export interface NotificationPrefs {
   heatingOn: boolean
   heatingFinished: boolean
+  boilerOverride: boolean
+}
+
+/** openapi: BoilerOverride. An admin forced the boiler off; no room heats until it is turned back on. */
+export interface BoilerOverride {
+  by: string
+  since: string
+}
+export interface BoilerOverrideStatus {
+  override: BoilerOverride | null
 }
 
 const enc = encodeURIComponent
@@ -295,6 +308,10 @@ export const api = {
 
   // Heating
   status: () => request<Status>('GET', '/api/status'),
+  /** Whether an admin has forced the boiler off. Every user may read it; only admins may change it. */
+  boiler: () => request<BoilerOverrideStatus>('GET', '/api/boiler'),
+  boilerOff: () => request<BoilerOverrideStatus>('POST', '/api/boiler/off', {}),
+  boilerOn: () => request<BoilerOverrideStatus>('POST', '/api/boiler/on', {}),
   rooms: () => request<Room[]>('GET', '/api/rooms'),
   createRoom: (name: string) => request<Room>('POST', '/api/rooms', { name }),
   patchRoom: (id: string, patch: { name?: string; control?: Control; sourceValve?: string; smartTemperatureControl?: boolean }) =>

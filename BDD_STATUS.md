@@ -1,6 +1,6 @@
 # BDD Status
 
-Checked 329 scenario(s) across 88 test file(s).
+Checked 337 scenario(s) across 90 test file(s).
 
 
 ## Feature: Service foundation
@@ -437,5 +437,16 @@ Checked 329 scenario(s) across 88 test file(s).
 - [x] A valve that keeps missing commands is flagged in the feed
 - [x] A valve that takes the command again is marked responding
 
+## Feature: Boiler override
+
+- [x] An admin turns the boiler off
+- [x] Nothing heats while the boiler is off
+- [x] The override survives a restart
+- [x] An admin turns the boiler back on
+- [x] Only admins can turn the boiler off or on
+- [x] The feed and the notifications tell everyone
+- [x] Each person can switch the boiler notification off
+- [x] The apps show that the boiler is forced off
+
 ---
-**329/329 scenarios covered.**
+**337/337 scenarios covered.**

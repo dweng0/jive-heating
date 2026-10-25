@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Flame, Hourglass, Moon, Timer } from 'lucide-react'
+import { Flame, Hourglass, Moon, PowerOff, Timer } from 'lucide-react'
 import { Dialog as DialogPrimitive } from 'radix-ui'
 import { XIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogClose, DialogDescription, DialogOverlay, DialogPortal, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { ActivityTray } from '@/components/heating/ActivityTray'
+import { BoilerOverrideButton } from '@/components/heating/BoilerOverrideButton'
 import type { BoilerStateName } from '@/lib/api'
 import { boilerExplanation, boilerLabel, boilerState } from '@/lib/format'
 import { useHome } from '@/lib/home'
@@ -41,24 +42,24 @@ function useNow(ticking: boolean): number {
  * state and what it means, then what changed in the heating lately.
  */
 export function BoilerChip() {
-  const { status, live } = useHome()
+  const { status, live, boilerOverride } = useHome()
   const boiler = boilerState(status)
   const now = useNow(boiler.until != null)
-  const Icon = ICONS[boiler.state]
-  const label = boilerLabel(boiler, now)
+  const Icon = boilerOverride ? PowerOff : ICONS[boiler.state]
+  const label = boilerOverride ? 'Off (admin)' : boilerLabel(boiler, now)
   const short = label.includes(' · ') ? label.split(' · ')[1] : label
 
   return (
     <Dialog>
       <DialogTrigger
         data-testid="boiler-chip"
-        data-state-name={boiler.state}
+        data-state-name={boilerOverride ? 'override' : boiler.state}
         className={cn(
           'flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium tabular-nums transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none',
-          boiler.state === 'heating' || boiler.state === 'cycling' ? 'bg-heat-container text-heat-text' : 'bg-off text-off-foreground',
+          !boilerOverride && (boiler.state === 'heating' || boiler.state === 'cycling') ? 'bg-heat-container text-heat-text' : 'bg-off text-off-foreground',
         )}
       >
-        <Icon className={cn('size-4', boiler.state === 'heating' && 'animate-pulse')} />
+        <Icon className={cn('size-4', !boilerOverride && boiler.state === 'heating' && 'animate-pulse')} />
         {/* Phones get the short form (the countdown, or the state word); wider screens the full label. */}
         <span className="hidden sm:inline" data-testid="boiler-label">{label}</span>
         <span className="sm:hidden" aria-hidden="true">{short}</span>
@@ -72,10 +73,15 @@ export function BoilerChip() {
           className="fixed inset-y-0 right-0 z-50 flex w-full flex-col gap-3 bg-popover p-4 text-left text-sm text-popover-foreground ring-1 ring-foreground/10 outline-none data-open:animate-in data-open:slide-in-from-right data-closed:animate-out data-closed:slide-out-to-right sm:max-w-md"
         >
           <div className="flex flex-col gap-2 pr-8">
-            <DialogTitle className="text-base font-semibold">{TITLES[boiler.state]}</DialogTitle>
-            <DialogDescription>{boilerExplanation[boiler.state]}</DialogDescription>
+            <DialogTitle className="text-base font-semibold">{boilerOverride ? 'Boiler turned off by admin' : TITLES[boiler.state]}</DialogTitle>
+            <DialogDescription>
+              {boilerOverride
+                ? `${boilerOverride.by === 'admin' ? 'An admin' : boilerOverride.by} forced the boiler off. No room heats until it is turned back on; room settings are kept.`
+                : boilerExplanation[boiler.state]}
+            </DialogDescription>
             <p className="text-xs text-muted-foreground">{live ? 'Live updates connected' : 'Reconnecting to live updates…'}</p>
           </div>
+          <BoilerOverrideButton />
           <ActivityTray />
           <DialogClose asChild>
             <Button variant="ghost" size="icon-sm" className="absolute top-2 right-2">

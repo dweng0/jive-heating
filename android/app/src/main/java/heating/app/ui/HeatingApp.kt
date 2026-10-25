@@ -221,6 +221,8 @@ private fun Connected(connection: Connection, onSignOut: () -> Unit, onPasswordC
                     onHouseControl = store::controlHouse,
                     onCancelHouseBoosts = store::cancelHouseBoosts,
                     loadActivity = { limit, before -> connection.api.activity(limit, before) },
+                    onBoilerOff = store::boilerOff,
+                    onBoilerOn = store::boilerOn,
                     contentPadding = padding,
                     waitingDevices = {
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {

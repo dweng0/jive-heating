@@ -150,6 +150,12 @@ export function NotificationsCard() {
               checked={prefs.heatingFinished}
               onChange={(heatingFinished) => choose({ heatingFinished })}
             />
+            <Toggle
+              title="Boiler turned off or on by an admin"
+              description="When an admin forces the boiler off, or lets it heat again."
+              checked={prefs.boilerOverride}
+              onChange={(boilerOverride) => choose({ boilerOverride })}
+            />
           </>
         )}
       </CardContent>

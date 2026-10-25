@@ -40,7 +40,7 @@ data class AuthStatus(val setupRequired: Boolean)
 
 /** Which phone notifications this person wants. */
 @Serializable
-data class NotificationPrefs(val heatingOn: Boolean = true, val heatingFinished: Boolean = true)
+data class NotificationPrefs(val heatingOn: Boolean = true, val heatingFinished: Boolean = true, val boilerOverride: Boolean = true)
 
 @Serializable
 private data class SetupRequest(val serviceToken: String, val username: String, val password: String)

@@ -74,7 +74,10 @@ fun RoomsScreen(
     waitingDevices: (@Composable () -> Unit)? = null,
     /** The boiler chip's activity tray reads the feed through this. */
     loadActivity: suspend (limit: Int, before: Long?) -> List<heating.app.data.ActivityEvent> = { _, _ -> emptyList() },
+    onBoilerOff: () -> Unit = {},
+    onBoilerOn: () -> Unit = {},
 ) {
+    heating.app.ui.components.BoilerOverrideNotice(state.boilerOverride, state.admin, onBoilerOn)
     val scope = rememberCoroutineScope()
     var refreshing by remember { mutableStateOf(false) }
     var adding by rememberSaveable { mutableStateOf(false) }
@@ -91,7 +94,7 @@ fun RoomsScreen(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            item(span = { GridItemSpan(2) }) { Header(state, loadActivity) }
+            item(span = { GridItemSpan(2) }) { Header(state, loadActivity, onBoilerOff, onBoilerOn) }
             // A member sees only the rooms an admin gave them: no whole house, no groups, no setup.
             if (state.admin) {
                 item(span = { GridItemSpan(2) }) { WholeHouseCard(state, onHouseControl, onCancelHouseBoosts) }
@@ -224,12 +227,17 @@ private fun GroupTile(group: Group, members: List<heating.app.data.Room>, onClic
 }
 
 @Composable
-private fun Header(state: HomeState, loadActivity: suspend (limit: Int, before: Long?) -> List<heating.app.data.ActivityEvent>) {
+private fun Header(
+    state: HomeState,
+    loadActivity: suspend (limit: Int, before: Long?) -> List<heating.app.data.ActivityEvent>,
+    onBoilerOff: () -> Unit,
+    onBoilerOn: () -> Unit,
+) {
     val colors = HeatingTheme.colors
     Column(Modifier.padding(top = 8.dp, bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // The chip says what the boiler is doing, or that the app is connecting / offline.
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            StatusChip(state, loadActivity)
+            StatusChip(state, loadActivity, onBoilerOff = onBoilerOff, onBoilerOn = onBoilerOn)
         }
         Text(headline(state.rooms, state.groups, state.status), style = MaterialTheme.typography.headlineMedium, modifier = Modifier.fillMaxWidth())
         state.status?.holiday?.let { holiday ->

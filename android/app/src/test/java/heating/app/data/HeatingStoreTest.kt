@@ -76,6 +76,44 @@ class HeatingStoreTest {
         assertEquals(19.5, store.state.value.boostTarget)
     }
 
+    // BDD: The apps show that the boiler is forced off
+    @Test
+    fun `every app learns the boiler is forced off, at start and live, and an admin can end it`() = runTest {
+        api.boilerOverride = BoilerOverride("jane", "2026-10-25T09:00:00+00:00")
+        val store = HeatingStore(api, backgroundScope)
+        store.start()
+        runCurrent()
+        assertEquals("jane", store.state.value.boilerOverride?.by, "loaded at start")
+
+        store.boilerOn()
+        runCurrent()
+        assertNull(store.state.value.boilerOverride)
+        assertTrue("boilerOn" in api.calls)
+
+        api.live.send(LiveEvent(LiveEvent.BOILER_OVERRIDE, boilerOverride = BoilerOverrideStatus(BoilerOverride("jane", "2026-10-25T10:00:00+00:00"))))
+        runCurrent()
+        assertEquals("2026-10-25T10:00:00+00:00", store.state.value.boilerOverride?.since, "pushed live")
+
+        store.boilerOn()
+        runCurrent()
+        store.boilerOff()
+        runCurrent()
+        assertEquals("jane", store.state.value.boilerOverride?.by)
+    }
+
+    @Test
+    fun `a member's app is told the boiler is forced off`() = runTest {
+        api.me = AccountUser("u-john", "john", admin = false)
+        api.boilerOverride = BoilerOverride("jane", "2026-10-25T09:00:00+00:00")
+        val store = HeatingStore(api, backgroundScope)
+        store.start()
+        runCurrent()
+        assertEquals("jane", store.state.value.boilerOverride?.by)
+        api.live.send(LiveEvent(LiveEvent.BOILER_OVERRIDE, boilerOverride = BoilerOverrideStatus(null)))
+        runCurrent()
+        assertNull(store.state.value.boilerOverride)
+    }
+
     @Test
     fun `live room update replaces the room`() = runTest {
         val store = HeatingStore(api, backgroundScope)
@@ -306,7 +344,7 @@ class HeatingStoreTest {
         store.start()
         runCurrent()
 
-        assertEquals(listOf("me", "rooms", "boostSettings"), api.calls)
+        assertEquals(listOf("me", "rooms", "boostSettings", "boiler"), api.calls)
         val state = store.state.value
         assertEquals(false, state.admin)
         assertEquals(listOf("Bedroom"), state.rooms.map { it.name })
@@ -342,7 +380,7 @@ class HeatingStoreTest {
         api.rooms["bedroom"] = room("bedroom", "Bedroom")
         api.live.send(LiveEvent("access.updated"))
         runCurrent()
-        assertEquals(listOf("me", "rooms", "boostSettings"), api.calls)
+        assertEquals(listOf("me", "rooms", "boostSettings", "boiler"), api.calls)
         assertEquals(listOf("Lounge", "Bedroom"), store.state.value.rooms.map { it.name })
 
         // Made an admin: the whole house loads.
@@ -380,7 +418,7 @@ class HeatingStoreTest {
         val store = HeatingStore(api, backgroundScope)
         store.start()
         runCurrent()
-        assertEquals(listOf("me", "rooms", "boostSettings", "status", "groups"), api.calls)
+        assertEquals(listOf("me", "rooms", "boostSettings", "boiler", "status", "groups"), api.calls)
         assertEquals(true, store.state.value.admin)
     }
 

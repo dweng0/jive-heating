@@ -40,6 +40,15 @@ class FakeHeatingApi : HeatingApi {
     override suspend fun history(range: String): History { call("history $range"); return history }
     override suspend fun me(): AccountUser { call("me"); return me }
     override suspend fun status(): Status { call("status"); return status }
+
+    var boilerOverride: BoilerOverride? = null
+    override suspend fun boiler(): BoilerOverrideStatus { call("boiler"); return BoilerOverrideStatus(boilerOverride) }
+    override suspend fun boilerOff(): BoilerOverrideStatus {
+        call("boilerOff")
+        boilerOverride = BoilerOverride("jane", "2026-10-25T09:00:00+00:00")
+        return BoilerOverrideStatus(boilerOverride)
+    }
+    override suspend fun boilerOn(): BoilerOverrideStatus { call("boilerOn"); boilerOverride = null; return BoilerOverrideStatus(null) }
     override suspend fun rooms(): List<Room> { call("rooms"); return rooms.values.toList() }
     override suspend fun room(id: String): Room { call("room $id"); return rooms.getValue(id) }
     override suspend fun createRoom(name: String): Room {

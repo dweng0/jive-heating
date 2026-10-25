@@ -67,6 +67,16 @@ class ActivityFormatTest {
         assertEquals("Utility not responding", activityText(stuck, true))
     }
 
+    // BDD: The apps show that the boiler is forced off
+    @Test
+    fun `an admin turning the boiler off or on reads naturally`() {
+        val off = event(1, "override", JsonPrimitive("off"), actor = "Jane")
+        val on = event(2, "override", JsonPrimitive("on"), actor = "Jane")
+        assertEquals("Jane turned the boiler off", activityText(off, false))
+        assertEquals("Jane turned the boiler back on", activityText(on, false))
+        assertEquals("Boiler turned off", activityText(off, true))
+    }
+
     // BDD: A plug losing contact is in the activity feed
     @Test
     fun `a plug losing contact is named with its room`() {

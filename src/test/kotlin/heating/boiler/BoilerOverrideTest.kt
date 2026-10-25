@@ -161,6 +161,18 @@ class BoilerOverrideTest {
         }
     }
 
+    // BDD: The apps show that the boiler is forced off
+    @Test
+    fun `every signed-in app is told when the boiler is forced off or back on`() {
+        val t = TestHeating()
+        heatingLounge(t)
+        val seen = mutableListOf<heating.Change>()
+        t.app.changes.subscribe { seen += it }
+        turnOff(t)
+        Actor.runAs("jane") { t.app.boiler.turnOn() }
+        assertEquals(2, seen.count { it == heating.Change.BoilerOverrideChanged })
+    }
+
     // BDD: The feed and the notifications tell everyone
     @Test
     fun `the feed and the notifications tell everyone`() {
