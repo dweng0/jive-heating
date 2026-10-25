@@ -218,14 +218,14 @@ class NotificationsTest {
         t.api {
             val users = household(t)
             val jane = users.getValue("jane")
-            assertEquals("""{"heatingOn":true,"heatingFinished":true}""", anonymous.get("/api/me/notifications") { bearerAuth(jane) }.bodyAsText())
+            assertEquals("""{"heatingOn":true,"heatingFinished":true,"boilerOverride":true}""", anonymous.get("/api/me/notifications") { bearerAuth(jane) }.bodyAsText())
             val saved = anonymous.put("/api/me/notifications") {
                 contentType(ContentType.Application.Json)
                 setBody("""{"heatingOn":false,"heatingFinished":true}""")
                 bearerAuth(jane)
             }
             assertEquals(HttpStatusCode.OK, saved.status)
-            assertEquals("""{"heatingOn":false,"heatingFinished":true}""", anonymous.get("/api/me/notifications") { bearerAuth(jane) }.bodyAsText())
+            assertEquals("""{"heatingOn":false,"heatingFinished":true,"boilerOverride":true}""", anonymous.get("/api/me/notifications") { bearerAuth(jane) }.bodyAsText())
             setMode(users.getValue("john"), zoneId, """{"mode":"manual","target":22.0}""")
         }
         gathered(t)

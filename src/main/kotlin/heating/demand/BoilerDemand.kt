@@ -15,6 +15,13 @@ class BoilerDemand(
         private set
     private var changedAt: Instant? = null
 
+    /** Switch off now, ignoring the minimum run time (an admin forced the boiler off). */
+    fun forceOff(now: Instant) {
+        if (!on) return
+        on = false
+        changedAt = now
+    }
+
     /** Move towards [wanted] if the minimum time in the current state has passed. True if it flipped. */
     fun update(wanted: Boolean, now: Instant): Boolean {
         if (wanted == on) return false

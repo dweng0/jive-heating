@@ -78,7 +78,8 @@ class HeatingApp(
     val holidays = HolidayRepository(store)
     val actions = ActionTracker(clock::instant)
     val activity = heating.activity.ActivityLog(config.dbPath, clock::instant)
-    val zones = ZoneControl(rooms, commander, ::now, holidays::current, actions, activity)
+    val boilerOverride = heating.boiler.BoilerOverride(store)
+    val zones = ZoneControl(rooms, commander, ::now, holidays::current, actions, activity, forcedOff = { boilerOverride.on })
     val boostSettings = heating.boost.BoostSettingsRepository(store)
     val boosts = BoostControl(rooms, zones, commander, holidays, ::now, actions, activity) { boostSettings.get().defaultTarget }
     val holiday = HolidayControl(holidays, boosts, zones, changes, config.timezone, ::now, activity)
@@ -114,6 +115,8 @@ class HeatingApp(
         temperature = demand::zoneTemperature,
         webPush = webPush,
     )
+
+    val boiler = heating.boiler.BoilerControl(boilerOverride, rooms, zones, boosts, demand, changes, ::now, activity, alerts)
 
     private val offlineActivity = heating.activity.OfflineActivity(activity, rooms, valves, sensors, meters, monitoredMeters)
 

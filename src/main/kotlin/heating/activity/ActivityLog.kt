@@ -163,6 +163,9 @@ class ActivityLog(path: String, private val now: () -> Instant) {
 
 const val BOILER = "boiler"
 
+/** An admin turned the boiler off or back on: the whole house's, so every viewer sees it. */
+const val OVERRIDE = "override"
+
 /** "john" becomes "John". */
 fun displayName(username: String): String = username.replaceFirstChar { it.titlecase(java.util.Locale.UK) }
 
@@ -176,7 +179,7 @@ fun Activity.forViewer(canSee: ((String) -> Boolean)?, admin: Boolean): Activity
     if (canSee == null) return this
     val keep = roomIds.indices.filter { canSee(roomIds[it]) }
     val names = if (rooms.size == roomIds.size) keep.map { rooms[it] } else rooms
-    if (kind == BOILER) return copy(rooms = if (rooms.size == roomIds.size) names else emptyList(), roomIds = keep.map { roomIds[it] })
+    if (kind == BOILER || kind == OVERRIDE) return copy(rooms = if (rooms.size == roomIds.size) names else emptyList(), roomIds = keep.map { roomIds[it] })
     if (keep.isEmpty()) return null
     return copy(roomIds = keep.map { roomIds[it] }, rooms = names)
 }

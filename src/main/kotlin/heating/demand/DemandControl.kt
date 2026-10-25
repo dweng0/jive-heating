@@ -64,6 +64,17 @@ class DemandControl(
         publish()
     }
 
+    /** Stop the boiler now, without waiting for the minimum run time, and publish it. */
+    fun forceOff() {
+        val wasOn = synchronized(this) { boiler.on.also { boiler.forceOff(now().toInstant()) } }
+        evaluate()
+        if (wasOn) {
+            holdLogged = false
+            publish()
+            changes.emit(Change.StatusChanged)
+        }
+    }
+
     fun zoneCalling(zone: Zone): Boolean = zoneDemand.isCalling(zone)
 
     fun zoneTemperature(zone: Zone): Double? = zoneDemand.temperature(zone)

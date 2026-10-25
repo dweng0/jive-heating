@@ -23,6 +23,8 @@ data class StatusView(
     val holiday: HolidayView?,
     val serverTime: String,
     val timezone: String,
+    /** Set while an admin has forced the boiler off (see /api/boiler). */
+    val boilerOverride: BoilerOverrideView? = null,
 )
 
 fun HeatingApp.statusView() = StatusView(
@@ -35,6 +37,7 @@ fun HeatingApp.statusView() = StatusView(
     },
     serverTime = now().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
     timezone = config.timezone.id,
+    boilerOverride = boilerOverrideStatus().override,
 )
 
 fun Route.statusRoutes(heating: HeatingApp) {

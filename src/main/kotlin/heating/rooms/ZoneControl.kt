@@ -22,6 +22,8 @@ class ZoneControl(
     private val holiday: () -> Holiday? = { null },
     private val actions: ActionTracker? = null,
     private val activity: heating.activity.ActivityLog? = null,
+    /** True while an admin has forced the boiler off: no zone has a target then. */
+    private val forcedOff: () -> Boolean = { false },
 ) {
     private class AppliedTarget(val target: Double?)
 
@@ -54,7 +56,8 @@ class ZoneControl(
     }
 
     /** What [settings] should heat to right now, including any holiday. */
-    fun effectiveTarget(settings: ZoneSettings): Double? = EffectiveTarget.of(settings, now(), holiday())
+    fun effectiveTarget(settings: ZoneSettings): Double? =
+        if (forcedOff()) null else EffectiveTarget.of(settings, now(), holiday())
 
     /** Send a zone's effective target to its valves: heat to it, or off. */
     fun apply(zone: Zone) {

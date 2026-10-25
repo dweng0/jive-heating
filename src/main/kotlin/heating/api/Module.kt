@@ -80,7 +80,9 @@ fun Application.heatingModule(heating: HeatingApp) {
                 deviceRoutes(heating)
                 dashboardRoutes(heating)
                 livePowerRoutes(heating)
+                boilerAdminRoutes(heating)
             }
+            boilerReadRoutes(heating)
             boostSettingsRoutes(heating)
             liveRoutes(heating)
             authRoutes(heating)

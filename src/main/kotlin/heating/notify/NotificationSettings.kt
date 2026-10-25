@@ -4,9 +4,9 @@ import heating.heatingJson
 import heating.store.Store
 import kotlinx.serialization.Serializable
 
-/** Which notifications a person wants. Both are on for a new user. */
+/** Which notifications a person wants. All are on for a new user. */
 @Serializable
-data class NotificationPrefs(val heatingOn: Boolean = true, val heatingFinished: Boolean = true)
+data class NotificationPrefs(val heatingOn: Boolean = true, val heatingFinished: Boolean = true, val boilerOverride: Boolean = true)
 
 @Serializable
 private data class NotificationsDocument(

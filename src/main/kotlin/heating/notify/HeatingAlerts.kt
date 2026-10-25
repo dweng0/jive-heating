@@ -72,6 +72,18 @@ class HeatingAlerts(
         }
     }
 
+    /**
+     * An admin turned the boiler off ([on] false) or back on. Everyone but [by] who wants it hears, and
+     * a person who can see no room hears nothing, like the other notifications.
+     */
+    fun boilerOverride(on: Boolean, by: String?, rooms: List<Pair<String, String>>) {
+        val mentions = rooms.map { (id, name) -> Mention(id, name, null) }
+        send(exclude = by, mentions, { it.boilerOverride }) {
+            if (on) "Boiler back on" to "Heating is running again"
+            else "Boiler turned off by admin" to "Heating is paused until an admin turns it back on"
+        }
+    }
+
     @Synchronized
     private fun flush(force: Boolean) {
         val due = gathering.values.filter { force || Duration.between(it.first, now()) >= GATHER }

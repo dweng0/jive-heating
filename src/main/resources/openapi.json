@@ -329,8 +329,18 @@
           "boiler": { "$ref": "#/components/schemas/BoilerState" },
           "holiday": { "$ref": "#/components/schemas/Holiday", "nullable": true },
           "serverTime": { "type": "string", "format": "date-time" },
-          "timezone": { "type": "string" }
+          "timezone": { "type": "string" },
+          "boilerOverride": { "$ref": "#/components/schemas/BoilerOverride", "nullable": true, "description": "Set while an admin has forced the boiler off. Absent or null otherwise" }
         }
+      },
+      "BoilerOverride": {
+        "description": "An admin forced the boiler off. While it is set no zone calls for heat, valves are held off and heat demand is false; the zones' own settings are untouched. Clients show a notice to everyone and, to admins, a button to turn the boiler back on",
+        "type": "object", "required": ["by", "since"],
+        "properties": { "by": { "type": "string", "description": "Username of the admin, or admin when the service token did it" }, "since": { "type": "string", "format": "date-time" } }
+      },
+      "BoilerOverrideStatus": {
+        "type": "object", "required": ["override"],
+        "properties": { "override": { "$ref": "#/components/schemas/BoilerOverride", "nullable": true } }
       },
       "BoilerState": {
         "description": "What the boiler is doing. heating: a zone calls and demand is on. cycling: no zone calls but demand stays on until its minimum run ends. resting: a zone calls but demand stays off until its minimum rest ends. idle: nothing calls and demand is off.",
@@ -436,6 +446,24 @@
     },
     "/api/status": {
       "get": { "summary": "Heat demand, holiday, server time", "responses": { "200": { "description": "status", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Status" } } } } } }
+    },
+    "/api/boiler": {
+      "get": {
+        "summary": "Whether an admin has forced the boiler off. Any signed-in user may read it, so every app can say why nothing is heating (Status carries the same in boilerOverride for admins and the live status.updated event)",
+        "responses": { "200": { "description": "override state", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BoilerOverrideStatus" } } } } }
+      }
+    },
+    "/api/boiler/off": {
+      "post": {
+        "summary": "Admins only. Force the boiler off: heat demand false at once, every valve sent off, every boost cancelled. Zone modes, targets and schedules are kept. Stays on, across restarts, until /api/boiler/on. 409 if it is already off",
+        "responses": { "200": { "description": "override state", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BoilerOverrideStatus" } } } }, "403": { "description": "Not an admin" }, "409": { "$ref": "#/components/responses/Conflict" } }
+      }
+    },
+    "/api/boiler/on": {
+      "post": {
+        "summary": "Admins only. End the override: every zone is sent its own target again and demand follows the rooms. 409 if the boiler is not forced off",
+        "responses": { "200": { "description": "override state", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BoilerOverrideStatus" } } } }, "403": { "description": "Not an admin" }, "409": { "$ref": "#/components/responses/Conflict" } }
+      }
     },
     "/api/rooms": {
       "get": { "summary": "List rooms", "responses": { "200": { "description": "rooms", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Room" } } } } } } },

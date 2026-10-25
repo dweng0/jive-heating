@@ -1465,7 +1465,7 @@ Engineering rules (apply to every scenario):
 
         Scenario: Each person can turn each notification off
             When "jane" sends PUT /api/me/notifications {"heatingOn":false,"heatingFinished":true}
-            Then GET /api/me/notifications returns those settings
+            Then GET /api/me/notifications returns those settings, with "boilerOverride" on because it was not sent
             And "jane" gets "Heating finished" notifications but not "turned the heating on" ones
             And both are on for a new user
 
@@ -2172,6 +2172,65 @@ Engineering rules (apply to every scenario):
             Given the feed says the valve in "Utility" is unresponsive
             When the valve reports the target it was sent
             Then the feed lists an "unresponsive" event with room "Utility" and value "responding"
+
+    Feature: Boiler override
+        As the household admin
+        I want to force the boiler off from the app
+        So that I can stop the heating at once, whatever the rooms are asking for
+
+        An override is admin only. While it is on, no zone calls for heat, every valve is sent off, the
+        published heat demand is false (so the thermostat drops to its lowest setting) and the zones'
+        own modes, targets and schedules are kept exactly as they were. It stays on, across restarts, until an
+        admin turns it back on. Anyone signed in can read whether it is on; only an admin can change it.
+
+        Scenario: An admin turns the boiler off
+            Given zone "Lounge" is on manual target 21.0 with a boost running, and the boiler is heating
+            When admin "jane" turns the boiler off
+            Then heat demand is published as false at once, without waiting for the minimum run time
+            And "Lounge TRV" is sent system_mode off, and so is every other valve
+            And the boost is cancelled but the zone keeps mode manual and target 21.0
+            And the action log has one line "boiler turned off by jane"
+
+        Scenario: Nothing heats while the boiler is off
+            Given the boiler is turned off
+            When a room is turned up, boosted or has its knob turned
+            Then the change is saved
+            And no zone calls for heat, the valves are sent off again, and heat demand stays false
+
+        Scenario: The override survives a restart
+            Given the boiler is turned off by admin "jane"
+            When the service restarts
+            Then the boiler is still off, with "jane" as who turned it off
+
+        Scenario: An admin turns the boiler back on
+            Given the boiler is turned off and zone "Lounge" is below its target
+            When admin "jane" turns the boiler back on
+            Then every zone is sent its own target again from its schedule or mode
+            And heat demand is true again once the boiler's minimum rest time has passed
+            And the boost cancelled earlier does not come back
+
+        Scenario: Only admins can turn the boiler off or on
+            When member "john" or a caller with no token tries to turn the boiler off or on
+            Then it is refused with 403 or 401 and nothing changes
+            But any signed-in user can read whether the override is on, and who set it
+
+        Scenario: The feed and the notifications tell everyone
+            When admin "jane" turns the boiler off
+            Then the feed lists an "override" event with actor "Jane" and value "off"
+            And everyone with the app except "jane", who wants it, is sent "Boiler turned off by admin"
+            And when the boiler is turned back on, the feed lists value "on" and they are sent "Boiler back on"
+            And members are told only if they can see at least one room
+
+        Scenario: Each person can switch the boiler notification off
+            Given "john" turned off "Boiler turned off or on" in his notification settings
+            When admin "jane" turns the boiler off
+            Then "john" is sent nothing, but the feed still has the event
+
+        Scenario: The apps show that the boiler is forced off
+            When the boiler is turned off
+            Then every signed-in app shows a notice that the system will not heat while the admin override is on
+            And the admin sees a button to turn the boiler back on, and the boiler chip shows "Off (admin)"
+            And turning the boiler off asks "Are you sure?" first
 
 # Deferred (not to be built yet)
 # - Mirror schedules to the valve weekly_schedule as a fallback when the service is down
