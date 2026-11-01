@@ -246,7 +246,8 @@ The Android app only allows cleartext HTTP to `localhost`, so use HTTPS for anyt
 **Phone push notifications (Android).** Create a Firebase project, enable Cloud Messaging, download the
 `google-services.json` into `android/app/` before building the app (it is gitignored), create a service
 account key, mount that JSON into the container and set `FCM_SERVICE_ACCOUNT_FILE` to its path. Without
-it, everything works except push notifications.
+it, everything works except push notifications. Building the APK without `google-services.json` stops with
+an error, so push is never lost by accident; pass `-PnoPush` to build without it on purpose.
 
 **Browser notifications (Web Push).** Set `WEBPUSH_CONTACT=mailto:you@example.com`. The service creates
 and stores its own signing keys.

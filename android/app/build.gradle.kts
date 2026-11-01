@@ -6,8 +6,16 @@ plugins {
 }
 
 // Firebase config for push notifications (heating-notifier project); kept out of git. Without it the
-// app builds and runs, it just never gets a push token.
-if (file("google-services.json").exists()) apply(plugin = "com.google.gms.google-services")
+// app runs but never gets a push token, so building an APK needs it, or -PnoPush to mean that.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+} else if (!hasProperty("noPush")) {
+    gradle.taskGraph.whenReady {
+        if (allTasks.any { it.project == project && it.name.startsWith("assemble") }) {
+            throw GradleException("android/app/google-services.json is missing, so this APK would get no push notifications. Add it, or pass -PnoPush.")
+        }
+    }
+}
 
 android {
     namespace = "heating.app"
@@ -17,8 +25,8 @@ android {
         applicationId = "heating.app"
         minSdk = 33 // Android 13 and newer
         targetSdk = 35
-        versionCode = 28
-        versionName = "0.15.0"
+        versionCode = 29
+        versionName = "0.15.1"
     }
 
     buildTypes {
