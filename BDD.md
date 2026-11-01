@@ -2359,6 +2359,121 @@ Engineering rules (apply to every scenario):
             And there is no table, and it says this is what no plug accounts for
             And with no house reading "Now" says "No reading", and its figures are marked incomplete
 
+    Feature: Energy areas
+        As the household admin
+        I want to measure electricity that does not belong to a heated room
+        So that I can see what all the lights, or the garage and office, use and cost
+
+        An energy area is a named thing with meters and no valves, such as "Lights" or "Garage/Office". It is not a
+        room: it has no heating, and appears only on the Energy tab, for admins. An area's whole-area meter is a clamp
+        that measures all of it. Its use is "of which" the house meter's, and its cost is use at the electricity price
+        alone: standing charges are never split onto areas. Lights are a whole-house figure, never split across rooms.
+
+        Scenario: An admin creates an energy area
+            Given admin "jane" is on the Energy tab, on the web app or the Android app
+            When they choose "Add area" and enter "Garage/Office"
+            Then POST /api/energy/areas is sent and GET /api/energy/areas lists it with id "garage-office"
+            And it can be renamed or deleted, and a name already used by another area gets 409
+            And a member gets 403
+
+        Scenario: An energy area stays out of heating
+            Given energy area "Garage/Office" exists
+            When anyone opens the Rooms screen, schedules, holiday settings or the boiler views
+            Then "Garage/Office" is not listed, and GET /api/rooms does not include it
+            And it is not offered as a place to put a valve or a sensor, and never asks for heat
+
+        Scenario: A clamp measures a whole area
+            Given meter "Garage Clamp" is waiting to be set up and energy area "Garage/Office" exists
+            When admin "jane" chooses "Measure an energy area", then "Garage/Office"
+            Then PUT /api/energy/areas/garage-office/whole-meter/Garage Clamp is sent and it leaves "Waiting to be set up"
+            And GET /api/energy/areas shows it as the area's whole-area meter
+            And a meter that reports power but no energy can be chosen; one that reports neither gets 422
+            And the house meter cannot be chosen (409), and a meter measures one area at most (409)
+            And choosing another meter replaces it, and each five-minute record keeps the area it was measuring when recorded
+
+        Scenario: A whole-area meter is recorded from its power
+            Given "Garage Clamp" measures "Garage/Office"
+            When it reports 1200 W for five minutes, and its energy total jumps up and down
+            Then history records 0.1 kWh and an average of 1200 W for that five minutes
+            And each power reading holds until the next one, as for the house meter
+            And minutes with no reading are marked missing, never 0 kWh
+
+        Scenario: A plug is put in an energy area
+            Given "Desk Plug" is monitored and energy area "Garage/Office" exists
+            When admin "jane" chooses "Garage/Office" for it
+            Then PUT /api/energy/areas/garage-office/meters/Desk Plug is sent and GET /api/meters shows it in that area
+            And a plug is in one room or one area at most: choosing an area takes it out of its room
+            And use already recorded stays where it was recorded
+
+        Scenario: An area with no clamp is the sum of its plugs
+            Given "Desk Plug" used 0.2 kWh and "Heater Plug" used 0.3 kWh today, both in "Garage/Office", which has no whole-area meter
+            When an admin sends GET /api/dashboard?period=today
+            Then "areas" lists "Garage/Office" with 0.5 kWh and its cost
+
+        Scenario: An area's plugs are part of its clamp's figure
+            Given "Garage Clamp" recorded 1.0 kWh today in "Garage/Office" and "Desk Plug" in that area used 0.2 kWh
+            When an admin sends GET /api/dashboard?period=today
+            Then "areas" lists "Garage/Office" with 1.0 kWh, not 1.2 kWh, with "Desk Plug" 0.2 kWh and a rest of 0.8 kWh
+            And if the plugs add up to more than the clamp the rest is 0, never negative
+
+        Scenario: Everything else counts an area once
+            Given the house meter recorded 8.0 kWh today, "Garage Clamp" 1.0 kWh, "Desk Plug" behind it 0.2 kWh, "Lights Clamp" 0.5 kWh and "Fridge Plug" in "Kitchen" 1.2 kWh
+            When an admin reads everything else today, from the dashboard, its usage over time or its live card
+            Then it is 5.3 kWh: the house minus each whole-area meter, and minus only those plugs not behind one
+            And electricityKwh is still 8.0, and totalCost does not add areas again
+            And "devices" does not list whole-area meters, and "rooms" does not list areas
+
+        Scenario: The Energy tab shows areas below the rooms
+            Given "Lights" is using 60 W and has used 0.5 kWh today
+            When admin "jane" opens the Energy tab, on the web app or the Android app
+            Then an "Other areas" section below the room cards and above "Everything else" has a card for "Lights"
+            And the card shows power now, use and cost for the chosen period, with live readings like a room card
+            And with no areas, the section is replaced by the "Add area" action alone
+            And members do not see areas
+
+        Scenario: An area card opens its energy dashboard
+            Given "Garage/Office" has "Garage Clamp" and "Desk Plug"
+            When admin "jane" opens its card, on the web app or the Android app
+            Then it opens the same dashboard as a room: cards, carousel, scrolling back through time, table and the Power, Use and Cost choice
+            And on the web app it has the address /energy/areas/garage-office, and a member sent there goes to the Rooms screen
+            And GET /api/energy/areas/garage-office/usage takes "window" and "to", with the same shape as a room's
+            And the carousel starts with the whole area, then "Desk Plug", and the table has a "Rest of Garage/Office" row with no chart
+            And an area measured by a clamp alone shows one chart and no table
+
+        Scenario: Lights are not split across rooms
+            Given "Lights Clamp" measures "Lights" and "Lamp Plug" is in "Lounge"
+            When admin "jane" opens the dashboards of "Lights" and "Lounge"
+            Then "Lounge" counts only "Lamp Plug", with no share of "Lights"
+            And "Lights" has no per-room figures
+
+        Scenario: Two areas that share a circuit say so
+            Given "Lights Clamp" also measures the garage and office lights, which "Garage Clamp" measures too
+            When admin "jane" chooses "Shares a circuit with" "Garage/Office" in the settings of "Lights"
+            Then PUT /api/energy/areas/lights/overlaps/garage-office is sent, and DELETE clears it
+            And the figures do not change: the shared use cannot be measured, so it is not guessed
+            And the dashboards of both areas say "Some use is also counted in" the other
+            And "Everything else" says it reads low by whatever "Lights" and "Garage/Office" both measure
+
+        Scenario: A clamp with no reading leaves the area incomplete
+            Given "Garage Clamp" had no reading from 14:20 to 15:00, while "Desk Plug" kept reporting
+            When an admin reads the use of "Garage/Office" over that time
+            Then the area's points are marked incomplete, hold only what the clamp recorded, and do not use the plug's figures instead
+            And "Now" says "No reading", never its last power
+            And "Everything else" is marked incomplete for that time
+
+        Scenario: A clamp that leaves Zigbee2MQTT leaves its area
+            Given "Garage Clamp" measures "Garage/Office"
+            When it is renamed or unpaired in Zigbee2MQTT
+            Then the area has no whole-area meter, and the energy settings carry the notice "Garage Clamp was removed from Zigbee2MQTT"
+            And its recorded use is kept and still counted in the area for when it was recorded
+
+        Scenario: Deleting an area keeps what was recorded
+            Given "Garage/Office" has "Garage Clamp" and "Desk Plug", with use recorded
+            When admin "jane" deletes the area and confirms
+            Then "Garage Clamp" is waiting to be set up again, "Desk Plug" stays monitored in no room, and any "Shares a circuit with" is cleared
+            And recorded samples are kept, and the house figure does not change
+            And from then on "Everything else" no longer subtracts "Garage Clamp", while past periods still do
+
 # Deferred (not to be built yet)
 # - Mirror schedules to the valve weekly_schedule as a fallback when the service is down
 # - Open-window alerts (TRVZB exposes the setting, not a state; needs inference)
