@@ -2359,6 +2359,14 @@ Engineering rules (apply to every scenario):
             And there is no table, and it says this is what no plug accounts for
             And with no house reading "Now" says "No reading", and its figures are marked incomplete
 
+        Scenario: Android dashboards pass being driven end to end
+            Given the web app and service for this feature are deployed, and the Android screens exist but are uncommitted
+            When RoomEnergyScreen and EverythingElseEnergyScreen are composed with what the service would send, and driven by touch
+            Then every scenario of this feature that names the Android app holds there: cards, carousel, dragging back, touch and hold, table, moved out, no plugs, room not found
+            And dragging a chart moves the chart and not the carousel, and the back arrow returns to the Energy tab where it was left
+            And RoomEnergyScreenTest passes under Robolectric, or on a device if one is plugged in
+            And then the Android work is committed and pushed, and the APK is built for the user
+
     Feature: Energy areas
         As the household admin
         I want to measure electricity that does not belong to a heated room
