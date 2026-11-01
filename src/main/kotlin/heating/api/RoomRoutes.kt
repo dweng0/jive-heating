@@ -18,6 +18,7 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 import io.ktor.server.routing.route
 import kotlinx.serialization.Serializable
+import heating.energy.UsageWindow
 import java.time.temporal.ChronoUnit
 
 @Serializable
@@ -89,6 +90,12 @@ fun Route.roomRoutes(heating: HeatingApp) = route("/api/rooms") {
                 val room = heating.rooms.get(call.parameters["id"]!!)
                 // An hour a bar over a day; a day a bar over a week or a month.
                 call.respond(heating.roomEnergyHistory.of(room.id, range.length, if (range == HistoryRange.DAY) ChronoUnit.HOURS else ChronoUnit.DAYS))
+            }
+
+            get("/plugs/usage") {
+                val window = UsageWindow.of(call.request.queryParameters["window"])
+                val to = usageTo(call.request.queryParameters["to"])
+                call.respond(heating.energyUsage.ofRoom(heating.rooms.get(call.parameters["id"]!!).id, window, to))
             }
 
             put("/meters/{meter}") {

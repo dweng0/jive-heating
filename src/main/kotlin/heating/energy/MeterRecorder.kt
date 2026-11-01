@@ -9,7 +9,8 @@ import java.time.ZoneId
 /**
  * Records the house meter and every monitored device every five minutes: the kWh used since the previous sample. The house
  * meter's is counted from its power readings ([MeterRegistry.powerTotal]), with its average power, since some clamps' energy
- * totals jump up and down; a device's is worked out from its running total. A total that drops (the device reset it) counts on from the new
+ * totals jump up and down; a device's is worked out from its running total, with its average power from its power readings
+ * (its total moves in 0.01 kWh steps, too coarse to chart five minutes by). A total that drops (the device reset it) counts on from the new
  * total rather than going negative. A stale or offline meter is recorded as unknown, not as 0 kWh;
  * when it reports again the use since its last reading is counted (a catch-up). A catch-up on the day the device went
  * stale covers its stale samples, so nothing is missing; a device back with a lower total (reset) loses the use while
@@ -31,6 +32,9 @@ class MeterRecorder(
 
     /** Each monitored device's total at its last sample that had a reading. */
     private val lastDevices = mutableMapOf<String, Double>()
+
+    /** Each monitored device's power total at its last sample that had one. */
+    private val lastDevicePower = mutableMapOf<String, Double>()
     private var failing = false
 
     val tick = Periodic { time ->
@@ -67,6 +71,7 @@ class MeterRecorder(
         last = if (meter != null && counter != null) meter to counter else last?.takeIf { it.first == meter }
 
         for (device in monitored.all()) {
+            val watts = deviceWatts(device, previousSample, hours)
             val reading = meters.reading(device)
             if (reading == null) {
                 history.addDevice(MeterSample(at, device, null, null, monitored.roomOf(device)))
@@ -79,7 +84,7 @@ class MeterRecorder(
                 staleSince != null && previous != null && reading < previous -> 0.0
                 else -> used(reading, previous)
             }
-            history.addDevice(MeterSample(at, device, reading, use, monitored.roomOf(device)))
+            history.addDevice(MeterSample(at, device, reading, use, monitored.roomOf(device), watts))
             // A catch-up on the day it went offline covers the stale samples: nothing is missing. One past midnight
             // lands on the day it came back, so both days keep their stale samples.
             if (staleSince != null && previous != null && reading >= previous && day(staleSince, zone) == day(at, zone)) {
@@ -87,6 +92,19 @@ class MeterRecorder(
             }
             lastDevices[device] = reading
         }
+    }
+
+    /** [device]'s average power since the last sample, like the house meter's; null while it has no reading. */
+    private fun deviceWatts(device: String, previousSample: Instant?, hours: Double): Double? {
+        val total = meters.powerTotal(device)
+        if (total == null) {
+            lastDevicePower.remove(device)
+            return null
+        }
+        val fresh = meters[device]?.powerSince?.let { previousSample == null || !it.isBefore(previousSample) } == true
+        val previous = lastDevicePower[device] ?: if (fresh) 0.0 else null
+        lastDevicePower[device] = total
+        return previous?.takeIf { hours > 0 }?.let { (total - it).coerceAtLeast(0.0) * 1000 / hours }
     }
 
     /** The household day a sample counts in: it covers the five minutes before it, so one at midnight is the day before. */

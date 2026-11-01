@@ -198,6 +198,44 @@
           "points": { "type": "array", "items": { "$ref": "#/components/schemas/EnergyBar" } }
         }
       },
+      "UsagePoint": {
+        "type": "object", "required": ["at", "watts", "kwh", "cost", "incomplete"],
+        "properties": {
+          "at": { "type": "string", "format": "date-time", "description": "The end of its five minutes, or the start of its hour or day" },
+          "watts": { "type": "number", "nullable": true, "description": "Average power; null with no reading, and before plug power was kept" },
+          "kwh": { "type": "number", "nullable": true, "description": "Use recorded in the point; null with no reading (not known, not 0)" },
+          "cost": { "type": "number", "nullable": true, "description": "Minor units at the electricity price; no standing charge" },
+          "incomplete": { "type": "boolean", "description": "A reading is missing, so the figures are only what was recorded" }
+        }
+      },
+      "PlugUsage": {
+        "type": "object", "required": ["meter", "points"],
+        "properties": {
+          "meter": { "type": "string" },
+          "points": { "type": "array", "items": { "$ref": "#/components/schemas/UsagePoint" }, "description": "Only its use recorded in this room" }
+        }
+      },
+      "RoomUsage": {
+        "type": "object", "required": ["currency", "from", "to", "earliest", "room", "plugs"],
+        "properties": {
+          "currency": { "type": "string", "description": "ISO 4217 code the costs are in" },
+          "from": { "type": "string", "format": "date-time" },
+          "to": { "type": "string", "format": "date-time" },
+          "earliest": { "type": "string", "format": "date-time", "nullable": true, "description": "The room's first sample; null when it has none" },
+          "room": { "type": "array", "items": { "$ref": "#/components/schemas/UsagePoint" }, "description": "The sum of the plugs at the time, in the room each was in when recorded, including plugs moved out since" },
+          "plugs": { "type": "array", "items": { "$ref": "#/components/schemas/PlugUsage" }, "description": "The plugs in the room now, sorted by name" }
+        }
+      },
+      "EverythingElseUsage": {
+        "type": "object", "required": ["currency", "from", "to", "earliest", "room"],
+        "properties": {
+          "currency": { "type": "string", "description": "ISO 4217 code the costs are in" },
+          "from": { "type": "string", "format": "date-time" },
+          "to": { "type": "string", "format": "date-time" },
+          "earliest": { "type": "string", "format": "date-time", "nullable": true, "description": "The first house sample; null when there is none" },
+          "room": { "type": "array", "items": { "$ref": "#/components/schemas/UsagePoint" }, "description": "The house less all monitored plugs, never below 0" }
+        }
+      },
       "EnergyBar": {
         "type": "object", "required": ["at", "kwh", "incomplete"],
         "properties": {
@@ -501,6 +539,14 @@
     "/api/rooms/{id}/plugs/history": {
       "parameters": [{ "$ref": "#/components/parameters/roomId" }, { "name": "range", "in": "query", "required": false, "schema": { "type": "string", "enum": ["24h", "7d", "30d"], "default": "24h" }, "description": "24h: one bar per hour; 7d and 30d: one bar per day from the household's midnight" }],
       "get": { "summary": "The room's electricity use over time as bars, from the plug use recorded in it (admin only); no points when it has no plug use in the range", "responses": { "200": { "description": "room energy history", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RoomEnergyHistory" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/api/rooms/{id}/plugs/usage": {
+      "parameters": [{ "$ref": "#/components/parameters/roomId" }, { "name": "window", "in": "query", "required": false, "schema": { "type": "string", "enum": ["24h", "7d", "30d"], "default": "24h" }, "description": "24h: a point per five minutes; 7d: per hour; 30d: per day from the household's midnight" }, { "name": "to", "in": "query", "required": false, "schema": { "type": "string", "format": "date-time" }, "description": "The end of the window; defaults to now, and a time to come is now" }],
+      "get": { "summary": "The room's and each plug's power, use and cost over time (admin only)", "responses": { "200": { "description": "room usage", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RoomUsage" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/api/energy/else/usage": {
+      "parameters": [{ "name": "window", "in": "query", "required": false, "schema": { "type": "string", "enum": ["24h", "7d", "30d"], "default": "24h" }, "description": "24h: a point per five minutes; 7d: per hour; 30d: per day from the household's midnight" }, { "name": "to", "in": "query", "required": false, "schema": { "type": "string", "format": "date-time" }, "description": "The end of the window; defaults to now, and a time to come is now" }],
+      "get": { "summary": "Everything else's power, use and cost over time: what no plug accounts for (admin only)", "responses": { "200": { "description": "everything else's usage", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EverythingElseUsage" } } } }, "400": { "$ref": "#/components/responses/BadRequest" } } }
     },
     "/api/rooms/{id}/meters/{meter}": {
       "parameters": [{ "$ref": "#/components/parameters/roomId" }, { "name": "meter", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Meter friendly name, URL-encoded" }],

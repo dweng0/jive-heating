@@ -14,7 +14,7 @@ import java.time.Instant
  * known, which the dashboard shows as missing rather than as 0 kWh). For a monitored device's sample, [room] is
  * the id of the room the plug was in when it was recorded (null: no room), so moving a plug never moves its past use.
  */
-/** [watts] is the house meter's average power over the five minutes; null on samples from before it was kept. */
+/** [watts] is the meter's average power over the five minutes; null with no reading, and on samples from before it was kept. */
 data class MeterSample(val at: Instant, val meter: String?, val counter: Double?, val kwh: Double?, val room: String? = null, val watts: Double? = null)
 
 /**
@@ -38,6 +38,11 @@ class EnergyHistory(path: String) {
             s.executeQuery("PRAGMA table_info(meter_samples)").use { rs -> generateSequence { if (rs.next()) rs.getString("name") else null }.any { name -> name == "watts" } }
         }
         if (!hasWatts) it.createStatement().use { s -> s.execute("ALTER TABLE meter_samples ADD COLUMN watts REAL") }
+        val deviceHasWatts = it.createStatement().use { s ->
+            s.executeQuery("PRAGMA table_info(device_samples)").use { rs -> generateSequence { if (rs.next()) rs.getString("name") else null }.any { name -> name == "watts" } }
+        }
+        if (!deviceHasWatts) it.createStatement().use { s -> s.execute("ALTER TABLE device_samples ADD COLUMN watts REAL") }
+        it.createStatement().use { s -> s.execute("CREATE INDEX IF NOT EXISTS device_samples_room_at ON device_samples (room, at)") }
     }
 
     @Synchronized
@@ -92,12 +97,13 @@ class EnergyHistory(path: String) {
     /** Adds a five-minute sample of a monitored device; [MeterSample.meter] is the device, [MeterSample.room] its room then. */
     @Synchronized
     fun addDevice(sample: MeterSample) {
-        connection.prepareStatement("INSERT INTO device_samples (at, meter, counter, kwh, room) VALUES (?, ?, ?, ?, ?)").use { s ->
+        connection.prepareStatement("INSERT INTO device_samples (at, meter, counter, kwh, room, watts) VALUES (?, ?, ?, ?, ?, ?)").use { s ->
             s.setLong(1, sample.at.toEpochMilli())
             s.setString(2, sample.meter)
             s.setNullableDouble(3, sample.counter)
             s.setNullableDouble(4, sample.kwh)
             if (sample.room == null) s.setNull(5, Types.VARCHAR) else s.setString(5, sample.room)
+            s.setNullableDouble(6, sample.watts)
             s.executeUpdate()
         }
     }
@@ -105,14 +111,14 @@ class EnergyHistory(path: String) {
     /** Samples of the monitored device [meter] with [from] <= at <= [to], oldest first. */
     @Synchronized
     fun deviceSamples(meter: String, from: Instant, to: Instant): List<MeterSample> =
-        connection.prepareStatement("SELECT at, counter, kwh, room FROM device_samples WHERE meter = ? AND at >= ? AND at <= ? ORDER BY at").use { s ->
+        connection.prepareStatement("SELECT at, counter, kwh, room, watts FROM device_samples WHERE meter = ? AND at >= ? AND at <= ? ORDER BY at").use { s ->
             s.setString(1, meter)
             s.setLong(2, from.toEpochMilli())
             s.setLong(3, to.toEpochMilli())
             s.executeQuery().use { rs ->
                 buildList {
                     while (rs.next()) {
-                        add(MeterSample(Instant.ofEpochMilli(rs.getLong(1)), meter, rs.getNullableDouble(2), rs.getNullableDouble(3), rs.getString(4)))
+                        add(MeterSample(Instant.ofEpochMilli(rs.getLong(1)), meter, rs.getNullableDouble(2), rs.getNullableDouble(3), rs.getString(4), rs.getNullableDouble(5)))
                     }
                 }
             }
@@ -121,17 +127,32 @@ class EnergyHistory(path: String) {
     /** Samples of every monitored device recorded in [room] with [from] < at <= [to], oldest first. */
     @Synchronized
     fun roomSamples(room: String, from: Instant, to: Instant): List<MeterSample> =
-        connection.prepareStatement("SELECT at, meter, counter, kwh FROM device_samples WHERE room = ? AND at > ? AND at <= ? ORDER BY at").use { s ->
+        connection.prepareStatement("SELECT at, meter, counter, kwh, watts FROM device_samples WHERE room = ? AND at > ? AND at <= ? ORDER BY at").use { s ->
             s.setString(1, room)
             s.setLong(2, from.toEpochMilli())
             s.setLong(3, to.toEpochMilli())
             s.executeQuery().use { rs ->
                 buildList {
                     while (rs.next()) {
-                        add(MeterSample(Instant.ofEpochMilli(rs.getLong(1)), rs.getString(2), rs.getNullableDouble(3), rs.getNullableDouble(4), room))
+                        add(MeterSample(Instant.ofEpochMilli(rs.getLong(1)), rs.getString(2), rs.getNullableDouble(3), rs.getNullableDouble(4), room, rs.getNullableDouble(5)))
                     }
                 }
             }
+        }
+
+    /** When the first sample recorded in [room] was; null when there is none. */
+    @Synchronized
+    fun earliestInRoom(room: String): Instant? =
+        connection.prepareStatement("SELECT MIN(at) FROM device_samples WHERE room = ?").use { s ->
+            s.setString(1, room)
+            s.executeQuery().use { rs -> if (rs.next()) rs.getLong(1).takeUnless { rs.wasNull() }?.let(Instant::ofEpochMilli) else null }
+        }
+
+    /** When the first house sample was; null when there is none. */
+    @Synchronized
+    fun earliest(): Instant? =
+        connection.prepareStatement("SELECT MIN(at) FROM meter_samples").use { s ->
+            s.executeQuery().use { rs -> if (rs.next()) rs.getLong(1).takeUnless { rs.wasNull() }?.let(Instant::ofEpochMilli) else null }
         }
 
     /** The last counter recorded for the monitored device [meter]; null when there is none. */

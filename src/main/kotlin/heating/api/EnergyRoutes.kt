@@ -6,8 +6,10 @@ import heating.actionLog
 import heating.Actor
 import heating.energy.EnergySettings
 import heating.energy.Meter
+import heating.energy.UsageWindow
 import heating.energy.validated
 import kotlinx.serialization.Serializable
+import java.time.Instant
 import java.time.format.DateTimeFormatter
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
@@ -21,9 +23,19 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.doubleOrNull
 
+/** The "to" of a usage request: an instant, or null for now; 400 if it cannot be read. */
+internal fun usageTo(to: String?): Instant? = to?.let {
+    runCatching { Instant.parse(it) }.getOrElse { throw ApiException.badRequest("to must be a date and time") }
+}
+
 /** Energy prices and the house electricity meter. Registered inside [adminOnly]. */
 fun Route.energyRoutes(heating: HeatingApp) {
     get("/api/settings/energy") { call.respond(heating.energySettings.get()) }
+
+    get("/api/energy/else/usage") {
+        val window = UsageWindow.of(call.request.queryParameters["window"])
+        call.respond(heating.energyUsage.ofEverythingElse(window, usageTo(call.request.queryParameters["to"])))
+    }
 
     get("/api/meters") {
         val unassignedOnly = call.request.queryParameters["unassigned"] == "true"
