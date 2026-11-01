@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Flame, PlugZap, Receipt, Sigma } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { NO_METER, energyApi, formatCost, formatKwh, plugNowWarning, type DeviceEnergy, type EnergyDashboard, type RoomEnergy, type EverythingElse, type EnergyDay, type EnergyPeriod } from '@/lib/energy'
+import { NO_METER, energyApi, energyPlace, formatCost, formatKwh, plugNowWarning, type DeviceEnergy, type EnergyDashboard, type RoomEnergy, type EverythingElse, type EnergyDay, type EnergyPeriod } from '@/lib/energy'
 import { IncompleteWarning } from './IncompleteWarning'
 import { cn } from '@/lib/utils'
 
@@ -14,7 +14,11 @@ const PERIODS: { value: EnergyPeriod; label: string }[] = [
 
 /** Gas, electricity, standing charges and total for today, the last week or month, with a bar per day. */
 export function EnergySection() {
-  const [period, setPeriod] = useState<EnergyPeriod>('today')
+  const [period, choosePeriod] = useState<EnergyPeriod>(energyPlace.period)
+  const setPeriod = (p: EnergyPeriod) => {
+    energyPlace.period = p
+    choosePeriod(p)
+  }
   const [dashboard, setDashboard] = useState<EnergyDashboard | null>(null)
   const [failed, setFailed] = useState(false)
 

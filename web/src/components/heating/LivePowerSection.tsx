@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Card, CardContent } from '@/components/ui/card'
-import { energyApi, formatCost, formatKwh, type EnergyDashboard } from '@/lib/energy'
+import { energyApi, energyPlace, formatCost, formatKwh, type EnergyDashboard } from '@/lib/energy'
 import {
   SWEEP_MS,
   dialFraction,
@@ -138,7 +139,7 @@ export function LivePowerSection() {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {rooms.map((r) => {
             const day = today?.rooms?.find((d) => d.room === r.room)
-            return <UseCard key={r.room} testId={`live-room-${r.room}`} name={r.name} watts={r.watts} house={watts} kwh={day?.kwh} cost={day?.cost} currency={currency} />
+            return <UseCard key={r.room} to={`/energy/rooms/${encodeURIComponent(r.room)}`} testId={`live-room-${r.room}`} name={r.name} watts={r.watts} house={watts} kwh={day?.kwh} cost={day?.cost} currency={currency} />
           })}
           {devices.map((d) => {
             const day = today?.devices?.find((e) => e.meter === d.meter)
@@ -147,6 +148,7 @@ export function LivePowerSection() {
           {/* The rest of the house: only while the house reading is live, as it is the house less the rest. */}
           {live?.elseWatts != null && (
             <UseCard
+              to="/energy/else"
               testId="live-rest"
               name="Everything else"
               detail="What no plug accounts for"
@@ -265,6 +267,7 @@ function Sparkline({ points, bands }: { points: PowerPoint[]; bands: PowerBands 
 }
 
 function UseCard({
+  to,
   testId,
   name,
   detail,
@@ -275,6 +278,8 @@ function UseCard({
   currency,
   muted,
 }: {
+  /** Where picking the card goes: a room's or everything else's energy dashboard. */
+  to?: string
   testId: string
   name: string
   detail?: string
@@ -287,8 +292,8 @@ function UseCard({
 }) {
   // Share of the house's load now: only while both are live.
   const share = watts != null && house != null && house > 0 ? Math.min(1, watts / house) : null
-  return (
-    <Card data-testid={testId}>
+  const card = (
+    <Card data-testid={testId} className={cn('h-full', to && 'transition-colors hover:bg-accent/40')}>
       <CardContent className="flex flex-col gap-2 p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -315,5 +320,11 @@ function UseCard({
         </div>
       </CardContent>
     </Card>
+  )
+  if (!to) return card
+  return (
+    <Link to={to} aria-label={`${name} energy`} className="rounded-xl focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none" onClick={() => (energyPlace.scrollY = window.scrollY)}>
+      {card}
+    </Link>
   )
 }

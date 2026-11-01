@@ -38,6 +38,9 @@ export interface Meter {
 
 export type EnergyPeriod = 'today' | 'week' | 'month'
 
+/** Where the Energy tab was left on opening a room's dashboard, so coming back finds it there. Forgotten on a reload. */
+export const energyPlace: { period: EnergyPeriod; scrollY: number | null } = { period: 'today', scrollY: null }
+
 export interface EnergyDay {
   date: string
   boilerHours: number

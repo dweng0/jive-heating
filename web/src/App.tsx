@@ -8,6 +8,7 @@ import { HomeProvider } from '@/lib/home'
 import { AccountPage } from '@/pages/Account'
 import { DashboardPage } from '@/pages/Dashboard'
 import { EnergyPage } from '@/pages/Energy'
+import { EverythingElseEnergyPage, RoomEnergyPage } from '@/pages/RoomEnergy'
 import { GroupPage } from '@/pages/GroupPage'
 import { PeoplePage } from '@/pages/People'
 import { RoomPage } from '@/pages/RoomPage'
@@ -47,6 +48,8 @@ export default function App() {
               <Route path="/" element={<RoomsPage />} />
               <Route path="/dashboard" element={auth.me.admin ? <DashboardPage /> : <Navigate to="/" replace />} />
               <Route path="/energy" element={auth.me.admin ? <EnergyPage /> : <Navigate to="/" replace />} />
+              <Route path="/energy/rooms/:id" element={auth.me.admin ? <RoomEnergyPage /> : <Navigate to="/" replace />} />
+              <Route path="/energy/else" element={auth.me.admin ? <EverythingElseEnergyPage /> : <Navigate to="/" replace />} />
               <Route path="/rooms/:id" element={<RoomPage />} />
               <Route path="/groups/:id" element={auth.me.admin ? <GroupPage /> : <Navigate to="/" replace />} />
               <Route path="/account" element={<AccountPage onSignOut={signOut} onSignedOutEverywhere={() => setAuth({ state: 'signedOut' })} />} />
