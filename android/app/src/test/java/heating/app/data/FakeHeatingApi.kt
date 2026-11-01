@@ -255,6 +255,16 @@ class FakeHeatingApi : HeatingApi {
         ignoredMeters.remove(device)?.let { meters[device] = it }
     }
     val roomEnergyHistories = mutableMapOf<String, RoomEnergyHistory>()
+    override suspend fun roomUsage(room: String, window: String, to: String?): EnergyUsage {
+        call("roomUsage $room $window $to")
+        return EnergyUsage(from = "2026-10-12T00:00:00Z", to = "2026-10-13T00:00:00Z")
+    }
+
+    override suspend fun everythingElseUsage(window: String, to: String?): EnergyUsage {
+        call("everythingElseUsage $window $to")
+        return EnergyUsage(from = "2026-10-12T00:00:00Z", to = "2026-10-13T00:00:00Z")
+    }
+
     override suspend fun roomEnergyHistory(room: String, range: String): RoomEnergyHistory {
         call("roomEnergyHistory $room $range")
         return roomEnergyHistories[room] ?: RoomEnergyHistory(room, "2026-10-12T00:00:00Z", "2026-10-13T00:00:00Z")

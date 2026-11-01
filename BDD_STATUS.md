@@ -1,6 +1,6 @@
 # BDD Status
 
-Checked 337 scenario(s) across 90 test file(s).
+Checked 369 scenario(s) across 95 test file(s).
 
 
 ## Feature: Service foundation
@@ -448,5 +448,58 @@ Checked 337 scenario(s) across 90 test file(s).
 - [x] Each person can switch the boiler notification off
 - [x] The apps show that the boiler is forced off
 
+## Feature: Room energy dashboard
+
+- [x] A plug's average power is recorded every five minutes
+- [x] A room's use is read over time
+- [x] A room's use is read further back
+- [x] Missing readings are not shown as no use
+- [x] Everything else is read over time
+- [x] A room card opens the room's energy dashboard
+- [x] The room dashboard leads with what it is using and costing
+- [x] The room dashboard charts each plug in a carousel
+- [x] A chart scrolls back through time
+- [x] A chart says what it shows at any point
+- [x] A chart with nothing to draw says so
+- [x] A table compares the plugs in the room
+- [x] The table says when a plug's figures cannot be trusted
+- [x] A plug moved out of the room still adds up
+- [x] A room with no plugs left has nothing to chart
+- [x] Everything else has its own dashboard
+- [x] Android dashboards pass being driven end to end
+
+## Feature: Energy areas
+
+- [ ] UNCOVERED: An admin creates an energy area
+- [ ] UNCOVERED: An energy area stays out of heating
+- [ ] UNCOVERED: A clamp measures a whole area
+- [ ] UNCOVERED: A whole-area meter is recorded from its power
+- [ ] UNCOVERED: A plug is put in an energy area
+- [ ] UNCOVERED: An area with no clamp is the sum of its plugs
+- [ ] UNCOVERED: An area's plugs are part of its clamp's figure
+- [ ] UNCOVERED: Everything else counts an area once
+- [ ] UNCOVERED: The Energy tab shows areas below the rooms
+- [ ] UNCOVERED: An area card opens its energy dashboard
+- [ ] UNCOVERED: Lights are not split across rooms
+- [ ] UNCOVERED: Two areas that share a circuit say so
+- [x] A clamp with no reading leaves the area incomplete
+- [x] A clamp that leaves Zigbee2MQTT leaves its area
+- [ ] UNCOVERED: Deleting an area keeps what was recorded
+
 ---
-**337/337 scenarios covered.**
+**356/369 scenarios covered.**
+
+13 scenario(s) need tests:
+- An admin creates an energy area
+- An energy area stays out of heating
+- A clamp measures a whole area
+- A whole-area meter is recorded from its power
+- A plug is put in an energy area
+- An area with no clamp is the sum of its plugs
+- An area's plugs are part of its clamp's figure
+- Everything else counts an area once
+- The Energy tab shows areas below the rooms
+- An area card opens its energy dashboard
+- Lights are not split across rooms
+- Two areas that share a circuit say so
+- Deleting an area keeps what was recorded

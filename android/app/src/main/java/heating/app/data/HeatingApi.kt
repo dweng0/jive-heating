@@ -103,6 +103,10 @@ interface HeatingApi {
     suspend fun roomPlugs(room: String): RoomPlugs
     /** [room]'s use as bars over [range] ("24h", "7d" or "30d"). */
     suspend fun roomEnergyHistory(room: String, range: String): RoomEnergyHistory
+    /** [room]'s and its plugs' power, use and cost over the [window] ("24h", "7d" or "30d") up to [to] (null: now). */
+    suspend fun roomUsage(room: String, window: String, to: String? = null): EnergyUsage
+    /** What no plug accounts for over the [window] up to [to] (null: now). */
+    suspend fun everythingElseUsage(window: String, to: String? = null): EnergyUsage
     /** Leave [device] (a valve, sensor or meter) out of "Waiting to be set up". */
     suspend fun ignoreDevice(device: String)
     suspend fun ignoredDevices(): List<String>
@@ -322,6 +326,10 @@ class KtorHeatingApi(
     override suspend fun roomPlugs(room: String): RoomPlugs = client.get("api/rooms/${room.encodeURLPathPart()}/plugs").body()
     override suspend fun roomEnergyHistory(room: String, range: String): RoomEnergyHistory =
         client.get("api/rooms/${room.encodeURLPathPart()}/plugs/history") { parameter("range", range) }.body()
+    override suspend fun roomUsage(room: String, window: String, to: String?): EnergyUsage =
+        client.get("api/rooms/${room.encodeURLPathPart()}/plugs/usage") { parameter("window", window); to?.let { parameter("to", it) } }.body()
+    override suspend fun everythingElseUsage(window: String, to: String?): EnergyUsage =
+        client.get("api/energy/else/usage") { parameter("window", window); to?.let { parameter("to", it) } }.body()
 
     override suspend fun ignoreDevice(device: String) {
         client.put("api/devices/${device.encodeURLPathPart()}/ignored")

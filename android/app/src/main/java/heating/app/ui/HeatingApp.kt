@@ -72,6 +72,8 @@ import heating.app.data.EnergyStore
 import heating.app.ui.energy.EnergyPricesCard
 import heating.app.ui.account.BoostSettingsCard
 import heating.app.ui.energy.EnergyScreen
+import heating.app.ui.energy.EverythingElseEnergyScreen
+import heating.app.ui.energy.RoomEnergyScreen
 import heating.app.ui.energy.IgnoredDevicesCard
 import heating.app.ui.energy.plugsWithNoRoom
 import heating.app.ui.energy.MonitoredDevicesCard
@@ -148,6 +150,8 @@ private fun Connected(connection: Connection, onSignOut: () -> Unit, onPasswordC
     val scheduleRoom = zoneArg?.let { z -> state.rooms.firstOrNull { r -> r.zones.any { it.id == z } } }
     val title = when (route) {
         "room/{id}" -> room?.name ?: ""
+        "energy/room/{id}" -> room?.name ?: "Energy"
+        "energy/else" -> "Everything else"
         "group/{id}" -> roomId?.let { state.group(it) }?.name ?: ""
         "schedule/{zoneId}" -> "${scheduleRoom?.name ?: ""} schedule"
         "settings/{id}" -> "${room?.name ?: ""} settings"
@@ -239,7 +243,20 @@ private fun Connected(connection: Connection, onSignOut: () -> Unit, onPasswordC
                 }
             }
             composable("energy") {
-                if (state.admin) EnergyScreen(connection.api, energyState, energy::loadDashboard, contentPadding = padding)
+                if (state.admin) {
+                    EnergyScreen(
+                        connection.api, energyState, energy::loadDashboard,
+                        onOpenRoom = { nav.navigate("energy/room/${android.net.Uri.encode(it)}") },
+                        onOpenEverythingElse = { nav.navigate("energy/else") },
+                        contentPadding = padding,
+                    )
+                }
+            }
+            composable("energy/room/{id}") { e ->
+                if (state.admin) RoomEnergyScreen(connection.api, e.arguments?.getString("id")!!, room?.name, contentPadding = padding)
+            }
+            composable("energy/else") {
+                if (state.admin) EverythingElseEnergyScreen(connection.api, contentPadding = padding)
             }
             composable("group/{id}") {
                 roomId?.let { state.group(it) }?.let { g ->

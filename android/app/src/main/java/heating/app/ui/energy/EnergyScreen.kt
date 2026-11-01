@@ -18,13 +18,13 @@ import heating.app.data.HeatingApi
 
 /** What the house uses: electricity now first, then use and cost for today, the week or the month. Admin only. */
 @Composable
-fun EnergyScreen(api: HeatingApi, state: EnergyState, onPeriod: (String) -> Unit, contentPadding: PaddingValues) {
+fun EnergyScreen(api: HeatingApi, state: EnergyState, onPeriod: (String) -> Unit, onOpenRoom: (String) -> Unit, onOpenEverythingElse: () -> Unit, contentPadding: PaddingValues) {
     Column(
         Modifier.fillMaxSize().padding(contentPadding).verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Text("Energy", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        LivePowerSection(api)
+        LivePowerSection(api, onOpenRoom, onOpenEverythingElse)
         EnergySection(state, onPeriod)
     }
 }

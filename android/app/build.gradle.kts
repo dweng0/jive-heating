@@ -17,8 +17,8 @@ android {
         applicationId = "heating.app"
         minSdk = 33 // Android 13 and newer
         targetSdk = 35
-        versionCode = 27
-        versionName = "0.14.1"
+        versionCode = 28
+        versionName = "0.15.0"
     }
 
     buildTypes {
@@ -43,6 +43,7 @@ android {
 
     testOptions {
         unitTests.isReturnDefaultValues = true
+        unitTests.isIncludeAndroidResources = true
     }
 }
 
@@ -78,6 +79,9 @@ dependencies {
 
     testImplementation(kotlin("test"))
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
     testImplementation("io.ktor:ktor-client-mock:$ktorVersion")
 }

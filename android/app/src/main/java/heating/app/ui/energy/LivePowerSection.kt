@@ -6,6 +6,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,6 +44,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 import heating.app.data.EnergyDashboard
 import heating.app.data.HeatingApi
 import heating.app.data.LivePower
@@ -64,20 +67,29 @@ private const val TODAY_EVERY_MS = 5 * 60_000L
 private val SweepEasing = Easing { t -> 1 - (1 - t).pow(3) }
 
 /** Same colours as the web's --power-*: aqua, yellow, red and blue from the validated palette. */
-private fun zoneColor(zone: PowerZone, dark: Boolean): Color = when (zone) {
+internal fun zoneColor(zone: PowerZone, dark: Boolean): Color = when (zone) {
     PowerZone.LOW -> Color(if (dark) 0xFF199E70 else 0xFF1BAF7A)
     PowerZone.MID -> Color(if (dark) 0xFFC98500 else 0xFFEDA100)
     PowerZone.HIGH -> Color(if (dark) 0xFFE66767 else 0xFFE34948)
     PowerZone.NEUTRAL -> Color(if (dark) 0xFF3987E5 else 0xFF2A78D6)
 }
 
+/** What the section last showed. It outlives leaving for a room's dashboard, so coming back lays out the same and the Energy tab keeps its scroll. */
+class LivePowerMemory : ViewModel() {
+    var live by mutableStateOf<LivePower?>(null)
+    var bands by mutableStateOf<PowerBands?>(null)
+    var recent by mutableStateOf<List<PowerPoint>>(emptyList())
+    var today by mutableStateOf<EnergyDashboard?>(null)
+}
+
 /** The house's electricity now, on a dial coloured by the household's own use, with its rooms as cards. Admin only. */
 @Composable
-fun LivePowerSection(api: HeatingApi) {
-    var live by remember { mutableStateOf<LivePower?>(null) }
-    var bands by remember { mutableStateOf<PowerBands?>(null) }
-    var recent by remember { mutableStateOf<List<PowerPoint>>(emptyList()) }
-    var today by remember { mutableStateOf<EnergyDashboard?>(null) }
+fun LivePowerSection(api: HeatingApi, onOpenRoom: (String) -> Unit, onOpenEverythingElse: () -> Unit) {
+    val memory = viewModel<LivePowerMemory>()
+    var live by memory::live
+    var bands by memory::bands
+    var recent by memory::recent
+    var today by memory::today
 
     LaunchedEffect(Unit) {
         launch {
@@ -128,7 +140,16 @@ fun LivePowerSection(api: HeatingApi) {
                 }
             }
         }
-        live?.let { p -> liveCards(p, today).forEach { UseCard(it, zoneColor(PowerZone.NEUTRAL, dark)) } }
+        live?.let { p ->
+            liveCards(p, today).forEach { card ->
+                val open: (() -> Unit)? = when {
+                    card.key == "rest" -> onOpenEverythingElse
+                    card.key.startsWith("room-") -> ({ onOpenRoom(card.key.removePrefix("room-")) })
+                    else -> null
+                }
+                UseCard(card, zoneColor(PowerZone.NEUTRAL, dark), open)
+            }
+        }
     }
 }
 
@@ -227,9 +248,12 @@ private fun Sparkline(points: List<PowerPoint>, bands: PowerBands?, color: Color
 }
 
 @Composable
-private fun UseCard(card: LiveCard, color: Color) {
+private fun UseCard(card: LiveCard, color: Color, onOpen: (() -> Unit)?) {
     val share by animateFloatAsState((card.share ?: 0.0).toFloat(), tween(700), label = "share")
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), modifier = Modifier.fillMaxWidth()) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        modifier = Modifier.fillMaxWidth().then(if (onOpen != null) Modifier.clickable(onClickLabel = "Open energy dashboard", onClick = onOpen) else Modifier),
+    ) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.Top) {
                 Column(Modifier.weight(1f)) {
