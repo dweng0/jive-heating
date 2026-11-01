@@ -2232,6 +2232,133 @@ Engineering rules (apply to every scenario):
             And the admin sees a button to turn the boiler back on, and the boiler chip shows "Off (admin)"
             And turning the boiler off asks "Are you sure?" first
 
+    Feature: Room energy dashboard
+        As the household admin
+        I want to open a room from the Energy tab and see its electricity in detail
+        So that I can see what each plug in it uses and costs, now and at any time in the past
+
+        A room's dashboard is on both the web app and the Android app, and is admin only like the rest of the
+        Energy tab. "Everything else" has the same dashboard. A room's use is "of which" the house meter's, and its
+        cost is use at the electricity price alone: standing charges are never split onto rooms. All costs use
+        today's price, like the energy dashboard.
+
+        Scenario: A plug's average power is recorded every five minutes
+            Given "Fridge Plug" is monitored
+            When it reports 60 W, then 120 W two and a half minutes later
+            Then the five-minute sample records an average of 90 W beside its kWh: each power reading holds until the next one
+            And a sample while the plug has no reading has no power, never 0 W
+            And samples recorded before this change have no power, and keep their kWh
+
+        Scenario: A room's use is read over time
+            Given "Fridge Plug" and "Kettle Plug" are in "Kitchen", and electricity costs 25p per kWh
+            When an admin sends GET /api/rooms/kitchen/plugs/usage?window=24h
+            Then "room" and each entry of "plugs" list points of watts, kWh and cost, one per five minutes, oldest first
+            And 7d has one point per hour and 30d one point per day (from the household's midnight), watts being the average over the point
+            And the room's points are the sum of its plugs at the time, in the room the plug was in when it was recorded
+            And a member gets 403, and an unknown room 404
+
+        Scenario: A room's use is read further back
+            Given samples are kept for 365 days
+            When an admin sends GET /api/rooms/kitchen/plugs/usage?window=24h&to=2026-10-20T12:00:00Z
+            Then the points are the 24 hours up to that time
+            And "earliest" says when the room's first sample was, so an app knows how far back it can go
+            And a "to" in the future is treated as now, and an unreadable "to" or window gets 400
+
+        Scenario: Missing readings are not shown as no use
+            Given "Fridge Plug" in "Kitchen" had no reading from 14:20 to 15:00
+            When an admin reads the room's use over that time
+            Then the plug's points from 14:20 to 15:00 have null watts, kWh and cost, never 0
+            And the room's points then hold only what was recorded and are marked incomplete
+            And a plug's catch-up after being offline stays in the five minutes it came back, as the energy dashboard counts it
+
+        Scenario: Everything else is read over time
+            Given the house meter recorded 1000 W and monitored plugs 300 W over five minutes
+            When an admin sends GET /api/energy/else/usage?window=24h
+            Then the point has 700 W with its kWh and cost, in the same shape as a room's without "plugs"
+            And it is house minus all monitored plugs, in rooms or not, and never below 0
+            And it takes "to" like a room's, is marked incomplete when the house or any plug is, is null when the house has no reading, and a member gets 403
+
+        Scenario: A room card opens the room's energy dashboard
+            Given admin "jane" is on the Energy tab, on the web app or the Android app
+            When they click or tap the "Utility" card
+            Then "Utility" opens as its own screen, with a way back to the Energy tab where they left it
+            And on the web app it has its own address, /energy/rooms/utility, that can be reloaded or bookmarked
+            And a member sent to that address goes to the Rooms screen
+
+        Scenario: The room dashboard leads with what it is using and costing
+            Given "Kitchen" is using 42 W now, and has used 1.6 kWh today at 25p per kWh
+            When admin "jane" opens its energy dashboard, on the web app or the Android app
+            Then cards at the top show "Now" 42 W, "Today" 1.6 kWh and "Cost today" £0.40
+            And "Now" moves with the live readings, without reloading
+            And "Now" shows "No reading" when no plug in the room is reporting, never its last power
+            And incomplete figures show so far with the warning triangle used in a room's Plugs section
+
+        Scenario: The room dashboard charts each plug in a carousel
+            Given "Kitchen" has "Fridge Plug" and "Kettle Plug"
+            When admin "jane" opens its energy dashboard, on the web app or the Android app
+            Then a carousel shows a line chart of the whole room first, then one for each plug by name
+            And they move between them by swiping or with arrows, with dots showing where they are
+            And a Power, Use and Cost choice draws watts, kWh or pounds, and stays as they move between charts
+            And a room with one plug shows its chart alone, with no room chart repeating it
+
+        Scenario: A chart scrolls back through time
+            Given a chart in the carousel is showing the last 24 hours
+            When admin "jane" drags or swipes along the chart
+            Then it moves back through time, loading earlier readings as they go, and stops at "earliest"
+            And 24h, 7d and 30d choose how much it shows, keeping the time they are looking at in view
+            And a "Now" button returns to the latest readings, which then keep arriving
+            And swiping on the chart moves the chart, not the carousel, and the other charts follow to the same time
+
+        Scenario: A chart says what it shows at any point
+            Given a chart in the carousel
+            When admin "jane" hovers over it, or touches and holds it
+            Then it marks that point and shows its time, watts, kWh and cost
+            And a point with no reading says "No reading", and an incomplete one "Some readings missing"
+            And the line breaks where there is no reading, instead of joining across or dropping to 0
+
+        Scenario: A chart with nothing to draw says so
+            Given "Fridge Plug" has no samples in the time being shown, or only samples from before power was kept while Power is chosen
+            When admin "jane" looks at its chart
+            Then it says "Nothing recorded for this time" instead of drawing an empty line at 0
+            And they can still scroll, and choose another range
+
+        Scenario: A table compares the plugs in the room
+            Given "Kitchen" has "Fridge Plug" using 40 W with 1.2 kWh and £0.30 today, and "Kettle Plug" using 2 W with 0.4 kWh and £0.10
+            When admin "jane" opens its energy dashboard, on the web app or the Android app
+            Then a table lists each plug with its state, power now, share of the room's use today, use today and cost today
+            And it starts sorted by cost today, highest first
+            And clicking or tapping a column heading sorts by it, again reverses it, and the heading shows which way
+            And the sort stays as live readings arrive, and on a phone the table scrolls sideways with the plug's name kept in view
+            And selecting a plug moves the carousel to its chart
+
+        Scenario: The table says when a plug's figures cannot be trusted
+            Given "TV Plug" in "Bedroom 1" went offline at 14:20
+            When admin "jane" opens the room's energy dashboard
+            Then its state is "Offline" and its power "Offline", never its last power, and it sorts below every plug with a reading of power
+            And its use and cost today show so far with the warning triangle, saying what a room's Plugs section says
+            And a plug whose energy total has stopped going up shows the same triangle and words as there
+
+        Scenario: A plug moved out of the room still adds up
+            Given "Kettle Plug" used 0.5 kWh in "Kitchen" this morning, then moved to "Lounge"
+            When admin "jane" opens the energy dashboard of "Kitchen"
+            Then the cards still count the 0.5 kWh, and the table has a row "Moved out" with 0.5 kWh and its cost, and no power
+            And the room's chart still includes it, and the carousel has no chart for "Kettle Plug" in "Kitchen"
+            And the energy dashboard of "Lounge" counts only what it used there
+
+        Scenario: A room with no plugs left has nothing to chart
+            Given every plug has been moved out of "Utility"
+            When admin "jane" opens /energy/rooms/utility
+            Then it shows what the room used today, the room's chart for what was recorded there, and says "No plugs in this room"
+            And an unknown room says "Room not found", with a way back to the Energy tab
+
+        Scenario: Everything else has its own dashboard
+            Given the house is using 855 W and plugs account for 189 W
+            When admin "jane" opens the "Everything else" card, on the web app or the Android app
+            Then cards show "Now" 666 W, "Today" and "Cost today", and on the web app it has the address /energy/else
+            And one chart scrolls back through time with the same Power, Use and Cost choice, with no carousel
+            And there is no table, and it says this is what no plug accounts for
+            And with no house reading "Now" says "No reading", and its figures are marked incomplete
+
 # Deferred (not to be built yet)
 # - Mirror schedules to the valve weekly_schedule as a fallback when the service is down
 # - Open-window alerts (TRVZB exposes the setting, not a state; needs inference)
