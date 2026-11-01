@@ -76,6 +76,7 @@ fun Application.heatingModule(heating: HeatingApp) {
                 houseRoutes(heating)
                 groupRoutes(heating)
                 energyRoutes(heating)
+                energyAreaRoutes(heating)
                 boostSettingsAdminRoutes(heating)
                 deviceRoutes(heating)
                 dashboardRoutes(heating)

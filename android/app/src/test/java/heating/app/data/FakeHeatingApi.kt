@@ -65,6 +65,10 @@ class FakeHeatingApi : HeatingApi {
         ).also { rooms[id] = it }
     }
     override suspend fun deleteRoom(id: String) { call("deleteRoom $id"); rooms.remove(id) }
+    override suspend fun energyAreas(): List<EnergyArea> = emptyList()
+    override suspend fun addEnergyArea(name: String) = EnergyArea(name.lowercase(), name)
+    override suspend fun renameEnergyArea(id: String, name: String) = EnergyArea(id, name)
+    override suspend fun deleteEnergyArea(id: String) {}
     override suspend fun assignValve(roomId: String, valve: String): Room { call("assignValve $roomId $valve"); return rooms.getValue(roomId) }
     override suspend fun removeValve(roomId: String, valve: String): Room { call("removeValve $roomId $valve"); return rooms.getValue(roomId) }
 

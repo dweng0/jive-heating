@@ -3,7 +3,7 @@
   "info": {
     "title": "Home Heating API",
     "version": "1.0.0",
-    "description": "Contract between the heating service and the Android app. Both sides build against this document; change it only by agreement. All times are ISO-8601 with offset in the service's time zone. Temperatures are °C in 0.5 steps. Live updates: WebSocket /ws (bearer token) sends JSON messages of type LiveEvent; WebSocket /ws/power (admins only) sends LivePower. Room access: admins (and the service token) use every route. A member sees and controls only the rooms an admin gave them (User.rooms); any /api/rooms/{id} or /api/zones/{zoneId} route on another room answers 404. Members get 403 on /api/house, /api/groups, /api/dashboard, GET /api/status, /api/holiday, /api/valves, /api/sensors, /api/meters, /api/settings/energy, /api/power, /ws/power, /api/admin, and on creating, renaming, deleting rooms or assigning valves and sensors."
+    "description": "Contract between the heating service and the Android app. Both sides build against this document; change it only by agreement. All times are ISO-8601 with offset in the service's time zone. Temperatures are °C in 0.5 steps. Live updates: WebSocket /ws (bearer token) sends JSON messages of type LiveEvent; WebSocket /ws/power (admins only) sends LivePower. Room access: admins (and the service token) use every route. A member sees and controls only the rooms an admin gave them (User.rooms); any /api/rooms/{id} or /api/zones/{zoneId} route on another room answers 404. Members get 403 on /api/house, /api/groups, /api/dashboard, GET /api/status, /api/holiday, /api/valves, /api/sensors, /api/meters, /api/energy/areas, /api/settings/energy, /api/power, /ws/power, /api/admin, and on creating, renaming, deleting rooms or assigning valves and sensors."
   },
   "components": {
     "securitySchemes": { "bearer": { "type": "http", "scheme": "bearer", "description": "A session token from /api/auth/login or /api/auth/setup, or the HEATING_API_TOKEN service token (admin)." } },
@@ -106,6 +106,14 @@
         "description": "What a boost heats to when no target is given, and where the apps start their boost picker. Default 22.0. PUT takes defaultTarget; 400 unless it is a number from 5.0 to 30.0 in 0.5 steps",
         "properties": {
           "defaultTarget": { "type": "number", "description": "°C, 5.0 to 30.0 in 0.5 steps" }
+        }
+      },
+      "EnergyArea": {
+        "type": "object", "required": ["id", "name"],
+        "description": "A named thing with meters and no valves, such as Lights. Not a room: it has no heating",
+        "properties": {
+          "id": { "type": "string", "description": "From the name it was created with, such as garage-office; a rename keeps it" },
+          "name": { "type": "string" }
         }
       },
       "EnergySettings": {
@@ -543,6 +551,23 @@
     "/api/rooms/{id}/plugs/usage": {
       "parameters": [{ "$ref": "#/components/parameters/roomId" }, { "name": "window", "in": "query", "required": false, "schema": { "type": "string", "enum": ["24h", "7d", "30d"], "default": "24h" }, "description": "24h: a point per five minutes; 7d: per hour; 30d: per day from the household's midnight" }, { "name": "to", "in": "query", "required": false, "schema": { "type": "string", "format": "date-time" }, "description": "The end of the window; defaults to now, and a time to come is now" }],
       "get": { "summary": "The room's and each plug's power, use and cost over time (admin only)", "responses": { "200": { "description": "room usage", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RoomUsage" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/api/energy/areas": {
+      "get": { "summary": "Energy areas, by name (admin only)", "responses": { "200": { "description": "areas", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/EnergyArea" } } } } } } },
+      "post": {
+        "summary": "Create an energy area (admin only); 409 for a name another area uses, whatever its case",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["name"], "properties": { "name": { "type": "string" } } } } } },
+        "responses": { "201": { "description": "area", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EnergyArea" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "409": { "$ref": "#/components/responses/Conflict" } }
+      }
+    },
+    "/api/energy/areas/{id}": {
+      "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+      "patch": {
+        "summary": "Rename an energy area, keeping its id (admin only); 409 for a name another area uses, whatever its case",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["name"], "properties": { "name": { "type": "string" } } } } } },
+        "responses": { "200": { "description": "area", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EnergyArea" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "$ref": "#/components/responses/Conflict" } }
+      },
+      "delete": { "summary": "Delete an energy area (admin only)", "responses": { "204": { "description": "deleted" }, "404": { "$ref": "#/components/responses/NotFound" } } }
     },
     "/api/energy/else/usage": {
       "parameters": [{ "name": "window", "in": "query", "required": false, "schema": { "type": "string", "enum": ["24h", "7d", "30d"], "default": "24h" }, "description": "24h: a point per five minutes; 7d: per hour; 30d: per day from the household's midnight" }, { "name": "to", "in": "query", "required": false, "schema": { "type": "string", "format": "date-time" }, "description": "The end of the window; defaults to now, and a time to come is now" }],

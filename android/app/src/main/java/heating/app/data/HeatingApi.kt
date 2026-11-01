@@ -115,6 +115,12 @@ interface HeatingApi {
     /** [period] is today, week or month. */
     suspend fun energyDashboard(period: String): EnergyDashboard
 
+    // Energy areas (admins only): named things with meters and no valves.
+    suspend fun energyAreas(): List<EnergyArea>
+    suspend fun addEnergyArea(name: String): EnergyArea
+    suspend fun renameEnergyArea(id: String, name: String): EnergyArea
+    suspend fun deleteEnergyArea(id: String)
+
     /** Colour bands and the last 30 minutes of house readings for the live power dial. */
     suspend fun powerSummary(): PowerSummary
 
@@ -343,6 +349,23 @@ class KtorHeatingApi(
 
     override suspend fun energyDashboard(period: String): EnergyDashboard =
         client.get("api/dashboard") { parameter("period", period) }.body()
+
+    override suspend fun energyAreas(): List<EnergyArea> = client.get("api/energy/areas").body()
+
+    override suspend fun addEnergyArea(name: String): EnergyArea = client.post("api/energy/areas") {
+        contentType(ContentType.Application.Json)
+        setBody(EnergyAreaName(name))
+    }.body()
+
+    override suspend fun renameEnergyArea(id: String, name: String): EnergyArea =
+        client.patch("api/energy/areas/${id.encodeURLPathPart()}") {
+            contentType(ContentType.Application.Json)
+            setBody(EnergyAreaName(name))
+        }.body()
+
+    override suspend fun deleteEnergyArea(id: String) {
+        client.delete("api/energy/areas/${id.encodeURLPathPart()}")
+    }
 
     override suspend fun powerSummary(): PowerSummary = client.get("api/power").body()
 

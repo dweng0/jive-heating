@@ -116,6 +116,9 @@ def find_test_files():
             parts = path.split(os.sep)
             if any(part in EXCLUDE_DIRS for part in parts):
                 continue
+            # A fake lists the whole API, so its words would seem to cover scenarios it does not test
+            if os.path.basename(path).startswith("Fake"):
+                continue
             if os.path.isfile(path):
                 test_files.add(path)
     return sorted(test_files)

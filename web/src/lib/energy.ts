@@ -117,6 +117,13 @@ export interface EnergyDashboard {
   everythingElse: EverythingElse | null
 }
 
+/** A named thing with meters and no valves, such as "Lights". Not a room: it has no heating. */
+export interface EnergyArea {
+  /** From the name it was created with; a rename keeps it */
+  id: string
+  name: string
+}
+
 const enc = encodeURIComponent
 
 export const energyApi = {
@@ -133,6 +140,10 @@ export const energyApi = {
   ignoredDevices: () => request<string[]>('GET', '/api/devices/ignored'),
   showDeviceAgain: (device: string) => request<void>('DELETE', `/api/devices/${enc(device)}/ignored`).then(() => true),
   dashboard: (period: EnergyPeriod) => request<EnergyDashboard>('GET', `/api/dashboard?period=${period}`),
+  areas: () => request<EnergyArea[]>('GET', '/api/energy/areas'),
+  addArea: (name: string) => request<EnergyArea>('POST', '/api/energy/areas', { name }),
+  renameArea: (id: string, name: string) => request<EnergyArea>('PATCH', `/api/energy/areas/${enc(id)}`, { name }),
+  deleteArea: (id: string) => request<void>('DELETE', `/api/energy/areas/${enc(id)}`).then(() => true),
 }
 
 /** How the house meter is named to an admin: the button that picks it, its hint, and its role once chosen. */

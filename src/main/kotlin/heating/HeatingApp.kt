@@ -98,6 +98,7 @@ class HeatingApp(
     val ignoredDevices = heating.devices.IgnoredDevices(store)
     val energySettings = heating.energy.EnergySettingsRepository(store)
     val monitoredMeters = heating.energy.MonitoredMeters(store)
+    val energyAreas = heating.energy.EnergyAreas(store)
     val meters = heating.energy.MeterRegistry(bus, topics, clock)
     val energyHistory = heating.energy.EnergyHistory(config.dbPath)
     val livePower = heating.energy.LivePower(

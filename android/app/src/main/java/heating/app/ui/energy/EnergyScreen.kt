@@ -26,5 +26,6 @@ fun EnergyScreen(api: HeatingApi, state: EnergyState, onPeriod: (String) -> Unit
         Text("Energy", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         LivePowerSection(api, onOpenRoom, onOpenEverythingElse)
         EnergySection(state, onPeriod)
+        EnergyAreasSection(api)
     }
 }
