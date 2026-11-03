@@ -1,6 +1,6 @@
 # BDD Status
 
-Checked 370 scenario(s) across 99 test file(s).
+Checked 370 scenario(s) across 101 test file(s).
 
 
 ## Feature: Service foundation
@@ -473,12 +473,12 @@ Checked 370 scenario(s) across 99 test file(s).
 
 - [x] An admin creates an energy area
 - [x] An energy area stays out of heating
-- [ ] UNCOVERED: A clamp measures a whole area
-- [ ] UNCOVERED: A whole-area meter is recorded from its power
-- [ ] UNCOVERED: A plug is put in an energy area
-- [ ] UNCOVERED: An area with no clamp is the sum of its plugs
-- [ ] UNCOVERED: An area's plugs are part of its clamp's figure
-- [ ] UNCOVERED: Everything else counts an area once
+- [x] A clamp measures a whole area
+- [x] A whole-area meter is recorded from its power
+- [x] A plug is put in an energy area
+- [x] An area with no clamp is the sum of its plugs
+- [x] An area's plugs are part of its clamp's figure
+- [x] Everything else counts an area once
 - [ ] UNCOVERED: The Energy tab shows areas below the rooms
 - [ ] UNCOVERED: An area card opens its energy dashboard
 - [ ] UNCOVERED: Lights are not split across rooms
@@ -488,15 +488,9 @@ Checked 370 scenario(s) across 99 test file(s).
 - [ ] UNCOVERED: Deleting an area keeps what was recorded
 
 ---
-**359/370 scenarios covered.**
+**365/370 scenarios covered.**
 
-11 scenario(s) need tests:
-- A clamp measures a whole area
-- A whole-area meter is recorded from its power
-- A plug is put in an energy area
-- An area with no clamp is the sum of its plugs
-- An area's plugs are part of its clamp's figure
-- Everything else counts an area once
+5 scenario(s) need tests:
 - The Energy tab shows areas below the rooms
 - An area card opens its energy dashboard
 - Lights are not split across rooms
