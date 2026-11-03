@@ -52,6 +52,8 @@ data class AreaUsage(
     val area: String,
     val name: String,
     val wholeMeter: String?,
+    /** Names of the areas it shares a circuit with: some of its use is also counted in them. */
+    val overlaps: List<String> = emptyList(),
 )
 
 /**
@@ -60,7 +62,15 @@ data class AreaUsage(
  * openapi: EverythingElseUsage
  */
 @Serializable
-data class EverythingElseUsage(val currency: String, val from: String, val to: String, val earliest: String?, val room: List<UsagePoint>)
+data class EverythingElseUsage(
+    val currency: String,
+    val from: String,
+    val to: String,
+    val earliest: String?,
+    val room: List<UsagePoint>,
+    /** Pairs of area names that share a circuit: it reads low by whatever both measure. */
+    val sharedCircuits: List<List<String>> = emptyList(),
+)
 
 /** How much a usage request covers, and how finely. A null [point] is one per five-minute sample. */
 enum class UsageWindow(val length: Duration, val point: ChronoUnit?) {
@@ -86,6 +96,7 @@ class EnergyUsageReport(
     private val monitored: MonitoredMeters,
     private val zone: ZoneId,
     private val clock: Clock,
+    private val areas: () -> List<EnergyArea> = { emptyList() },
 ) {
     fun ofRoom(room: String, window: UsageWindow, to: Instant?): RoomUsage {
         val end = end(to)
@@ -119,7 +130,7 @@ class EnergyUsageReport(
         }
         return AreaUsage(
             prices.currency, format(from), format(end), energy.earliestInArea(area.id)?.let(::format),
-            slotPoints(slots, window, prices), plugs, area.id, area.name, area.wholeMeter,
+            slotPoints(slots, window, prices), plugs, area.id, area.name, area.wholeMeter, overlapNames(area, areas()),
         )
     }
 
@@ -145,7 +156,7 @@ class EnergyUsageReport(
                 missing || house.kwh == null,
             )
         }
-        return EverythingElseUsage(prices.currency, format(from), format(end), energy.earliest()?.let(::format), slotPoints(rest, window, prices))
+        return EverythingElseUsage(prices.currency, format(from), format(end), energy.earliest()?.let(::format), slotPoints(rest, window, prices), sharedCircuits(areas()))
     }
 
     /** One figure for one five minutes. */

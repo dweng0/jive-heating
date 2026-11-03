@@ -95,6 +95,25 @@ fun Route.energyAreaRoutes(heating: HeatingApp) {
         call.respond(HttpStatusCode.NoContent)
     }
 
+    put("/api/energy/areas/{id}/overlaps/{other}") {
+        val id = call.parameters["id"]!!
+        val other = call.parameters["other"]!!
+        val area = call.acting {
+            heating.energyAreas.overlap(id, other).also { actionLog.info("energy area {} shares a circuit with {}{}", it.id, untrusted(other), Actor.by()) }
+        }
+        call.respond(area)
+    }
+
+    delete("/api/energy/areas/{id}/overlaps/{other}") {
+        val id = call.parameters["id"]!!
+        val other = call.parameters["other"]!!
+        call.acting {
+            heating.energyAreas.stopOverlapping(id, other)
+            actionLog.info("energy area {} no longer shares a circuit with {}{}", untrusted(id), untrusted(other), Actor.by())
+        }
+        call.respond(HttpStatusCode.NoContent)
+    }
+
     delete("/api/energy/areas/{id}") {
         val id = call.parameters["id"]!!
         call.acting {

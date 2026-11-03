@@ -118,6 +118,8 @@ data class AreaEnergy(
     val plugs: List<AreaPlugEnergy> = emptyList(),
     val rest: Double? = null,
     val restCost: Double? = null,
+    /** Names of the areas it shares a circuit with: some of its use is also counted in them. */
+    val overlaps: List<String> = emptyList(),
 )
 
 /**
@@ -134,6 +136,8 @@ data class EverythingElse(
     val cost: Double,
     val missingMinutes: Int = 0,
     val incomplete: Boolean = false,
+    /** Pairs of area names that share a circuit: it reads low by whatever both measure. */
+    val sharedCircuits: List<List<String>> = emptyList(),
 )
 
 /**
@@ -233,6 +237,7 @@ class EnergyDashboards(
         val byRoom = devices.flatMap { it.samples }.filter { it.room != null }.groupBy { it.room!! }
         // A sample covers the five minutes before it, so one at midnight is yesterday's.
         val areaSamples = energy.allAreaSamples(from.toInstant(), now.toInstant())
+        val areaList = areas().sortedBy { it.name.lowercase() }
         val clamped = AreaCounting.clamped(areaSamples)
         val plugSamples = devices.flatMap { it.samples }
         // Everything else takes off each clamp's figure, and each plug not behind one.
@@ -278,10 +283,11 @@ class EnergyDashboards(
             everythingElse = electricityKwh?.let { house ->
                 val kwh = (house - accounted).coerceAtLeast(0.0)
                 val missing = maxOf(missing, staleMinutes(elseStale.toSet()))
-                EverythingElse(round(kwh, 2), round(kwh * prices.electricityPencePerKwh, 1), missing, missing > 0)
+                EverythingElse(round(kwh, 2), round(kwh * prices.electricityPencePerKwh, 1), missing, missing > 0, sharedCircuits(areaList))
             },
-            areas = areas().sortedBy { it.name.lowercase() }.map { area ->
+            areas = areaList.map { area ->
                 area(area, areaSamples.filter { it.room == area.id }, plugSamples.filter { it.area == area.id }, clamped, prices)
+                    .copy(overlaps = overlapNames(area, areaList))
             },
         )
     }

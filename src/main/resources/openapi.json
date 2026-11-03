@@ -109,12 +109,13 @@
         }
       },
       "EnergyArea": {
-        "type": "object", "required": ["id", "name"],
+        "type": "object", "required": ["id", "name", "overlaps"],
         "description": "A named thing with meters and no valves, such as Lights. Not a room: it has no heating",
         "properties": {
           "id": { "type": "string", "description": "From the name it was created with, such as garage-office; a rename keeps it" },
           "name": { "type": "string" },
-          "wholeMeter": { "type": "string", "nullable": true, "description": "The meter (clamp) that measures all of the area; null when none" }
+          "wholeMeter": { "type": "string", "nullable": true, "description": "The meter (clamp) that measures all of the area; null when none" },
+          "overlaps": { "type": "array", "items": { "type": "string" }, "description": "Ids of the areas it shares a circuit with, both ways. Figures are not changed: the shared use cannot be measured" }
         }
       },
       "EnergySettings": {
@@ -193,13 +194,14 @@
         }
       },
       "EverythingElse": {
-        "type": "object", "required": ["kwh", "cost", "missingMinutes", "incomplete"],
+        "type": "object", "required": ["kwh", "cost", "missingMinutes", "incomplete", "sharedCircuits"],
         "description": "electricityKwh minus all monitored plugs, in rooms or not, never below 0. Part of electricityKwh, so never added to totalCost",
         "properties": {
           "kwh": { "type": "number" },
           "cost": { "type": "number", "description": "Minor units at the electricity price" },
           "missingMinutes": { "type": "integer", "description": "The longer of the house meter's minutes with no reading and the minutes any monitored plug had none" },
-          "incomplete": { "type": "boolean", "description": "True when the house meter or any monitored plug is incomplete" }
+          "incomplete": { "type": "boolean", "description": "True when the house meter or any monitored plug is incomplete" },
+          "sharedCircuits": { "type": "array", "items": { "type": "array", "items": { "type": "string" }, "minItems": 2, "maxItems": 2 }, "description": "Pairs of area names that share a circuit: this reads low by whatever both measure" }
         }
       },
       "RoomEnergyHistory": {
@@ -240,7 +242,7 @@
         }
       },
       "AreaUsage": {
-        "type": "object", "required": ["currency", "from", "to", "earliest", "room", "plugs", "area", "name", "wholeMeter"],
+        "type": "object", "required": ["currency", "from", "to", "earliest", "room", "plugs", "area", "name", "wholeMeter", "overlaps"],
         "description": "An energy area over time, in the shape of RoomUsage",
         "properties": {
           "currency": { "type": "string", "description": "ISO 4217 code the costs are in" },
@@ -251,17 +253,19 @@
           "plugs": { "type": "array", "items": { "$ref": "#/components/schemas/PlugUsage" }, "description": "The plugs in the area now, sorted by name, with what each used while in it" },
           "area": { "type": "string" },
           "name": { "type": "string" },
-          "wholeMeter": { "type": "string", "nullable": true }
+          "wholeMeter": { "type": "string", "nullable": true },
+          "overlaps": { "type": "array", "items": { "type": "string" }, "description": "Names of the areas it shares a circuit with: some of its use is also counted in them" }
         }
       },
       "EverythingElseUsage": {
-        "type": "object", "required": ["currency", "from", "to", "earliest", "room"],
+        "type": "object", "required": ["currency", "from", "to", "earliest", "room", "sharedCircuits"],
         "properties": {
           "currency": { "type": "string", "description": "ISO 4217 code the costs are in" },
           "from": { "type": "string", "format": "date-time" },
           "to": { "type": "string", "format": "date-time" },
           "earliest": { "type": "string", "format": "date-time", "nullable": true, "description": "The first house sample; null when there is none" },
-          "room": { "type": "array", "items": { "$ref": "#/components/schemas/UsagePoint" }, "description": "The house less all monitored plugs, never below 0" }
+          "room": { "type": "array", "items": { "$ref": "#/components/schemas/UsagePoint" }, "description": "The house less all monitored plugs, never below 0" },
+          "sharedCircuits": { "type": "array", "items": { "type": "array", "items": { "type": "string" }, "minItems": 2, "maxItems": 2 }, "description": "Pairs of area names that share a circuit: this reads low by whatever both measure" }
         }
       },
       "EnergyBar": {
@@ -303,7 +307,7 @@
         }
       },
       "AreaEnergy": {
-        "type": "object", "required": ["area", "name", "kwh", "cost", "missingMinutes", "incomplete", "wholeMeter", "plugs", "rest", "restCost"],
+        "type": "object", "required": ["area", "name", "kwh", "cost", "missingMinutes", "incomplete", "wholeMeter", "plugs", "rest", "restCost", "overlaps"],
         "description": "An energy area over the period. While its whole-area meter recorded, the area is the clamp's figure and its plugs are part of it; with no clamp it is the sum of its plugs. Of which the house's; standing charges are never split onto areas",
         "properties": {
           "area": { "type": "string" },
@@ -315,6 +319,7 @@
           "wholeMeter": { "type": "string", "nullable": true },
           "plugs": { "type": "array", "items": { "type": "object", "required": ["meter", "kwh", "cost"], "properties": { "meter": { "type": "string" }, "kwh": { "type": "number" }, "cost": { "type": "number" } } }, "description": "Each plug's use while in the area" },
           "rest": { "type": "number", "nullable": true, "description": "What the clamp measured beyond its plugs, never below 0; null with no clamp" },
+          "overlaps": { "type": "array", "items": { "type": "string" }, "description": "Names of the areas it shares a circuit with: some of its use is also counted in them" },
           "restCost": { "type": "number", "nullable": true }
         }
       },
@@ -617,6 +622,11 @@
       "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }, { "name": "meter", "in": "path", "required": true, "schema": { "type": "string" } }],
       "put": { "summary": "Put a monitored plug in the area, taking it out of any room or other area; its recorded use stays where it was recorded (admin only); 409 for a plug that is not monitored", "responses": { "200": { "description": "meter", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Meter" } } } }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "$ref": "#/components/responses/Conflict" } } },
       "delete": { "summary": "Take a plug out of the area; it stays monitored (admin only)", "responses": { "204": { "description": "taken out" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/api/energy/areas/{id}/overlaps/{other}": {
+      "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }, { "name": "other", "in": "path", "required": true, "schema": { "type": "string" } }],
+      "put": { "summary": "The two areas share a circuit, both ways; figures do not change, but both areas and everything else say so (admin only); 400 for the area itself", "responses": { "200": { "description": "area", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EnergyArea" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "404": { "$ref": "#/components/responses/NotFound" } } },
+      "delete": { "summary": "The two areas no longer share a circuit (admin only)", "responses": { "204": { "description": "cleared" }, "404": { "$ref": "#/components/responses/NotFound" } } }
     },
     "/api/energy/areas/{id}/whole-meter": {
       "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],

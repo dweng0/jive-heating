@@ -3,6 +3,7 @@ package heating.energy
 import heating.heatingJson
 import heating.testing.MutableClock
 import heating.testing.TestHeating
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.put
@@ -168,4 +169,47 @@ class EnergyAreaDashboardTest {
         assertEquals(listOf("garage-office" to 1000.0, "lights" to 500.0), live.areas.map { it.area to it.watts })
         assertEquals(emptyList(), live.devices, "an area's plug is not a device in no room")
     }
+
+    // BDD: Two areas that share a circuit say so
+    @Test
+    fun `two areas that share a circuit say so`() {
+        val t = house(plugs = emptyList(), areas = listOf("Garage/Office", "Lights"), clamps = listOf("Garage Clamp", "Lights Clamp"))
+        put(t, "/api/energy/areas/garage-office/whole-meter/Garage Clamp")
+        put(t, "/api/energy/areas/lights/whole-meter/Lights Clamp")
+        house(t, 8.0)
+        clamp(t, "Garage Clamp", "garage-office", 1.0)
+        clamp(t, "Lights Clamp", "lights", 0.5)
+        val before = dashboard(t)
+
+        put(t, "/api/energy/areas/lights/overlaps/garage-office")
+        val after = dashboard(t)
+        // The figures do not change: the shared use cannot be measured, so it is not guessed.
+        assertEquals(before.list("areas").map { it.number("kwh") }, after.list("areas").map { it.number("kwh") })
+        assertEquals(before["everythingElse"]!!.jsonObject.number("kwh"), after["everythingElse"]!!.jsonObject.number("kwh"))
+        // Both areas say so, and everything else says it reads low by what both measure.
+        assertEquals(listOf("Lights"), after.area("garage-office").names("overlaps"))
+        assertEquals(listOf("Garage/Office"), after.area("lights").names("overlaps"))
+        assertEquals(listOf(listOf("Garage/Office", "Lights")), after["everythingElse"]!!.jsonObject.pairs())
+        t.api { client ->
+            val areas = heatingJson.parseToJsonElement(client.get("/api/energy/areas").bodyAsText()).jsonArray.map { it.jsonObject }
+            assertEquals(listOf(listOf("lights"), listOf("garage-office")), areas.map { it.names("overlaps") })
+            val usage = heatingJson.parseToJsonElement(client.get("/api/energy/areas/lights/usage").bodyAsText()).jsonObject
+            assertEquals(listOf("Garage/Office"), usage.names("overlaps"))
+            val rest = heatingJson.parseToJsonElement(client.get("/api/energy/else/usage").bodyAsText()).jsonObject
+            assertEquals(listOf(listOf("Garage/Office", "Lights")), rest.pairs())
+
+            assertEquals(HttpStatusCode.NotFound, client.put("/api/energy/areas/lights/overlaps/shed").status)
+            assertEquals(HttpStatusCode.BadRequest, client.put("/api/energy/areas/lights/overlaps/lights").status)
+            // DELETE clears it, from either side.
+            assertEquals(HttpStatusCode.NoContent, client.delete("/api/energy/areas/garage-office/overlaps/lights").status)
+            assertEquals(HttpStatusCode.NotFound, client.delete("/api/energy/areas/garage-office/overlaps/lights").status)
+        }
+        val cleared = dashboard(t)
+        assertEquals(emptyList(), cleared.area("lights").names("overlaps"))
+        assertEquals(emptyList(), cleared["everythingElse"]!!.jsonObject.pairs())
+    }
+
+    private fun JsonObject.names(key: String) = this[key]!!.jsonArray.map { it.jsonPrimitive.content }
+
+    private fun JsonObject.pairs() = this["sharedCircuits"]!!.jsonArray.map { pair -> pair.jsonArray.map { it.jsonPrimitive.content } }
 }

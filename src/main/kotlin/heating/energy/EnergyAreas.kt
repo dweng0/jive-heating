@@ -9,12 +9,24 @@ import kotlinx.serialization.builtins.ListSerializer
 /**
  * A named thing with meters and no valves, such as "Lights" or "Garage/Office". It is not a room: it has no heating.
  * Its [id] comes from the name it was created with and stays the same through a rename. [wholeMeter] is the meter (a
- * clamp) that measures all of it, null when it has none; a meter measures one area at most.
+ * clamp) that measures all of it, null when it has none; a meter measures one area at most. [overlaps] are the ids of the
+ * areas it shares a circuit with, both ways: some use is counted in both, and as it cannot be measured it is not guessed.
  *
  * openapi: EnergyArea
  */
 @Serializable
-data class EnergyArea(val id: String, val name: String, val wholeMeter: String? = null)
+data class EnergyArea(val id: String, val name: String, val wholeMeter: String? = null, val overlaps: List<String> = emptyList())
+
+/** Each pair of [areas] that share a circuit, as their names in order, once per pair, sorted. */
+fun sharedCircuits(areas: List<EnergyArea>): List<List<String>> {
+    val names = areas.associate { it.id to it.name }
+    return areas.flatMap { area -> area.overlaps.mapNotNull { other -> names[other]?.let { listOf(area.name, it).sortedBy(String::lowercase) } } }
+        .distinct().sortedBy { it.joinToString("\u0000").lowercase() }
+}
+
+/** The names of the areas [area] shares a circuit with, by name. */
+fun overlapNames(area: EnergyArea, areas: List<EnergyArea>): List<String> =
+    areas.filter { it.id in area.overlaps }.map { it.name }.sortedBy(String::lowercase)
 
 /** The household's [EnergyArea]s, sorted by name and kept as one document in the store. */
 class EnergyAreas(private val store: Store) {
@@ -43,11 +55,36 @@ class EnergyAreas(private val store: Store) {
         return renamed
     }
 
+    /** Deletes area [id]. Any area that shared a circuit with it no longer does. */
     @Synchronized
     fun delete(id: String) {
         if (!areas.removeIf { it.id == id }) throw ApiException.notFound("area not found")
+        areas.replaceAll { area -> if (id in area.overlaps) area.copy(overlaps = area.overlaps - id) else area }
         save()
     }
+
+    /** Areas [id] and [other] share a circuit, both ways. 404 for an unknown area, 400 for the area itself. */
+    @Synchronized
+    fun overlap(id: String, other: String): EnergyArea {
+        val area = get(id)
+        val with = get(other)
+        if (id == other) throw ApiException.badRequest("an area cannot share a circuit with itself")
+        replace(with.copy(overlaps = (with.overlaps + id).distinct().sorted()))
+        return replace(area.copy(overlaps = (area.overlaps + other).distinct().sorted()))
+    }
+
+    /** Areas [id] and [other] no longer share a circuit. 404 if they did not. */
+    @Synchronized
+    fun stopOverlapping(id: String, other: String) {
+        val area = get(id)
+        if (other !in area.overlaps) throw ApiException.notFound("the areas do not share a circuit")
+        replace(area.copy(overlaps = area.overlaps - other))
+        areas.firstOrNull { it.id == other }?.let { replace(it.copy(overlaps = it.overlaps - id)) }
+    }
+
+    /** Each pair of areas that share a circuit, as their names in order, once per pair. */
+    @Synchronized
+    fun sharedCircuits(): List<List<String>> = sharedCircuits(list())
 
     @Synchronized
     fun get(id: String): EnergyArea = areas.firstOrNull { it.id == id } ?: throw ApiException.notFound("area not found")
