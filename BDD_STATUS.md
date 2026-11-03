@@ -1,6 +1,6 @@
 # BDD Status
 
-Checked 369 scenario(s) across 98 test file(s).
+Checked 369 scenario(s) across 99 test file(s).
 
 
 ## Feature: Service foundation
@@ -471,7 +471,7 @@ Checked 369 scenario(s) across 98 test file(s).
 ## Feature: Energy areas
 
 - [x] An admin creates an energy area
-- [ ] UNCOVERED: An energy area stays out of heating
+- [x] An energy area stays out of heating
 - [ ] UNCOVERED: A clamp measures a whole area
 - [ ] UNCOVERED: A whole-area meter is recorded from its power
 - [ ] UNCOVERED: A plug is put in an energy area
@@ -487,10 +487,9 @@ Checked 369 scenario(s) across 98 test file(s).
 - [ ] UNCOVERED: Deleting an area keeps what was recorded
 
 ---
-**357/369 scenarios covered.**
+**358/369 scenarios covered.**
 
-12 scenario(s) need tests:
-- An energy area stays out of heating
+11 scenario(s) need tests:
 - A clamp measures a whole area
 - A whole-area meter is recorded from its power
 - A plug is put in an energy area
