@@ -1,6 +1,6 @@
 # BDD Status
 
-Checked 370 scenario(s) across 101 test file(s).
+Checked 370 scenario(s) across 102 test file(s).
 
 
 ## Feature: Service foundation
@@ -481,18 +481,15 @@ Checked 370 scenario(s) across 101 test file(s).
 - [x] Everything else counts an area once
 - [ ] UNCOVERED: The Energy tab shows areas below the rooms
 - [ ] UNCOVERED: An area card opens its energy dashboard
-- [ ] UNCOVERED: Lights are not split across rooms
-- [ ] UNCOVERED: Two areas that share a circuit say so
+- [x] Lights are not split across rooms
+- [x] Two areas that share a circuit say so
 - [x] A clamp with no reading leaves the area incomplete
 - [x] A clamp that leaves Zigbee2MQTT leaves its area
-- [ ] UNCOVERED: Deleting an area keeps what was recorded
+- [x] Deleting an area keeps what was recorded
 
 ---
-**365/370 scenarios covered.**
+**368/370 scenarios covered.**
 
-5 scenario(s) need tests:
+2 scenario(s) need tests:
 - The Energy tab shows areas below the rooms
 - An area card opens its energy dashboard
-- Lights are not split across rooms
-- Two areas that share a circuit say so
-- Deleting an area keeps what was recorded
