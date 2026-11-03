@@ -198,4 +198,29 @@ class EnergyAreaMetersTest {
             assertEquals(HttpStatusCode.Forbidden, send(sam, HttpMethod.Put, "/api/energy/areas/lights/whole-meter/Office%20Clamp").status)
         }
     }
+
+    // BDD: A clamp that leaves Zigbee2MQTT leaves its area
+    @Test
+    fun `a clamp that leaves Zigbee2MQTT leaves its area`() {
+        val t = TestHeating(clock = MutableClock(start))
+        garageClamp(t)
+        t.meterState("Garage Clamp", """{"energy":1.0,"power":1200}""")
+        minutes(t, 5)
+
+        // Renamed in Zigbee2MQTT: the old name is gone.
+        t.discover(meters = listOf("Garage Clamp 2"))
+        t.api { client ->
+            assertNull(client.areas().withId("garage-office").text("wholeMeter"))
+            val settings = heatingJson.parseToJsonElement(client.get("/api/settings/energy").bodyAsText()).jsonObject
+            assertEquals(listOf("Garage Clamp was removed from Zigbee2MQTT"), settings["notices"]!!.jsonArray.map { it.jsonPrimitive.content })
+            // Its recorded use is kept and still counted in the area for when it was recorded.
+            val usage = heatingJson.parseToJsonElement(client.get("/api/energy/areas/garage-office/usage").bodyAsText()).jsonObject
+            val kwh = usage["room"]!!.jsonArray.mapNotNull { it.jsonObject["kwh"]?.takeUnless { k -> k is JsonNull }?.jsonPrimitive?.content?.toDouble() }.sum()
+            assertEquals(0.1, kwh, 1e-9)
+            val dashboard = heatingJson.parseToJsonElement(client.get("/api/dashboard?period=today").bodyAsText()).jsonObject
+            val area = dashboard["areas"]!!.jsonArray.map { it.jsonObject }.single()
+            assertEquals(0.1, area["kwh"]!!.jsonPrimitive.content.toDouble(), 1e-9)
+        }
+        assertEquals(1, garageSamples(t).size)
+    }
 }
