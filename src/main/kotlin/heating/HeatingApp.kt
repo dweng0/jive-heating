@@ -105,7 +105,7 @@ class HeatingApp(
         meters, energySettings, monitoredMeters, { id -> runCatching { rooms.get(id).name }.getOrNull() },
         energyHistory, config.timezone, changes, clock,
     )
-    val meterRecorder = heating.energy.MeterRecorder(energyHistory, meters, energySettings, monitoredMeters, clock::instant)
+    val meterRecorder = heating.energy.MeterRecorder(energyHistory, meters, energySettings, monitoredMeters, clock::instant, energyAreas)
     val energyDashboards = heating.energy.EnergyDashboards(history, energyHistory, energySettings, monitoredMeters, meters, rooms::list, ::now)
     val roomPlugs = heating.energy.RoomPlugsReport(energyHistory, energySettings, monitoredMeters, meters, ::now)
     val roomEnergyHistory = heating.energy.RoomEnergyHistoryReport(energyHistory, config.timezone, clock)
@@ -155,6 +155,10 @@ class HeatingApp(
             if (energySettings.get().electricityMeter == meter) actionLog.info("house meter {} removed from Zigbee2MQTT", meter)
             energySettings.meterRemoved(meter)
             monitoredMeters.meterRemoved(meter)
+            energyAreas.meterRemoved(meter)?.let { area ->
+                actionLog.info("whole-area meter {} of {} removed from Zigbee2MQTT", meter, area.id)
+                energySettings.update { it.copy(notices = it.notices + "$meter was removed from Zigbee2MQTT") }
+            }
         }
         livePower.start()
         meters.start()

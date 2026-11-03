@@ -23,7 +23,11 @@ class MeterRecorder(
     private val settings: EnergySettingsRepository,
     private val monitored: MonitoredMeters,
     private val now: () -> Instant,
+    private val areas: EnergyAreas? = null,
 ) {
+    /** Each whole-area meter's power total at its last sample that had one. */
+    private val lastAreaPower = mutableMapOf<String, Double>()
+
     private var lastSample: Instant? = null
     private var lastCleanup: Instant? = null
 
@@ -91,6 +95,30 @@ class MeterRecorder(
                 history.coverDeviceStale(device, staleSince, at)
             }
             lastDevices[device] = reading
+        }
+
+        recordAreas(at, previousSample, hours)
+    }
+
+    /**
+     * Each energy area's whole-area meter, counted from its power like the house meter: some clamps' energy totals jump up and
+     * down, and some report no energy at all. A meter with no reading is recorded as unknown, never 0 kWh.
+     */
+    private fun recordAreas(at: Instant, previousSample: Instant?, hours: Double) {
+        val measuring = areas?.list().orEmpty().mapNotNull { area -> area.wholeMeter?.let { area.id to it } }
+        lastAreaPower.keys.retainAll(measuring.map { it.second }.toSet())
+        for ((area, meter) in measuring) {
+            val total = meters.powerTotal(meter)
+            if (total == null) {
+                lastAreaPower.remove(meter)
+                history.addArea(MeterSample(at, meter, null, null, area))
+                continue
+            }
+            // Its first reading this run is all new use; a meter read for longer (just chosen) starts counting from now.
+            val fresh = meters[meter]?.powerSince?.let { previousSample == null || !it.isBefore(previousSample) } == true
+            val kwh = used(total, lastAreaPower[meter] ?: if (fresh) 0.0 else null)
+            lastAreaPower[meter] = total
+            history.addArea(MeterSample(at, meter, total, kwh, area, kwh.takeIf { hours > 0 }?.let { it * 1000 / hours }))
         }
     }
 

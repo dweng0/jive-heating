@@ -43,6 +43,53 @@ class EnergyHistory(path: String) {
         }
         if (!deviceHasWatts) it.createStatement().use { s -> s.execute("ALTER TABLE device_samples ADD COLUMN watts REAL") }
         it.createStatement().use { s -> s.execute("CREATE INDEX IF NOT EXISTS device_samples_room_at ON device_samples (room, at)") }
+        it.createStatement().use { s ->
+            s.execute("CREATE TABLE IF NOT EXISTS area_samples (at INTEGER NOT NULL, area TEXT NOT NULL, meter TEXT NOT NULL, counter REAL, kwh REAL, watts REAL)")
+            s.execute("CREATE INDEX IF NOT EXISTS area_samples_area_at ON area_samples (area, at)")
+            s.execute("CREATE INDEX IF NOT EXISTS area_samples_at ON area_samples (at)")
+        }
+    }
+
+    /**
+     * Adds a five-minute sample of an energy area's whole-area meter: [MeterSample.meter] is the meter, [MeterSample.room]
+     * the area it was measuring then, [MeterSample.counter] its power total.
+     */
+    @Synchronized
+    fun addArea(sample: MeterSample) {
+        connection.prepareStatement("INSERT INTO area_samples (at, area, meter, counter, kwh, watts) VALUES (?, ?, ?, ?, ?, ?)").use { s ->
+            s.setLong(1, sample.at.toEpochMilli())
+            s.setString(2, sample.room!!)
+            s.setString(3, sample.meter!!)
+            s.setNullableDouble(4, sample.counter)
+            s.setNullableDouble(5, sample.kwh)
+            s.setNullableDouble(6, sample.watts)
+            s.executeUpdate()
+        }
+    }
+
+    /** Whole-area meter samples recorded for [area] with [from] < at <= [to], oldest first. */
+    @Synchronized
+    fun areaSamples(area: String, from: Instant, to: Instant): List<MeterSample> =
+        connection.prepareStatement("SELECT at, meter, counter, kwh, watts FROM area_samples WHERE area = ? AND at > ? AND at <= ? ORDER BY at").use { s ->
+            s.setString(1, area)
+            s.setLong(2, from.toEpochMilli())
+            s.setLong(3, to.toEpochMilli())
+            s.executeQuery().use { rs -> areaRows(rs, area) }
+        }
+
+    /** Every area's whole-area meter samples with [from] < at <= [to], oldest first. */
+    @Synchronized
+    fun allAreaSamples(from: Instant, to: Instant): List<MeterSample> =
+        connection.prepareStatement("SELECT at, meter, counter, kwh, watts, area FROM area_samples WHERE at > ? AND at <= ? ORDER BY at").use { s ->
+            s.setLong(1, from.toEpochMilli())
+            s.setLong(2, to.toEpochMilli())
+            s.executeQuery().use { rs -> areaRows(rs, null) }
+        }
+
+    private fun areaRows(rs: java.sql.ResultSet, area: String?): List<MeterSample> = buildList {
+        while (rs.next()) {
+            add(MeterSample(Instant.ofEpochMilli(rs.getLong(1)), rs.getString(2), rs.getNullableDouble(3), rs.getNullableDouble(4), area ?: rs.getString(6), rs.getNullableDouble(5)))
+        }
     }
 
     @Synchronized
@@ -198,7 +245,7 @@ class EnergyHistory(path: String) {
     /** Deletes samples older than [cutoff]. */
     @Synchronized
     fun deleteBefore(cutoff: Instant) {
-        for (table in listOf("meter_samples", "device_samples")) {
+        for (table in listOf("meter_samples", "device_samples", "area_samples")) {
             connection.prepareStatement("DELETE FROM $table WHERE at < ?").use { s ->
                 s.setLong(1, cutoff.toEpochMilli())
                 s.executeUpdate()

@@ -42,19 +42,25 @@ fun Route.energyRoutes(heating: HeatingApp) {
         val house = heating.energySettings.get().electricityMeter
         call.respond(
             heating.meters.all()
-                .filter { !unassignedOnly || (it.name != house && it.name !in heating.ignoredDevices && it.name !in heating.monitoredMeters) }
+                .filter {
+                    !unassignedOnly || (
+                        it.reportsEnergy && it.name != house && it.name !in heating.ignoredDevices &&
+                            it.name !in heating.monitoredMeters && heating.energyAreas.measuredBy(it.name) == null
+                        )
+                }
                 .map { heating.meterView(it, house) },
         )
     }
 
     put("/api/meters/{meter}/monitored") {
         val name = call.parameters["meter"]!!
-        val meter = heating.meters[name]
+        val meter = heating.meters[name]?.takeIf { it.reportsEnergy }
         if (meter == null) {
             if (heating.meters.isDevice(name)) throw ApiException.unprocessable("This device does not report energy")
             throw ApiException.notFound("meter not found")
         }
         if (heating.energySettings.get().electricityMeter == name) throw ApiException.conflict("the main meter cannot also be monitored")
+        if (heating.energyAreas.measuredBy(name) != null) throw ApiException.conflict("a whole-area meter cannot also be monitored")
         call.acting {
             heating.monitoredMeters.monitor(name)
             actionLog.info("meter {} monitored{}", name, Actor.by())
@@ -73,7 +79,8 @@ fun Route.energyRoutes(heating: HeatingApp) {
 
     put("/api/meters/{meter}/house") {
         val name = call.parameters["meter"]!!
-        if (heating.meters[name] == null) throw ApiException.notFound("meter not found")
+        if (heating.meters[name]?.takeIf { it.reportsEnergy } == null) throw ApiException.notFound("meter not found")
+        if (heating.energyAreas.measuredBy(name) != null) throw ApiException.conflict("a whole-area meter cannot be the house meter")
         val updated = call.acting {
             heating.energySettings.chooseMeter(name)
                 .also { actionLog.info("house electricity meter -> {}{}", name, Actor.by()) }
@@ -120,6 +127,10 @@ data class MeterView(
     val monitored: Boolean = false,
     /** Id of the room this monitored device is in; null when it is in no room. */
     val room: String? = null,
+    /** Id of the energy area this meter measures as its whole-area meter; null when none. */
+    val area: String? = null,
+    /** False for a meter that reports power but no energy total: it can only measure an energy area. */
+    val reportsEnergy: Boolean = true,
 )
 
 fun HeatingApp.meterView(meter: Meter, house: String? = energySettings.get().electricityMeter) = MeterView(
@@ -132,6 +143,8 @@ fun HeatingApp.meterView(meter: Meter, house: String? = energySettings.get().ele
     inUse = meter.name == house,
     monitored = meter.name in monitoredMeters,
     room = monitoredMeters.roomOf(meter.name),
+    area = energyAreas.measuredBy(meter.name),
+    reportsEnergy = meter.reportsEnergy,
 )
 
 /** [this] with the fields present in [body] replaced; fields left out are unchanged. */

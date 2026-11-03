@@ -113,7 +113,8 @@
         "description": "A named thing with meters and no valves, such as Lights. Not a room: it has no heating",
         "properties": {
           "id": { "type": "string", "description": "From the name it was created with, such as garage-office; a rename keeps it" },
-          "name": { "type": "string" }
+          "name": { "type": "string" },
+          "wholeMeter": { "type": "string", "nullable": true, "description": "The meter (clamp) that measures all of the area; null when none" }
         }
       },
       "EnergySettings": {
@@ -142,7 +143,9 @@
           "lastReading": { "type": "string", "format": "date-time", "nullable": true },
           "inUse": { "type": "boolean", "description": "It is the house electricity meter" },
           "monitored": { "type": "boolean", "description": "Its use is monitored, as part of the house meter's, never added to it" },
-          "room": { "type": "string", "nullable": true, "description": "Id of the room this monitored device is in; null when in no room" }
+          "room": { "type": "string", "nullable": true, "description": "Id of the room this monitored device is in; null when in no room" },
+          "area": { "type": "string", "nullable": true, "description": "Id of the energy area this meter measures as its whole-area meter; null when none" },
+          "reportsEnergy": { "type": "boolean", "description": "False for a meter reporting power but no energy total: it can only measure an energy area, and is never listed as waiting to be set up" }
         }
       },
       "EnergyDay": {
@@ -568,6 +571,17 @@
         "responses": { "200": { "description": "area", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EnergyArea" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "$ref": "#/components/responses/Conflict" } }
       },
       "delete": { "summary": "Delete an energy area (admin only)", "responses": { "204": { "description": "deleted" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/api/energy/areas/{id}/whole-meter/{meter}": {
+      "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }, { "name": "meter", "in": "path", "required": true, "schema": { "type": "string" } }],
+      "put": {
+        "summary": "Make a meter (a clamp) measure the whole area, replacing any it had (admin only). A meter reporting power without energy will do; 422 for a device reporting no power, 409 for the house meter, a monitored plug, or a meter already measuring another area",
+        "responses": { "200": { "description": "area", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EnergyArea" } } } }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "$ref": "#/components/responses/Conflict" }, "422": { "description": "This device does not report power" } }
+      }
+    },
+    "/api/energy/areas/{id}/whole-meter": {
+      "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+      "delete": { "summary": "The area no longer has a whole-area meter; its recorded use is kept (admin only)", "responses": { "204": { "description": "cleared" }, "404": { "$ref": "#/components/responses/NotFound" } } }
     },
     "/api/energy/else/usage": {
       "parameters": [{ "name": "window", "in": "query", "required": false, "schema": { "type": "string", "enum": ["24h", "7d", "30d"], "default": "24h" }, "description": "24h: a point per five minutes; 7d: per hour; 30d: per day from the household's midnight" }, { "name": "to", "in": "query", "required": false, "schema": { "type": "string", "format": "date-time" }, "description": "The end of the window; defaults to now, and a time to come is now" }],

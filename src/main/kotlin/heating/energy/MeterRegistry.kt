@@ -14,8 +14,8 @@ import java.time.Instant
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
- * Latest known state of one electricity meter: a Zigbee2MQTT device that exposes both `energy`
- * (a running kWh total) and `power` (W), such as an electricity clamp or a smart plug.
+ * Latest known state of one electricity meter: a Zigbee2MQTT device that exposes `power` (W) and usually
+ * `energy` (a running kWh total), such as an electricity clamp or a smart plug.
  */
 data class Meter(
     val name: String,
@@ -39,6 +39,11 @@ data class Meter(
      */
     val powerKwh: Double = 0.0,
     val powerSince: Instant? = null,
+    /**
+     * False for a device that reports power but no energy total. Such a meter can only measure an energy area (whose use is
+     * counted from power); it cannot be the house meter or be monitored.
+     */
+    val reportsEnergy: Boolean = true,
 )
 
 /**
@@ -127,19 +132,25 @@ class MeterRegistry(
     private fun onDevices(payload: String) {
         val devices = parse(payload) as? JsonArray ?: return
         val all = devices.mapNotNull { ((it as? JsonObject)?.get("friendly_name") as? JsonPrimitive)?.content }.toSet()
-        val names = devices.mapNotNull { element ->
+        // Every device reporting power, and whether it reports an energy total too.
+        val found = devices.mapNotNull { element ->
             val device = element as? JsonObject ?: return@mapNotNull null
             val definition = device["definition"] as? JsonObject ?: return@mapNotNull null
             val model = (definition["model"] as? JsonPrimitive)?.content
             val exposed = properties(definition["exposes"])
-            if (model != "TRVZB" && "energy" in exposed && "power" in exposed) {
-                (device["friendly_name"] as? JsonPrimitive)?.content
+            if (model != "TRVZB" && "power" in exposed) {
+                (device["friendly_name"] as? JsonPrimitive)?.content?.let { it to ("energy" in exposed) }
             } else null
-        }.toSet()
+        }.toMap()
+        val names = found.keys
 
         val removed = synchronized(this) {
             this.devices = all
-            names.forEach { name -> meters.putIfAbsent(name, Meter(name, discovered = clock.instant())) }
+            found.forEach { (name, energy) ->
+                val current = meters[name]
+                if (current == null) meters[name] = Meter(name, discovered = clock.instant(), reportsEnergy = energy)
+                else if (current.reportsEnergy != energy) meters[name] = current.copy(reportsEnergy = energy)
+            }
             val gone = meters.keys - names
             gone.forEach { meters.remove(it) }
             gone

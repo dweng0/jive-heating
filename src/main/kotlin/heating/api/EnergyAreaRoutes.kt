@@ -1,6 +1,7 @@
 package heating.api
 
 import heating.Actor
+import heating.ApiException
 import heating.HeatingApp
 import heating.actionLog
 import heating.untrusted
@@ -12,6 +13,7 @@ import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.patch
 import io.ktor.server.routing.post
+import io.ktor.server.routing.put
 import kotlinx.serialization.Serializable
 
 /** The name an energy area is created with or renamed to. */
@@ -37,6 +39,31 @@ fun Route.energyAreaRoutes(heating: HeatingApp) {
             heating.energyAreas.rename(id, name).also { actionLog.info("energy area {} renamed {}{}", it.id, untrusted(it.name), Actor.by()) }
         }
         call.respond(area)
+    }
+
+    put("/api/energy/areas/{id}/whole-meter/{meter}") {
+        val id = call.parameters["id"]!!
+        val name = call.parameters["meter"]!!
+        heating.energyAreas.get(id)
+        val meter = heating.meters[name]
+        if (meter == null) {
+            if (heating.meters.isDevice(name)) throw ApiException.unprocessable("This device does not report power")
+            throw ApiException.notFound("meter not found")
+        }
+        if (heating.energySettings.get().electricityMeter == name) throw ApiException.conflict("the house meter cannot measure an area")
+        if (name in heating.monitoredMeters) throw ApiException.conflict("a monitored plug cannot measure a whole area")
+        val area = call.acting {
+            heating.energyAreas.measure(id, name).also { actionLog.info("energy area {} measured by {}{}", it.id, untrusted(name), Actor.by()) }
+        }
+        call.respond(area)
+    }
+
+    delete("/api/energy/areas/{id}/whole-meter") {
+        val id = call.parameters["id"]!!
+        call.acting {
+            heating.energyAreas.stopMeasuring(id).also { actionLog.info("energy area {} has no whole-area meter{}", it.id, Actor.by()) }
+        }
+        call.respond(HttpStatusCode.NoContent)
     }
 
     delete("/api/energy/areas/{id}") {
