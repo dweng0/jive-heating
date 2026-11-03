@@ -68,11 +68,18 @@ class MeterRecorder(
             // The power total starts at 0 with this run. Its first reading since the last sample is all new use; a meter read
             // for longer (just made the house meter) starts counting from now.
             val fresh = meters[meter]?.powerSince?.let { previousSample == null || !it.isBefore(previousSample) } == true
-            used(counter, last?.takeIf { it.first == meter }?.second ?: if (fresh) 0.0 else null)
+            // A power total never resets within a run: one lower than last time means nothing more was used.
+            (last?.takeIf { it.first == meter }?.second ?: if (fresh) 0.0 else null)?.let { (counter - it).coerceAtLeast(0.0) } ?: 0.0
         }
         val hours = Duration.between(previousSample ?: at.minus(SAMPLE_INTERVAL), at).toMillis() / 3_600_000.0
         history.add(MeterSample(at, meter, counter, kwh, watts = kwh?.takeIf { hours > 0 }?.let { it * 1000 / hours }))
-        last = if (meter != null && counter != null) meter to counter else last?.takeIf { it.first == meter }
+        last = when {
+            meter != null && counter != null -> meter to counter
+            // Gone stale: the power total drops the last power it held past its last reading, so count on from what it
+            // had counted at that reading.
+            meter != null && meters[meter]?.powerSince != null -> meter to meters[meter]!!.powerKwh
+            else -> last?.takeIf { it.first == meter }
+        }
 
         for (device in monitored.all()) {
             val watts = deviceWatts(device, previousSample, hours)
@@ -110,13 +117,17 @@ class MeterRecorder(
         for ((area, meter) in measuring) {
             val total = meters.powerTotal(meter)
             if (total == null) {
-                lastAreaPower.remove(meter)
+                // The power total counts nothing for the gap, and drops the last power it was holding past the last
+                // reading: count on from what it had counted at that reading.
+                meters[meter]?.takeIf { it.powerSince != null }?.let { lastAreaPower[meter] = it.powerKwh }
                 history.addArea(MeterSample(at, meter, null, null, area))
                 continue
             }
             // Its first reading this run is all new use; a meter read for longer (just chosen) starts counting from now.
             val fresh = meters[meter]?.powerSince?.let { previousSample == null || !it.isBefore(previousSample) } == true
-            val kwh = used(total, lastAreaPower[meter] ?: if (fresh) 0.0 else null)
+            // A power total never resets within a run, so one lower than last time is the last power held past its last
+            // reading, then dropped when it went stale: nothing more was used.
+            val kwh = (lastAreaPower[meter] ?: if (fresh) 0.0 else null)?.let { (total - it).coerceAtLeast(0.0) } ?: 0.0
             lastAreaPower[meter] = total
             history.addArea(MeterSample(at, meter, total, kwh, area, kwh.takeIf { hours > 0 }?.let { it * 1000 / hours }))
         }

@@ -85,6 +85,26 @@ class MeterRecordingTest {
         assertEquals(0.2, after.single().kwh!!, 1e-9)
     }
 
+    // BDD: The house meter's use is counted from its power
+    @Test
+    fun `a house meter that goes quiet mid-sample counts only its use when it is back`() {
+        val t = TestHeating()
+        t.discover(meters = listOf("Main Clamp"))
+        houseMeter(t, "Main Clamp")
+        t.meterState("Main Clamp", """{"power":1200}""")
+        minutes(t, 5)
+        // Last heard from halfway through a sample, still drawing 1800 W, then silent past going stale.
+        t.clock.advance(Duration.ofSeconds(150))
+        t.meterState("Main Clamp", """{"power":1800}""")
+        t.clock.advance(Duration.ofSeconds(150))
+        t.app.tick()
+        minutes(t, 30)
+        assertEquals(null, lastKwh(t))
+        t.meterState("Main Clamp", """{"power":600}""")
+        minutes(t, 5)
+        assertEquals(0.05, lastKwh(t)!!, 1e-9)
+    }
+
     private fun fridgeKwh(t: TestHeating): Double? =
         t.app.energyHistory.deviceSamples("Fridge Plug", Instant.EPOCH, t.clock.instant()).last().kwh
 
