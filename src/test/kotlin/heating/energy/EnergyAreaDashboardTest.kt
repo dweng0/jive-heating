@@ -252,6 +252,34 @@ class EnergyAreaDashboardTest {
         assertEquals(12, t.app.energyHistory.allAreaSamples(Instant.EPOCH, t.clock.instant()).count { it.meter == "Garage Clamp" })
     }
 
+    // BDD: Lights are not split across rooms
+    @Test
+    fun `lights are not split across rooms`() {
+        val t = house(plugs = listOf("Lamp Plug"), areas = listOf("Lights"), clamps = listOf("Lights Clamp"))
+        val lounge = t.app.rooms.create("Lounge").id
+        put(t, "/api/energy/areas/lights/whole-meter/Lights Clamp")
+        put(t, "/api/rooms/$lounge/meters/Lamp Plug")
+        house(t, 8.0)
+        clamp(t, "Lights Clamp", "lights", 0.5)
+        plug(t, "Lamp Plug", 0.1, room = lounge)
+
+        val dashboard = dashboard(t)
+        // "Lounge" counts only "Lamp Plug", with no share of "Lights".
+        assertEquals(0.1, dashboard.list("rooms").single().number("kwh"), 1e-9)
+        assertEquals(0.5, dashboard.area("lights").number("kwh"), 1e-9)
+        t.api { client ->
+            val room = heatingJson.parseToJsonElement(client.get("/api/rooms/$lounge/plugs/usage").bodyAsText()).jsonObject
+            assertEquals(0.1, room.list("room").sumOf { it.number("kwh") }, 1e-3) // each point is rounded to 4 places
+            assertEquals(listOf("Lamp Plug"), room.list("plugs").map { it.text("meter") })
+            // "Lights" has no per-room figures: the whole area and its own plugs, none.
+            val lights = heatingJson.parseToJsonElement(client.get("/api/energy/areas/lights/usage").bodyAsText()).jsonObject
+            assertEquals(0.5, lights.list("room").sumOf { it.number("kwh") }, 1e-3)
+            assertEquals(emptyList(), lights.list("plugs"))
+            assertTrue(lights.keys.none { it.startsWith("rooms") }, "${lights.keys}")
+        }
+        assertTrue(dashboard.area("lights").keys.none { it.startsWith("rooms") })
+    }
+
     private fun JsonObject.names(key: String) = this[key]!!.jsonArray.map { it.jsonPrimitive.content }
 
     private fun JsonObject.pairs() = this["sharedCircuits"]!!.jsonArray.map { pair -> pair.jsonArray.map { it.jsonPrimitive.content } }
