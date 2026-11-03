@@ -35,17 +35,45 @@ class MonitoredMeters(private val store: Store) {
     fun stop(name: String): Boolean = names.remove(name).also {
         if (it) save()
         if (rooms.remove(name) != null) saveRooms()
+        if (areas.remove(name) != null) saveAreas()
     }
+
+    /** Meter name to energy area id. A meter is in one room or one area at most. */
+    private val areas: MutableMap<String, String> =
+        (store.get(AREAS_KEY)?.let { heatingJson.decodeFromString(ROOMS, it) } ?: emptyMap()).toMutableMap()
 
     @Synchronized
     fun roomOf(name: String): String? = rooms[name]
 
-    /** Puts monitored [name] in [room], taking it out of any other. Returns false if [name] is not monitored. */
+    @Synchronized
+    fun areaOf(name: String): String? = areas[name]
+
+    /** Puts monitored [name] in [room], taking it out of any other room or area. Returns false if [name] is not monitored. */
     @Synchronized
     fun putInRoom(name: String, room: String): Boolean {
         if (name !in names) return false
+        if (areas.remove(name) != null) saveAreas()
         if (rooms.put(name, room) != room) saveRooms()
         return true
+    }
+
+    /** Puts monitored [name] in energy area [area], taking it out of any room or other area. Returns false if [name] is not monitored. */
+    @Synchronized
+    fun putInArea(name: String, area: String): Boolean {
+        if (name !in names) return false
+        if (rooms.remove(name) != null) saveRooms()
+        if (areas.put(name, area) != area) saveAreas()
+        return true
+    }
+
+    /** Returns whether [name] was in [area]. */
+    @Synchronized
+    fun takeOutOfArea(name: String, area: String): Boolean = areas.remove(name, area).also { if (it) saveAreas() }
+
+    /** Takes every meter out of [area], which no longer exists. They stay monitored, and their recorded use is kept. */
+    @Synchronized
+    fun areaDeleted(area: String) {
+        if (areas.values.removeAll { it == area }) saveAreas()
     }
 
     /** Returns whether [name] was in [room]. */
@@ -77,9 +105,12 @@ class MonitoredMeters(private val store: Store) {
 
     private fun saveRooms() = store.put(ROOMS_KEY, heatingJson.encodeToString(ROOMS, rooms.toSortedMap()))
 
+    private fun saveAreas() = store.put(AREAS_KEY, heatingJson.encodeToString(ROOMS, areas.toSortedMap()))
+
     companion object {
         private const val KEY = "monitored-meters"
         private const val ROOMS_KEY = "monitored-meter-rooms"
+        private const val AREAS_KEY = "monitored-meter-areas"
         private val ROOMS = MapSerializer(String.serializer(), String.serializer())
     }
 }

@@ -66,6 +66,28 @@ fun Route.energyAreaRoutes(heating: HeatingApp) {
         call.respond(HttpStatusCode.NoContent)
     }
 
+    put("/api/energy/areas/{id}/meters/{meter}") {
+        val id = call.parameters["id"]!!
+        val name = call.parameters["meter"]!!
+        heating.energyAreas.get(id)
+        val meter = heating.meters[name] ?: throw ApiException.notFound("meter not found")
+        call.acting {
+            if (!heating.monitoredMeters.putInArea(name, id)) throw ApiException.conflict("only a monitored device can be put in an area")
+            actionLog.info("meter {} put in energy area {}{}", untrusted(name), id, Actor.by())
+        }
+        call.respond(heating.meterView(meter))
+    }
+
+    delete("/api/energy/areas/{id}/meters/{meter}") {
+        val id = call.parameters["id"]!!
+        val name = call.parameters["meter"]!!
+        val was = call.acting {
+            heating.monitoredMeters.takeOutOfArea(name, id).also { if (it) actionLog.info("meter {} taken out of energy area {}{}", untrusted(name), id, Actor.by()) }
+        }
+        if (!was) throw ApiException.notFound("meter is not in this area")
+        call.respond(HttpStatusCode.NoContent)
+    }
+
     delete("/api/energy/areas/{id}") {
         val id = call.parameters["id"]!!
         call.acting {

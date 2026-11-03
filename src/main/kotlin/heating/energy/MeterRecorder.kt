@@ -85,7 +85,7 @@ class MeterRecorder(
             val watts = deviceWatts(device, previousSample, hours)
             val reading = meters.reading(device)
             if (reading == null) {
-                history.addDevice(MeterSample(at, device, null, null, monitored.roomOf(device)))
+                history.addDevice(MeterSample(at, device, null, null, monitored.roomOf(device), area = monitored.areaOf(device)))
                 continue
             }
             val previous = lastDevices[device] ?: history.lastDeviceCounter(device)
@@ -95,7 +95,7 @@ class MeterRecorder(
                 staleSince != null && previous != null && reading < previous -> 0.0
                 else -> used(reading, previous)
             }
-            history.addDevice(MeterSample(at, device, reading, use, monitored.roomOf(device), watts))
+            history.addDevice(MeterSample(at, device, reading, use, monitored.roomOf(device), watts, monitored.areaOf(device)))
             // A catch-up on the day it went offline covers the stale samples: nothing is missing. One past midnight
             // lands on the day it came back, so both days keep their stale samples.
             if (staleSince != null && previous != null && reading >= previous && day(staleSince, zone) == day(at, zone)) {

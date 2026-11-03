@@ -95,6 +95,51 @@ class EnergyAreaMetersTest {
         assertEquals(0.05, garageSamples(t).last().kwh!!, 1e-9)
     }
 
+    // BDD: A plug is put in an energy area
+    @Test
+    fun `a plug is put in an energy area`() {
+        val t = TestHeating(clock = MutableClock(start))
+        t.discover(meters = listOf("Desk Plug", "Lamp Plug"))
+        val study = t.app.rooms.create("Study").id
+        t.api { client ->
+            client.put("/api/meters/Desk Plug/monitored")
+            client.addArea("Garage/Office")
+            assertEquals(HttpStatusCode.OK, client.put("/api/rooms/$study/meters/Desk Plug").status)
+        }
+        t.meterState("Desk Plug", """{"energy":1.0,"power":100}""")
+        minutes(t, 5)
+
+        t.api { client ->
+            assertEquals(HttpStatusCode.OK, client.put("/api/energy/areas/garage-office/meters/Desk Plug").status)
+            val desk = client.meters().named("Desk Plug")
+            assertEquals("garage-office", desk.text("area"))
+            assertNull(desk.text("room"), "choosing an area takes it out of its room")
+            assertEquals(HttpStatusCode.Conflict, client.put("/api/energy/areas/garage-office/meters/Lamp Plug").status, "only a monitored plug")
+            assertEquals(HttpStatusCode.NotFound, client.put("/api/energy/areas/shed/meters/Desk Plug").status)
+        }
+        t.meterState("Desk Plug", """{"energy":1.1,"power":100}""")
+        minutes(t, 5)
+
+        // Use already recorded stays where it was recorded.
+        val samples = t.app.energyHistory.deviceSamples("Desk Plug", start, t.clock.instant())
+        assertEquals(listOf(study to null, null to "garage-office"), samples.map { it.room to it.area })
+
+        t.api { client ->
+            // Choosing a room takes it out of its area.
+            assertEquals(HttpStatusCode.OK, client.put("/api/rooms/$study/meters/Desk Plug").status)
+            assertNull(client.meters().named("Desk Plug").text("area"))
+            client.put("/api/energy/areas/garage-office/meters/Desk Plug")
+            assertEquals(HttpStatusCode.NoContent, client.delete("/api/energy/areas/garage-office/meters/Desk Plug").status)
+            assertNull(client.meters().named("Desk Plug").text("area"))
+            assertEquals(HttpStatusCode.NotFound, client.delete("/api/energy/areas/garage-office/meters/Desk Plug").status)
+            // A plug that stops being monitored leaves its area.
+            client.put("/api/energy/areas/garage-office/meters/Desk Plug")
+            client.delete("/api/meters/Desk Plug/monitored")
+            client.put("/api/meters/Desk Plug/monitored")
+            assertNull(client.meters().named("Desk Plug").text("area"))
+        }
+    }
+
     // BDD: A clamp measures a whole area
     @Test
     fun `a clamp measures a whole area`() {
@@ -113,7 +158,7 @@ class EnergyAreaMetersTest {
             assertEquals("Garage Clamp", client.areas().withId("garage-office").text("wholeMeter"))
             // It leaves "Waiting to be set up", and says which area it measures.
             assertEquals(listOf("Office Clamp"), client.meters("?unassigned=true").map { it.text("name") })
-            assertEquals("garage-office", client.meters().named("Garage Clamp").text("area"))
+            assertEquals("garage-office", client.meters().named("Garage Clamp").text("measures"))
 
             // Power without energy will do; neither will not.
             assertEquals(HttpStatusCode.OK, client.measure("lights", "Lights Clamp").status)
@@ -138,7 +183,7 @@ class EnergyAreaMetersTest {
         t.api { client ->
             assertEquals(HttpStatusCode.OK, client.measure("garage-office", "Office Clamp").status)
             assertEquals("Office Clamp", client.areas().withId("garage-office").text("wholeMeter"))
-            assertNull(client.meters().named("Garage Clamp").text("area"))
+            assertNull(client.meters().named("Garage Clamp").text("measures"))
             assertEquals(listOf("Garage Clamp"), client.meters("?unassigned=true").map { it.text("name") })
         }
         minutes(t, 5)

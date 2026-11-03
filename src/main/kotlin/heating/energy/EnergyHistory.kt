@@ -14,8 +14,19 @@ import java.time.Instant
  * known, which the dashboard shows as missing rather than as 0 kWh). For a monitored device's sample, [room] is
  * the id of the room the plug was in when it was recorded (null: no room), so moving a plug never moves its past use.
  */
-/** [watts] is the meter's average power over the five minutes; null with no reading, and on samples from before it was kept. */
-data class MeterSample(val at: Instant, val meter: String?, val counter: Double?, val kwh: Double?, val room: String? = null, val watts: Double? = null)
+/**
+ * [watts] is the meter's average power over the five minutes; null with no reading, and on samples from before it was kept.
+ * For a monitored device's sample, [area] is the id of the energy area the plug was in when it was recorded (null: none).
+ */
+data class MeterSample(
+    val at: Instant,
+    val meter: String?,
+    val counter: Double?,
+    val kwh: Double?,
+    val room: String? = null,
+    val watts: Double? = null,
+    val area: String? = null,
+)
 
 /**
  * Meter samples, in their own table of the service's SQLite file next to the room history. Monitored devices
@@ -43,6 +54,10 @@ class EnergyHistory(path: String) {
         }
         if (!deviceHasWatts) it.createStatement().use { s -> s.execute("ALTER TABLE device_samples ADD COLUMN watts REAL") }
         it.createStatement().use { s -> s.execute("CREATE INDEX IF NOT EXISTS device_samples_room_at ON device_samples (room, at)") }
+        val deviceHasArea = it.createStatement().use { s ->
+            s.executeQuery("PRAGMA table_info(device_samples)").use { rs -> generateSequence { if (rs.next()) rs.getString("name") else null }.any { name -> name == "area" } }
+        }
+        if (!deviceHasArea) it.createStatement().use { s -> s.execute("ALTER TABLE device_samples ADD COLUMN area TEXT") }
         it.createStatement().use { s ->
             s.execute("CREATE TABLE IF NOT EXISTS area_samples (at INTEGER NOT NULL, area TEXT NOT NULL, meter TEXT NOT NULL, counter REAL, kwh REAL, watts REAL)")
             s.execute("CREATE INDEX IF NOT EXISTS area_samples_area_at ON area_samples (area, at)")
@@ -144,13 +159,14 @@ class EnergyHistory(path: String) {
     /** Adds a five-minute sample of a monitored device; [MeterSample.meter] is the device, [MeterSample.room] its room then. */
     @Synchronized
     fun addDevice(sample: MeterSample) {
-        connection.prepareStatement("INSERT INTO device_samples (at, meter, counter, kwh, room, watts) VALUES (?, ?, ?, ?, ?, ?)").use { s ->
+        connection.prepareStatement("INSERT INTO device_samples (at, meter, counter, kwh, room, watts, area) VALUES (?, ?, ?, ?, ?, ?, ?)").use { s ->
             s.setLong(1, sample.at.toEpochMilli())
             s.setString(2, sample.meter)
             s.setNullableDouble(3, sample.counter)
             s.setNullableDouble(4, sample.kwh)
             if (sample.room == null) s.setNull(5, Types.VARCHAR) else s.setString(5, sample.room)
             s.setNullableDouble(6, sample.watts)
+            if (sample.area == null) s.setNull(7, Types.VARCHAR) else s.setString(7, sample.area)
             s.executeUpdate()
         }
     }
@@ -158,14 +174,14 @@ class EnergyHistory(path: String) {
     /** Samples of the monitored device [meter] with [from] <= at <= [to], oldest first. */
     @Synchronized
     fun deviceSamples(meter: String, from: Instant, to: Instant): List<MeterSample> =
-        connection.prepareStatement("SELECT at, counter, kwh, room, watts FROM device_samples WHERE meter = ? AND at >= ? AND at <= ? ORDER BY at").use { s ->
+        connection.prepareStatement("SELECT at, counter, kwh, room, watts, area FROM device_samples WHERE meter = ? AND at >= ? AND at <= ? ORDER BY at").use { s ->
             s.setString(1, meter)
             s.setLong(2, from.toEpochMilli())
             s.setLong(3, to.toEpochMilli())
             s.executeQuery().use { rs ->
                 buildList {
                     while (rs.next()) {
-                        add(MeterSample(Instant.ofEpochMilli(rs.getLong(1)), meter, rs.getNullableDouble(2), rs.getNullableDouble(3), rs.getString(4), rs.getNullableDouble(5)))
+                        add(MeterSample(Instant.ofEpochMilli(rs.getLong(1)), meter, rs.getNullableDouble(2), rs.getNullableDouble(3), rs.getString(4), rs.getNullableDouble(5), rs.getString(6)))
                     }
                 }
             }

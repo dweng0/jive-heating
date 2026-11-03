@@ -127,8 +127,10 @@ data class MeterView(
     val monitored: Boolean = false,
     /** Id of the room this monitored device is in; null when it is in no room. */
     val room: String? = null,
-    /** Id of the energy area this meter measures as its whole-area meter; null when none. */
+    /** Id of the energy area this monitored plug is in; null when in none. A plug is in one room or one area at most. */
     val area: String? = null,
+    /** Id of the energy area this meter measures as its whole-area meter; null when none. */
+    val measures: String? = null,
     /** False for a meter that reports power but no energy total: it can only measure an energy area. */
     val reportsEnergy: Boolean = true,
 )
@@ -143,7 +145,8 @@ fun HeatingApp.meterView(meter: Meter, house: String? = energySettings.get().ele
     inUse = meter.name == house,
     monitored = meter.name in monitoredMeters,
     room = monitoredMeters.roomOf(meter.name),
-    area = energyAreas.measuredBy(meter.name),
+    area = monitoredMeters.areaOf(meter.name),
+    measures = energyAreas.measuredBy(meter.name),
     reportsEnergy = meter.reportsEnergy,
 )
 

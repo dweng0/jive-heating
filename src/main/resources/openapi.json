@@ -144,7 +144,8 @@
           "inUse": { "type": "boolean", "description": "It is the house electricity meter" },
           "monitored": { "type": "boolean", "description": "Its use is monitored, as part of the house meter's, never added to it" },
           "room": { "type": "string", "nullable": true, "description": "Id of the room this monitored device is in; null when in no room" },
-          "area": { "type": "string", "nullable": true, "description": "Id of the energy area this meter measures as its whole-area meter; null when none" },
+          "area": { "type": "string", "nullable": true, "description": "Id of the energy area this monitored plug is in; null when in none. A plug is in one room or one area at most" },
+          "measures": { "type": "string", "nullable": true, "description": "Id of the energy area this meter measures as its whole-area meter; null when none" },
           "reportsEnergy": { "type": "boolean", "description": "False for a meter reporting power but no energy total: it can only measure an energy area, and is never listed as waiting to be set up" }
         }
       },
@@ -578,6 +579,11 @@
         "summary": "Make a meter (a clamp) measure the whole area, replacing any it had (admin only). A meter reporting power without energy will do; 422 for a device reporting no power, 409 for the house meter, a monitored plug, or a meter already measuring another area",
         "responses": { "200": { "description": "area", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EnergyArea" } } } }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "$ref": "#/components/responses/Conflict" }, "422": { "description": "This device does not report power" } }
       }
+    },
+    "/api/energy/areas/{id}/meters/{meter}": {
+      "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }, { "name": "meter", "in": "path", "required": true, "schema": { "type": "string" } }],
+      "put": { "summary": "Put a monitored plug in the area, taking it out of any room or other area; its recorded use stays where it was recorded (admin only); 409 for a plug that is not monitored", "responses": { "200": { "description": "meter", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Meter" } } } }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "$ref": "#/components/responses/Conflict" } } },
+      "delete": { "summary": "Take a plug out of the area; it stays monitored (admin only)", "responses": { "204": { "description": "taken out" }, "404": { "$ref": "#/components/responses/NotFound" } } }
     },
     "/api/energy/areas/{id}/whole-meter": {
       "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
