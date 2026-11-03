@@ -54,6 +54,47 @@ class EnergyAreaMetersTest {
         t.app.tick()
     }
 
+    /** "Garage Clamp" measuring "Garage/Office", and its samples so far. */
+    private fun garageClamp(t: TestHeating) {
+        t.discover(meters = listOf("Garage Clamp"))
+        t.api { client ->
+            client.addArea("Garage/Office")
+            assertEquals(HttpStatusCode.OK, client.measure("garage-office", "Garage Clamp").status)
+        }
+    }
+
+    private fun garageSamples(t: TestHeating) = t.app.energyHistory.areaSamples("garage-office", Instant.EPOCH, t.clock.instant())
+
+    // BDD: A whole-area meter is recorded from its power
+    @Test
+    fun `a whole-area meter is recorded from its power`() {
+        val t = TestHeating(clock = MutableClock(start))
+        garageClamp(t)
+
+        t.meterState("Garage Clamp", """{"energy":12.0,"power":1200}""")
+        minutes(t, 5)
+        val first = garageSamples(t).single()
+        assertEquals(0.1, first.kwh!!, 1e-9)
+        assertEquals(1200.0, first.watts!!, 1e-6)
+
+        // Each power reading holds until the next; the total jumping up and down changes nothing.
+        t.meterState("Garage Clamp", """{"energy":3.0,"power":600}""")
+        t.clock.advance(Duration.ofSeconds(150))
+        t.meterState("Garage Clamp", """{"energy":40.0,"power":1800}""")
+        t.clock.advance(Duration.ofSeconds(150))
+        t.app.tick()
+        assertEquals(0.1, garageSamples(t).last().kwh!!, 1e-9)
+        assertEquals(1200.0, garageSamples(t).last().watts!!, 1e-6)
+
+        // Minutes with no reading are missing, never 0 kWh.
+        minutes(t, 30)
+        assertNull(garageSamples(t).last().kwh)
+        assertNull(garageSamples(t).last().watts)
+        t.meterState("Garage Clamp", """{"power":600}""")
+        minutes(t, 5)
+        assertEquals(0.05, garageSamples(t).last().kwh!!, 1e-9)
+    }
+
     // BDD: A clamp measures a whole area
     @Test
     fun `a clamp measures a whole area`() {
