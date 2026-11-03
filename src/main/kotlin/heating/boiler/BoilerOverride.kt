@@ -16,6 +16,7 @@ import heating.rooms.RoomService
 import heating.rooms.ZoneControl
 import heating.store.Store
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.nullable
 import kotlinx.serialization.json.JsonPrimitive
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
@@ -30,7 +31,8 @@ data class OverrideState(val by: String, val since: String)
  * off; the zones' own settings are not touched.
  */
 class BoilerOverride(private val store: Store) {
-    private var state: OverrideState? = store.get(KEY)?.let { heatingJson.decodeFromString(OverrideState.serializer(), it) }
+    // clear() stores "null", so read it back as nullable.
+    private var state: OverrideState? = store.get(KEY)?.let { heatingJson.decodeFromString(OverrideState.serializer().nullable, it) }
 
     @Synchronized
     fun current(): OverrideState? = state

@@ -95,6 +95,17 @@ class BoilerOverrideTest {
         assertEquals(null, t.app.zones.effectiveTarget(zone(t).settings))
     }
 
+    // BDD: The override survives a restart
+    @Test
+    fun `the app starts after the boiler was turned back on`() {
+        val t = TestHeating()
+        heatingLounge(t)
+        turnOff(t)
+        Actor.runAs("jane") { t.app.boiler.turnOn() }
+        t.restart()
+        assertEquals(null, t.app.boilerOverride.current())
+    }
+
     // BDD: An admin turns the boiler back on
     @Test
     fun `an admin turns the boiler back on`() {
