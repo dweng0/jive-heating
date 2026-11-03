@@ -58,6 +58,7 @@ class EnergyHistory(path: String) {
             s.executeQuery("PRAGMA table_info(device_samples)").use { rs -> generateSequence { if (rs.next()) rs.getString("name") else null }.any { name -> name == "area" } }
         }
         if (!deviceHasArea) it.createStatement().use { s -> s.execute("ALTER TABLE device_samples ADD COLUMN area TEXT") }
+        it.createStatement().use { s -> s.execute("CREATE INDEX IF NOT EXISTS device_samples_area_at ON device_samples (area, at)") }
         it.createStatement().use { s ->
             s.execute("CREATE TABLE IF NOT EXISTS area_samples (at INTEGER NOT NULL, area TEXT NOT NULL, meter TEXT NOT NULL, counter REAL, kwh REAL, watts REAL)")
             s.execute("CREATE INDEX IF NOT EXISTS area_samples_area_at ON area_samples (area, at)")
@@ -201,6 +202,33 @@ class EnergyHistory(path: String) {
                     }
                 }
             }
+        }
+
+    /** Samples of every monitored device recorded in energy area [area] with [from] < at <= [to], oldest first. */
+    @Synchronized
+    fun areaPlugSamples(area: String, from: Instant, to: Instant): List<MeterSample> =
+        connection.prepareStatement("SELECT at, meter, counter, kwh, watts FROM device_samples WHERE area = ? AND at > ? AND at <= ? ORDER BY at").use { s ->
+            s.setString(1, area)
+            s.setLong(2, from.toEpochMilli())
+            s.setLong(3, to.toEpochMilli())
+            s.executeQuery().use { rs ->
+                buildList {
+                    while (rs.next()) {
+                        add(MeterSample(Instant.ofEpochMilli(rs.getLong(1)), rs.getString(2), rs.getNullableDouble(3), rs.getNullableDouble(4), null, rs.getNullableDouble(5), area))
+                    }
+                }
+            }
+        }
+
+    /** When the first sample recorded in energy area [area] was, by its whole-area meter or a plug in it; null when none. */
+    @Synchronized
+    fun earliestInArea(area: String): Instant? =
+        connection.prepareStatement(
+            "SELECT MIN(at) FROM (SELECT MIN(at) AS at FROM device_samples WHERE area = ? UNION ALL SELECT MIN(at) FROM area_samples WHERE area = ?)",
+        ).use { s ->
+            s.setString(1, area)
+            s.setString(2, area)
+            s.executeQuery().use { rs -> if (rs.next()) rs.getLong(1).takeUnless { rs.wasNull() }?.let(Instant::ofEpochMilli) else null }
         }
 
     /** When the first sample recorded in [room] was; null when there is none. */

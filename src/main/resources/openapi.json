@@ -239,6 +239,21 @@
           "plugs": { "type": "array", "items": { "$ref": "#/components/schemas/PlugUsage" }, "description": "The plugs in the room now, sorted by name" }
         }
       },
+      "AreaUsage": {
+        "type": "object", "required": ["currency", "from", "to", "earliest", "room", "plugs", "area", "name", "wholeMeter"],
+        "description": "An energy area over time, in the shape of RoomUsage",
+        "properties": {
+          "currency": { "type": "string", "description": "ISO 4217 code the costs are in" },
+          "from": { "type": "string", "format": "date-time" },
+          "to": { "type": "string", "format": "date-time" },
+          "earliest": { "type": "string", "format": "date-time", "nullable": true, "description": "The area's first sample, by its clamp or a plug; null when it has none" },
+          "room": { "type": "array", "items": { "$ref": "#/components/schemas/UsagePoint" }, "description": "The whole area: at each five minutes its clamp if recorded then (a clamp with no reading leaves the point incomplete, never filled in from its plugs), else the sum of the plugs in it then" },
+          "plugs": { "type": "array", "items": { "$ref": "#/components/schemas/PlugUsage" }, "description": "The plugs in the area now, sorted by name, with what each used while in it" },
+          "area": { "type": "string" },
+          "name": { "type": "string" },
+          "wholeMeter": { "type": "string", "nullable": true }
+        }
+      },
       "EverythingElseUsage": {
         "type": "object", "required": ["currency", "from", "to", "earliest", "room"],
         "properties": {
@@ -606,6 +621,10 @@
     "/api/energy/areas/{id}/whole-meter": {
       "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
       "delete": { "summary": "The area no longer has a whole-area meter; its recorded use is kept (admin only)", "responses": { "204": { "description": "cleared" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/api/energy/areas/{id}/usage": {
+      "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }, { "name": "window", "in": "query", "required": false, "schema": { "type": "string", "enum": ["24h", "7d", "30d"], "default": "24h" }, "description": "24h: a point per five minutes; 7d: per hour; 30d: per day from the household's midnight" }, { "name": "to", "in": "query", "required": false, "schema": { "type": "string", "format": "date-time" }, "description": "The end of the window; defaults to now, and a time to come is now" }],
+      "get": { "summary": "The area's and each of its plugs' power, use and cost over time (admin only)", "responses": { "200": { "description": "area usage", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AreaUsage" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "404": { "$ref": "#/components/responses/NotFound" } } }
     },
     "/api/energy/else/usage": {
       "parameters": [{ "name": "window", "in": "query", "required": false, "schema": { "type": "string", "enum": ["24h", "7d", "30d"], "default": "24h" }, "description": "24h: a point per five minutes; 7d: per hour; 30d: per day from the household's midnight" }, { "name": "to", "in": "query", "required": false, "schema": { "type": "string", "format": "date-time" }, "description": "The end of the window; defaults to now, and a time to come is now" }],

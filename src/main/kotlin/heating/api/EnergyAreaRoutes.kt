@@ -4,6 +4,7 @@ import heating.Actor
 import heating.ApiException
 import heating.HeatingApp
 import heating.actionLog
+import heating.energy.UsageWindow
 import heating.untrusted
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
@@ -23,6 +24,12 @@ data class EnergyAreaName(val name: String)
 /** Energy areas: unheated things measured by their own meters. Registered inside [adminOnly]. */
 fun Route.energyAreaRoutes(heating: HeatingApp) {
     get("/api/energy/areas") { call.respond(heating.energyAreas.list()) }
+
+    get("/api/energy/areas/{id}/usage") {
+        val area = heating.energyAreas.get(call.parameters["id"]!!)
+        val window = UsageWindow.of(call.request.queryParameters["window"])
+        call.respond(heating.energyUsage.ofArea(area, window, usageTo(call.request.queryParameters["to"])))
+    }
 
     post("/api/energy/areas") {
         val name = call.receive<EnergyAreaName>().name
