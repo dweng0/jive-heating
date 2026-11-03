@@ -1,6 +1,6 @@
 # BDD Status
 
-Checked 369 scenario(s) across 99 test file(s).
+Checked 370 scenario(s) across 99 test file(s).
 
 
 ## Feature: Service foundation
@@ -465,6 +465,7 @@ Checked 369 scenario(s) across 99 test file(s).
 - [x] The table says when a plug's figures cannot be trusted
 - [x] A plug moved out of the room still adds up
 - [x] A room with no plugs left has nothing to chart
+- [x] The room dashboard says it only counts what is measured
 - [x] Everything else has its own dashboard
 - [x] Android dashboards pass being driven end to end
 
@@ -487,7 +488,7 @@ Checked 369 scenario(s) across 99 test file(s).
 - [ ] UNCOVERED: Deleting an area keeps what was recorded
 
 ---
-**358/369 scenarios covered.**
+**359/370 scenarios covered.**
 
 11 scenario(s) need tests:
 - A clamp measures a whole area

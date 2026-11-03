@@ -2351,6 +2351,13 @@ Engineering rules (apply to every scenario):
             Then it shows what the room used today, the room's chart for what was recorded there, and says "No plugs in this room"
             And an unknown room says "Room not found", with a way back to the Energy tab
 
+        Scenario: The room dashboard says it only counts what is measured
+            Given "Kitchen" has "Fridge Plug" and "Kettle Plug", and its oven is not on a plug or clamp
+            When admin "jane" opens the room's energy dashboard, on the web app or the Android app
+            Then an info icon beside the room's name says the figures are only what its registered plugs and meters measured
+            And that anything not on a plug or clamp in the room, such as an oven, is not counted here and falls in "Everything else"
+            And it is a small icon that opens the note on click or tap, not a banner over the cards
+
         Scenario: Everything else has its own dashboard
             Given the house is using 855 W and plugs account for 189 W
             When admin "jane" opens the "Everything else" card, on the web app or the Android app
