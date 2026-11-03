@@ -23,6 +23,7 @@ import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /** Energy areas on the energy dashboard, and how everything else counts them. */
 class EnergyAreaDashboardTest {
@@ -207,6 +208,48 @@ class EnergyAreaDashboardTest {
         val cleared = dashboard(t)
         assertEquals(emptyList(), cleared.area("lights").names("overlaps"))
         assertEquals(emptyList(), cleared["everythingElse"]!!.jsonObject.pairs())
+    }
+
+    // BDD: Deleting an area keeps what was recorded
+    @Test
+    fun `deleting an area keeps what was recorded`() {
+        val t = house(plugs = listOf("Desk Plug"), areas = listOf("Garage/Office", "Lights"), clamps = listOf("Garage Clamp", "Lights Clamp"))
+        put(t, "/api/energy/areas/garage-office/whole-meter/Garage Clamp")
+        put(t, "/api/energy/areas/garage-office/meters/Desk Plug")
+        put(t, "/api/energy/areas/lights/overlaps/garage-office")
+        house(t, 8.0)
+        clamp(t, "Garage Clamp", "garage-office", 1.0)
+        plug(t, "Desk Plug", 0.2, area = "garage-office")
+        val before = dashboard(t)
+
+        t.api { client ->
+            assertEquals(HttpStatusCode.NoContent, client.delete("/api/energy/areas/garage-office").status)
+            val meters = heatingJson.parseToJsonElement(client.get("/api/meters").bodyAsText()).jsonArray.map { it.jsonObject }
+            // The clamp is waiting to be set up again; the plug stays monitored in no room.
+            val unassigned = heatingJson.parseToJsonElement(client.get("/api/meters?unassigned=true").bodyAsText()).jsonArray.map { it.jsonObject.text("name") }
+            assertTrue("Garage Clamp" in unassigned, "$unassigned")
+            assertNull(meters.single { it.text("name") == "Garage Clamp" }.text("measures"))
+            val desk = meters.single { it.text("name") == "Desk Plug" }
+            assertEquals("true", desk.text("monitored"))
+            assertNull(desk.text("area"))
+            assertNull(desk.text("room"))
+            // Any "Shares a circuit with" is cleared.
+            val lights = heatingJson.parseToJsonElement(client.get("/api/energy/areas").bodyAsText()).jsonArray.single().jsonObject
+            assertEquals(emptyList(), lights.names("overlaps"))
+        }
+
+        // Recorded samples are kept, and the house figure does not change; past periods still subtract the clamp.
+        val after = dashboard(t)
+        assertEquals(12, t.app.energyHistory.areaSamples("garage-office", Instant.EPOCH, noon).size)
+        assertEquals(before.number("electricityKwh"), after.number("electricityKwh"), 1e-9)
+        assertEquals(7.0, after["everythingElse"]!!.jsonObject.number("kwh"), 1e-9)
+        assertEquals(listOf("lights"), after.list("areas").map { it.text("area") })
+
+        // From then on the clamp is not recorded for any area, so everything else no longer subtracts it.
+        t.meterState("Garage Clamp", """{"energy":1.0,"power":1200}""")
+        t.clock.advance(Duration.ofMinutes(5))
+        t.app.tick()
+        assertEquals(12, t.app.energyHistory.allAreaSamples(Instant.EPOCH, t.clock.instant()).count { it.meter == "Garage Clamp" })
     }
 
     private fun JsonObject.names(key: String) = this[key]!!.jsonArray.map { it.jsonPrimitive.content }

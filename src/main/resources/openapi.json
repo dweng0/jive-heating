@@ -609,7 +609,7 @@
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["name"], "properties": { "name": { "type": "string" } } } } } },
         "responses": { "200": { "description": "area", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EnergyArea" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "$ref": "#/components/responses/Conflict" } }
       },
-      "delete": { "summary": "Delete an energy area (admin only)", "responses": { "204": { "description": "deleted" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+      "delete": { "summary": "Delete an energy area (admin only): its whole-area meter is waiting to be set up again, its plugs stay monitored in no room, any shared circuit is cleared, and recorded samples are kept", "responses": { "204": { "description": "deleted" }, "404": { "$ref": "#/components/responses/NotFound" } } }
     },
     "/api/energy/areas/{id}/whole-meter/{meter}": {
       "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }, { "name": "meter", "in": "path", "required": true, "schema": { "type": "string" } }],

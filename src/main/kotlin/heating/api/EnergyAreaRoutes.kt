@@ -117,7 +117,9 @@ fun Route.energyAreaRoutes(heating: HeatingApp) {
     delete("/api/energy/areas/{id}") {
         val id = call.parameters["id"]!!
         call.acting {
+            // Its clamp goes with it (waiting to be set up again); its plugs stay monitored in no room or area.
             heating.energyAreas.delete(id)
+            heating.monitoredMeters.areaDeleted(id)
             actionLog.info("energy area {} deleted{}", untrusted(id), Actor.by())
         }
         call.respond(HttpStatusCode.NoContent)
