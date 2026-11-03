@@ -14,7 +14,14 @@ import kotlin.math.ceil
 @Serializable
 data class RoomPower(val room: String, val name: String, val watts: Double?)
 
-/** A monitored device in no room, and its live power; null while it is offline. */
+/**
+ * An energy area's live power: its whole-area meter's if it has one (null while that has no live reading, never its
+ * plugs' instead), else the sum of its plugs reporting now (null when none is).
+ */
+@Serializable
+data class AreaPower(val area: String, val name: String, val watts: Double?)
+
+/** A monitored device in no room or area, and its live power; null while it is offline. */
 @Serializable
 data class DevicePower(val meter: String, val watts: Double?)
 
@@ -32,6 +39,7 @@ data class LivePowerView(
     val rooms: List<RoomPower> = emptyList(),
     val devices: List<DevicePower> = emptyList(),
     val elseWatts: Double? = null,
+    val areas: List<AreaPower> = emptyList(),
 )
 
 /** Where the dial turns amber ([green]: the typical overnight load) and red ([red]: the 90th percentile). */
@@ -65,6 +73,7 @@ class LivePower(
     private val timezone: ZoneId,
     private val changes: ChangeNotifier,
     private val clock: Clock,
+    private val areas: EnergyAreas? = null,
 ) {
     @Volatile private var staleTold = false
     private val recent = ArrayDeque<Pair<Instant, Double?>>()
@@ -81,6 +90,7 @@ class LivePower(
                     changes.emit(Change.LivePowerChanged)
                 }
                 in monitored -> changes.emit(Change.LivePowerChanged)
+                else -> if (areas?.measuredBy(meter.name) != null) changes.emit(Change.LivePowerChanged)
             }
         }
     }
@@ -88,20 +98,27 @@ class LivePower(
     fun now(): LivePowerView {
         val house = settings.get().electricityMeter?.let { meters[it] }
         val watts = house?.takeIf(::isLive)?.power
-        val byRoom = monitored.all().groupBy { monitored.roomOf(it) }
+        val byRoom = monitored.all().filter { monitored.areaOf(it) == null }.groupBy { monitored.roomOf(it) }
         val rooms = byRoom.filterKeys { it != null }.mapNotNull { (room, plugs) ->
             val name = roomName(room!!) ?: return@mapNotNull null
             val live = plugs.mapNotNull(::plugWatts)
             RoomPower(room, name, if (live.isEmpty()) null else live.sum())
         }.sortedBy { it.name }
         val devices = byRoom[null].orEmpty().map { DevicePower(it, plugWatts(it)) }
-        val accounted = rooms.sumOf { it.watts ?: 0.0 } + devices.sumOf { it.watts ?: 0.0 }
+        val areaPower = areas?.list().orEmpty().map { area ->
+            val plugs = monitored.all().filter { monitored.areaOf(it) == area.id }.mapNotNull(::plugWatts)
+            val clamp = area.wholeMeter
+            AreaPower(area.id, area.name, if (clamp != null) plugWatts(clamp) else plugs.takeIf { it.isNotEmpty() }?.sum())
+        }
+        // Each area counts once: its clamp's power, or its plugs' when it has no clamp.
+        val accounted = rooms.sumOf { it.watts ?: 0.0 } + devices.sumOf { it.watts ?: 0.0 } + areaPower.sumOf { it.watts ?: 0.0 }
         return LivePowerView(
             watts = watts,
             at = house?.lastReading?.toString(),
             rooms = rooms,
             devices = devices,
             elseWatts = watts?.let { maxOf(0.0, it - accounted) },
+            areas = areaPower,
         )
     }
 

@@ -81,8 +81,12 @@ class EnergyUsageReport(
         val end = end(to)
         val from = end.minus(window.length)
         val prices = settings.get()
-        // Plugs are sampled together with the house, so each five minutes lines up.
-        val plugs = monitored.all().flatMap { energy.deviceSamples(it, from, end) }.groupBy { it.at }
+        // Plugs and whole-area meters are sampled together with the house, so each five minutes lines up. Each clamp's
+        // figure comes off, and each plug not behind one.
+        val areaSamples = energy.allAreaSamples(from, end)
+        val clamped = AreaCounting.clamped(areaSamples)
+        val plugs = (monitored.all().flatMap { energy.deviceSamples(it, from, end) }.filterNot { AreaCounting.behindClamp(it, clamped) } + areaSamples)
+            .groupBy { it.at }
         val rest = energy.samples(from, end).filter { it.at > from }.map { house ->
             val here = plugs[house.at].orEmpty()
             val missing = here.any { it.kwh == null }

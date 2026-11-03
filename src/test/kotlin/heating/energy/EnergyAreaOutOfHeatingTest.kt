@@ -29,7 +29,7 @@ class EnergyAreaOutOfHeatingTest {
                 setBody("""{"name":"Garage/Office"}""")
             }.status)
 
-            // Rooms screen, boiler views, status/dashboard (which carry holiday and demand) and holiday on/off
+            // Rooms screen, boiler views, status (which carries holiday and demand) and holiday on/off
             val holiday = client.put("/api/holiday") {
                 contentType(ContentType.Application.Json)
                 setBody("""{"until":"2026-10-20"}""")
@@ -38,7 +38,6 @@ class EnergyAreaOutOfHeatingTest {
                 "GET /api/rooms" to client.get("/api/rooms").bodyAsText(),
                 "GET /api/boiler" to client.get("/api/boiler").bodyAsText(),
                 "GET /api/status" to client.get("/api/status").bodyAsText(),
-                "GET /api/dashboard" to client.get("/api/dashboard").bodyAsText(),
                 "PUT /api/holiday" to holiday,
             )) {
                 assertFalse("garage-office" in body || "Garage/Office" in body, "$what mentions the area: $body")

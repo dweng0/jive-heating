@@ -188,7 +188,8 @@
           "currency": { "type": "string", "description": "ISO 4217 code the costs are in" },
           "devices": { "type": "array", "items": { "$ref": "#/components/schemas/DeviceEnergy" }, "description": "Monitored devices, sorted by name. Already part of electricityKwh and totalCost: shown as \"of which\", never added" },
           "rooms": { "type": "array", "items": { "$ref": "#/components/schemas/RoomEnergy" }, "description": "Rooms with plug use in the period, sorted by name: each plug's use counts in the room it was in when it was recorded, so moving a plug never moves its past use. Part of devices, so never added to electricityKwh or totalCost" },
-          "everythingElse": { "allOf": [{ "$ref": "#/components/schemas/EverythingElse" }], "nullable": true, "description": "House electricity no monitored plug accounts for. Null without a house meter" }
+          "everythingElse": { "allOf": [{ "$ref": "#/components/schemas/EverythingElse" }], "nullable": true, "description": "House electricity no monitored plug or energy area accounts for: the house minus each whole-area meter, and minus each plug not behind one. Null without a house meter" },
+          "areas": { "type": "array", "items": { "$ref": "#/components/schemas/AreaEnergy" }, "description": "Energy areas, by name. Of which the house's, never added to anything" }
         }
       },
       "EverythingElse": {
@@ -284,6 +285,22 @@
           } } },
           "offlineSince": { "type": "string", "format": "date-time", "nullable": true, "description": "Set while the plug is offline now (Zigbee2MQTT says so, or 30 minutes with no reading): when it went. It is then also incomplete" },
           "totalStuckSince": { "type": "string", "format": "date-time", "nullable": true, "description": "Set while the plug's power readings say it should have used at least 0.05 kWh since its energy total last changed (the total moves in 0.01 kWh steps): when the total last changed. It is then also incomplete. Never set while offline now" }
+        }
+      },
+      "AreaEnergy": {
+        "type": "object", "required": ["area", "name", "kwh", "cost", "missingMinutes", "incomplete", "wholeMeter", "plugs", "rest", "restCost"],
+        "description": "An energy area over the period. While its whole-area meter recorded, the area is the clamp's figure and its plugs are part of it; with no clamp it is the sum of its plugs. Of which the house's; standing charges are never split onto areas",
+        "properties": {
+          "area": { "type": "string" },
+          "name": { "type": "string" },
+          "kwh": { "type": "number" },
+          "cost": { "type": "number" },
+          "missingMinutes": { "type": "integer" },
+          "incomplete": { "type": "boolean" },
+          "wholeMeter": { "type": "string", "nullable": true },
+          "plugs": { "type": "array", "items": { "type": "object", "required": ["meter", "kwh", "cost"], "properties": { "meter": { "type": "string" }, "kwh": { "type": "number" }, "cost": { "type": "number" } } }, "description": "Each plug's use while in the area" },
+          "rest": { "type": "number", "nullable": true, "description": "What the clamp measured beyond its plugs, never below 0; null with no clamp" },
+          "restCost": { "type": "number", "nullable": true }
         }
       },
       "RoomEnergy": {
@@ -457,7 +474,8 @@
           "at": { "type": "string", "format": "date-time", "nullable": true, "description": "When the house meter was last read" },
           "rooms": { "type": "array", "description": "Rooms with monitored plugs, by name", "items": { "type": "object", "required": ["room", "name", "watts"], "properties": { "room": { "type": "string" }, "name": { "type": "string" }, "watts": { "type": "number", "nullable": true, "description": "Sum of its plugs reporting now; null when none is" } } } },
           "devices": { "type": "array", "description": "Monitored devices in no room", "items": { "type": "object", "required": ["meter", "watts"], "properties": { "meter": { "type": "string" }, "watts": { "type": "number", "nullable": true } } } },
-          "elseWatts": { "type": "number", "nullable": true, "description": "House W no room or device accounts for, never below 0; null while watts is" }
+          "elseWatts": { "type": "number", "nullable": true, "description": "House W no room, device or energy area accounts for (an area counts once: its clamp, or its plugs when it has none), never below 0; null while watts is" },
+          "areas": { "type": "array", "description": "Energy areas' power now: the whole-area meter's (null while it has no live reading), else the sum of its plugs reporting", "items": { "type": "object", "required": ["area", "name", "watts"], "properties": { "area": { "type": "string" }, "name": { "type": "string" }, "watts": { "type": "number", "nullable": true } } } }
         }
       },
       "LiveEvent": {

@@ -103,10 +103,10 @@ class HeatingApp(
     val energyHistory = heating.energy.EnergyHistory(config.dbPath)
     val livePower = heating.energy.LivePower(
         meters, energySettings, monitoredMeters, { id -> runCatching { rooms.get(id).name }.getOrNull() },
-        energyHistory, config.timezone, changes, clock,
+        energyHistory, config.timezone, changes, clock, energyAreas,
     )
     val meterRecorder = heating.energy.MeterRecorder(energyHistory, meters, energySettings, monitoredMeters, clock::instant, energyAreas)
-    val energyDashboards = heating.energy.EnergyDashboards(history, energyHistory, energySettings, monitoredMeters, meters, rooms::list, ::now)
+    val energyDashboards = heating.energy.EnergyDashboards(history, energyHistory, energySettings, monitoredMeters, meters, rooms::list, ::now, energyAreas::list)
     val roomPlugs = heating.energy.RoomPlugsReport(energyHistory, energySettings, monitoredMeters, meters, ::now)
     val roomEnergyHistory = heating.energy.RoomEnergyHistoryReport(energyHistory, config.timezone, clock)
     val energyUsage = heating.energy.EnergyUsageReport(energyHistory, energySettings, monitoredMeters, config.timezone, clock)
