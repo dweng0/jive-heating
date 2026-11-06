@@ -3,6 +3,7 @@ package heating.app.ui.energy
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,10 +32,13 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import heating.app.R
 import heating.app.data.EnergyTotals
 import kotlinx.coroutines.delay
 import java.time.LocalDate
@@ -42,10 +46,17 @@ import java.util.Locale
 
 private val WHEEL = 26.dp
 
-/** One wheel of a mechanical counter, rolling to [digit]. */
+/** How often the usage counter moves on: often enough that its last wheel is seen to turn. */
+private const val TICK_MS = 250L
+
+/** A dot-matrix face, like an arrivals board: Doto, OFL. */
+@OptIn(androidx.compose.ui.text.ExperimentalTextApi::class)
+private val DotMatrix = FontFamily(Font(R.font.doto, FontWeight.ExtraBold, variationSettings = FontVariation.Settings(FontVariation.weight(800))))
+
+/** One wheel of a mechanical counter, rolling to [digit] over [roll] ms. */
 @Composable
-private fun Wheel(digit: Int, tenths: Boolean) {
-    val pos by animateFloatAsState(digit.toFloat(), tween(700), label = "wheel")
+private fun Wheel(digit: Int, tenths: Boolean, roll: Int) {
+    val pos by animateFloatAsState(digit.toFloat(), tween(roll), label = "wheel")
     Box(
         Modifier.width(18.dp).height(WHEEL).clipToBounds()
             .background(if (tenths) zoneColor(PowerZone.HIGH, false).copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurface),
@@ -53,45 +64,51 @@ private fun Wheel(digit: Int, tenths: Boolean) {
         Column(Modifier.offset(y = -WHEEL * pos)) {
             (0..9).forEach { d ->
                 Box(Modifier.height(WHEEL).width(18.dp), contentAlignment = Alignment.Center) {
-                    Text("$d", color = MaterialTheme.colorScheme.surface, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    Text("$d", color = MaterialTheme.colorScheme.surface, fontFamily = DotMatrix, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp)
                 }
             }
         }
     }
 }
 
-/** A car's counter: [value] on wheels, its last [decimals] wheels the fraction. */
+/** A car's counter: [value] on wheels, its last [decimals] wheels the fraction, [prefix] such as "£" before them. */
 @Composable
-private fun Rolling(value: Double, digits: Int, decimals: Int, description: String) {
+private fun Rolling(value: Double, digits: Int, decimals: Int, description: String, prefix: String? = null, roll: Int = 700) {
     val text = String.format(Locale.UK, "%.${decimals}f", value).padStart(digits + if (decimals > 0) 1 else 0, '0')
     Row(
         Modifier.background(MaterialTheme.colorScheme.onSurface, RoundedCornerShape(6.dp)).padding(2.dp).semantics { contentDescription = "$description ${String.format(Locale.UK, "%.${decimals}f", value)}" },
         verticalAlignment = Alignment.Bottom,
     ) {
+        prefix?.let {
+            Box(Modifier.height(WHEEL).padding(horizontal = 3.dp), contentAlignment = Alignment.Center) {
+                Text(it, color = MaterialTheme.colorScheme.surface, fontFamily = DotMatrix, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp)
+            }
+        }
         text.forEachIndexed { i, ch ->
             if (ch == '.') Text(".", color = MaterialTheme.colorScheme.surface, modifier = Modifier.padding(horizontal = 1.dp))
-            else Wheel(ch - '0', tenths = i >= text.length - decimals)
+            else Wheel(ch - '0', tenths = i >= text.length - decimals, roll = roll)
         }
     }
 }
 
 /**
- * The dashboard's counters, like a car's: today's trip meter rolling on at the last 5 minutes' average power, an
+ * The dashboard's counters, like a car's: today's usage (or, tapped, its cost) rolling on at the last 5 minutes' average power, an
  * odometer for the day, week, month or year, and today against yesterday at the same time.
  */
 @Composable
 fun TripMeters(totals: EnergyTotals?, readings: List<Pair<Long, Double?>>, dark: Boolean, now: () -> Long = System::currentTimeMillis) {
     var period by rememberSaveable { mutableStateOf(OdometerPeriod.WEEK) }
+    var showsCost by rememberSaveable { mutableStateOf(false) }
     var trip by remember { mutableStateOf<Trip?>(null) }
     val latestReadings by rememberUpdatedState(readings)
 
-    // Every second the trip meter rolls on; a new recorded figure is taken at once.
+    // Every quarter second the usage counter rolls on; a new recorded figure is taken at once.
     LaunchedEffect(totals) {
         val t = totals ?: return@LaunchedEffect
         while (true) {
             val at = now()
             trip = tripAt(trip, LocalDate.now().toString(), t.today.kwh, fiveMinuteAverage(latestReadings, at), at)
-            delay(1_000)
+            delay(TICK_MS)
         }
     }
 
@@ -112,10 +129,19 @@ fun TripMeters(totals: EnergyTotals?, readings: List<Pair<Long, Double?>>, dark:
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         HorizontalDivider()
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.Bottom) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("TRIP · TODAY", style = MaterialTheme.typography.labelSmall, color = muted)
-                Rolling(todayKwh, digits = 3, decimals = 2, description = "Trip today kWh")
-                Text("kWh · ${formatCost(todayKwh * price, currency)}", style = MaterialTheme.typography.labelMedium)
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.clickable(onClickLabel = if (showsCost) "Show usage" else "Show cost") { showsCost = !showsCost },
+            ) {
+                Text(if (showsCost) "COST TODAY" else "USAGE TODAY", style = MaterialTheme.typography.labelSmall, color = muted)
+                if (showsCost) {
+                    Rolling(todayKwh * price / 100, digits = 2, decimals = 5, description = "Cost today", prefix = symbol(currency), roll = (TICK_MS * 2).toInt())
+                    Text(String.format(Locale.UK, "%.1f kWh", todayKwh), style = MaterialTheme.typography.labelMedium, color = muted)
+                } else {
+                    Rolling(todayKwh, digits = 3, decimals = 3, description = "Usage today kWh", roll = (TICK_MS * 2).toInt())
+                    Text("kWh · ${formatCost(todayKwh * price, currency)}", style = MaterialTheme.typography.labelMedium)
+                }
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("ODOMETER · ${period.label.uppercase()}", style = MaterialTheme.typography.labelSmall, color = muted)

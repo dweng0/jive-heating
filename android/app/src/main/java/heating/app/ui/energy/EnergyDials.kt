@@ -9,6 +9,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
@@ -46,7 +47,10 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -84,23 +88,36 @@ fun EnergyDials(
     if (wanted > max) max = wanted
 
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Box(Modifier.weight(1f)) {
-                    SpeedDial("Whole house", watts, bands, max, if (connected) "No reading" else "Connecting…", dark)
+        BoxWithConstraints {
+            val phone = maxWidth < PHONE_WIDTH
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (phone) {
+                    // On a phone only the whole-house dial: four gauges bunch up on a small screen.
+                    Box(Modifier.widthIn(max = 300.dp).fillMaxWidth().align(Alignment.CenterHorizontally)) {
+                        SpeedDial("Whole house", watts, bands, max, if (connected) "No reading" else "Connecting…", dark)
+                    }
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Box(Modifier.weight(1f)) {
+                            SpeedDial("Whole house", watts, bands, max, if (connected) "No reading" else "Connecting…", dark)
+                        }
+                        Box(Modifier.weight(1f)) {
+                            SpeedDial(busiest?.name ?: "Busiest room", busiest?.watts, null, max, if (connected) NO_PLACES else "Connecting…", dark)
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
+                        Box(Modifier.weight(1f)) { PeakGauge(peak, max, dark) }
+                        Box(Modifier.weight(1f)) { FuelGauge(today, dark, onSetTarget) }
+                    }
                 }
-                Box(Modifier.weight(1f)) {
-                    SpeedDial(busiest?.name ?: "Busiest room", busiest?.watts, null, max, if (connected) NO_PLACES else "Connecting…", dark)
-                }
+                counters?.invoke()
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
-                Box(Modifier.weight(1f)) { PeakGauge(peak, max, dark) }
-                Box(Modifier.weight(1f)) { FuelGauge(today, dark, onSetTarget) }
-            }
-            counters?.invoke()
         }
     }
 }
+
+/** Narrower than this the dashboard shows only the whole-house dial. */
+private val PHONE_WIDTH = 600.dp
 
 private fun DrawScope.point(angle: Float, r: Float, c: Offset = center): Offset {
     val rad = Math.toRadians(angle.toDouble())
@@ -252,7 +269,11 @@ private fun FuelGauge(today: EnergyDashboard?, dark: Boolean, onSetTarget: (() -
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.fillMaxWidth().semantics {
-            contentDescription = if (f != null && target != null) "Daily target: ${fuelLeft(f)}, ${fuelUsed(target)}, ${paceLine(f.paceKwh)}" else "Daily target: $NO_TARGET"
+            contentDescription = when {
+                f == null || target == null -> "Daily target: $NO_TARGET"
+                f.overKwh > 0 -> "Daily target: ${fuelLeft(f)} ${fuelUsed(target)}"
+                else -> "Daily target: ${fuelLeft(f)} ${fuelUsed(target)}, ${paceLine(f.paceKwh)}"
+            }
         },
     ) {
         Canvas(Modifier.widthIn(max = 150.dp).fillMaxWidth().aspectRatio(1.6f)) {
@@ -276,12 +297,22 @@ private fun FuelGauge(today: EnergyDashboard?, dark: Boolean, onSetTarget: (() -
                 tint = if (f?.low == true) zoneColor(PowerZone.MID, dark) else muted.copy(alpha = 0.4f),
                 modifier = Modifier.size(16.dp),
             )
-            Text("Daily target", style = MaterialTheme.typography.labelLarge, color = muted)
+            if (f != null) Text(fuelLeft(f), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
         }
         if (f != null && target != null) {
-            Text(fuelLeft(f), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-            Text("${fuelUsed(target)} · ${formatCost(today.electricityCost, today.currency)}", style = MaterialTheme.typography.labelSmall, color = muted, textAlign = TextAlign.Center)
-            Text(paceLine(f.paceKwh), style = MaterialTheme.typography.labelSmall, color = if (f.paceKwh <= 0) zoneColor(PowerZone.LOW, dark) else zoneColor(PowerZone.MID, dark))
+            val pace = if (f.paceKwh <= 0) zoneColor(PowerZone.LOW, dark) else zoneColor(PowerZone.MID, dark)
+            Text(
+                buildAnnotatedString {
+                    append(fuelUsed(target))
+                    if (f.overKwh <= 0) {
+                        append(" · ")
+                        withStyle(SpanStyle(color = pace)) { append(paceLine(f.paceKwh)) }
+                    }
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = muted,
+                textAlign = TextAlign.Center,
+            )
         } else {
             Text(NO_TARGET, style = MaterialTheme.typography.labelMedium, color = muted)
             today?.let { Text(todayLine(it), style = MaterialTheme.typography.labelSmall, color = muted) }

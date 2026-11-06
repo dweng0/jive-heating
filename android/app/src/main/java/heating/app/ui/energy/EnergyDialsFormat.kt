@@ -73,10 +73,10 @@ private fun one(v: Double) = String.format(Locale.UK, "%.1f", v)
 fun fuelLeft(f: Fuel): String = if (f.overKwh > 0) "${one(f.overKwh)} kWh over" else "${one(f.leftKwh)} kWh left"
 
 /** "5.0 of 12.0 kWh". */
-fun fuelUsed(t: EnergyTarget): String = "${one(t.usedKwh)} of ${formatKwh(t.kwh)}"
+fun fuelUsed(t: EnergyTarget): String = "of ${formatKwh(t.kwh)}"
 
-/** "1.0 kWh under pace" / "0.4 kWh over pace". */
-fun paceLine(paceKwh: Double): String = "${one(kotlin.math.abs(paceKwh))} kWh ${if (paceKwh <= 0) "under" else "over"} pace"
+/** "1.0 under pace" / "0.4 over pace": in kWh, said by the target beside it. */
+fun paceLine(paceKwh: Double): String = "${one(kotlin.math.abs(paceKwh))} ${if (paceKwh <= 0) "under" else "over"} pace"
 
 const val NO_TARGET = "No daily target"
 const val NO_PLACES = "No rooms reporting"

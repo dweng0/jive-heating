@@ -30,11 +30,15 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import java.time.Instant
 import java.time.ZoneId
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+
+/** Wide enough for all four gauges; narrower, a phone, shows only the whole-house dial. */
+private const val TABLET = "w800dp-h1280dp"
 
 @RunWith(RobolectricTestRunner::class)
 class EnergyDialsTest {
@@ -79,10 +83,15 @@ class EnergyDialsTest {
     fun `the house dial shows the whole house now`() {
         showSection()
         compose.onNodeWithContentDescription("Whole house: 2.40 kW").assertIsDisplayed()
+        // On a phone only the whole-house dial: no busiest, peak or fuel gauge.
+        compose.onNodeWithContentDescription("Kitchen", substring = true).assertDoesNotExist()
+        compose.onNodeWithContentDescription("Today's peak", substring = true).assertDoesNotExist()
+        compose.onNodeWithContentDescription("Daily target", substring = true).assertDoesNotExist()
     }
 
     // BDD: The second dial follows the busiest room or area
     @Test
+    @Config(qualifiers = TABLET)
     fun `the second dial follows the busiest room or area`() {
         val all = places(live(2400.0, 900.0, 300.0))
         // Everything else and devices in no room or area are never candidates.
@@ -117,13 +126,14 @@ class EnergyDialsTest {
 
     // BDD: The fuel gauge drains towards the daily target
     @Test
+    @Config(qualifiers = TABLET)
     fun `the fuel gauge drains towards the daily target`() {
         val f = fuel(target)
         assertEquals(7.0 / 12, f.left, 1e-9)
         assertEquals(6.0 / 12, f.pace, 1e-9)
         assertEquals("7.0 kWh left", fuelLeft(f))
-        assertEquals("5.0 of 12.0 kWh", fuelUsed(target))
-        assertEquals("1.0 kWh under pace", paceLine(f.paceKwh))
+        assertEquals("of 12.0 kWh", fuelUsed(target))
+        assertEquals("1.0 under pace", paceLine(f.paceKwh))
         assertEquals(false, f.low)
         val over = fuel(target.copy(usedKwh = 13.0, expectedKwh = 9.0))
         assertEquals(0.0, over.left)
@@ -132,7 +142,7 @@ class EnergyDialsTest {
         assertTrue(fuel(target.copy(usedKwh = 10.0)).low)
 
         showSection()
-        compose.onNodeWithContentDescription("Daily target: 7.0 kWh left, 5.0 of 12.0 kWh, 1.0 kWh under pace").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Daily target: 7.0 kWh left of 12.0 kWh, 1.0 under pace").assertIsDisplayed()
     }
 
     // BDD: Today's peak is the highest five-minute power since midnight
@@ -144,6 +154,7 @@ class EnergyDialsTest {
 
     // BDD: Today's peak says what was using the power
     @Test
+    @Config(qualifiers = TABLET)
     fun `tapping the peak gauge shows what was using the power`() {
         assertEquals(listOf("Kitchen" to "3.50 kW · 56%", "Everything else" to "2.30 kW · 37%", "Lights" to "400 W · 6%"), peakLines(peak))
         showSection()

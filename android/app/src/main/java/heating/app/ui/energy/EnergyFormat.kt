@@ -38,7 +38,7 @@ const val NOT_CONVERTED = "Prices are not converted. Check them for the new curr
 fun minorUnit(currency: String): String = if (currency == "GBP") "p" else "c"
 
 /** "£", "€", or the code itself when Java does not know the currency. */
-private fun symbol(currency: String): String =
+fun symbol(currency: String): String =
     runCatching { java.util.Currency.getInstance(currency).getSymbol(Locale.UK) }.getOrDefault(currency)
 
 private fun oneDecimal(v: Double) = String.format(Locale.UK, "%.1f", v)
