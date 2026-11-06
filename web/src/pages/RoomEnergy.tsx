@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Info } from 'lucide-react'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { IncompleteWarning } from '@/components/heating/IncompleteWarning'
 import { PlugTable } from '@/components/heating/PlugTable'
@@ -7,7 +8,7 @@ import { UsageCarousel, type UsageSlide } from '@/components/heating/UsageCarous
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { ApiError, request, type Room } from '@/lib/api'
-import { energyApi, formatCost, formatKwh, formatPower, type EnergyDashboard } from '@/lib/energy'
+import { energyApi, formatCost, formatKwh, formatPower, ONLY_MEASURED, readsLow, type EnergyDashboard } from '@/lib/energy'
 import { WHOLE, usageApi, type UsageWindow } from '@/lib/energyUsage'
 import { followPower, type LivePower } from '@/lib/livePower'
 import { roomPlugsApi, roomWarning, type RoomPlugs } from '@/lib/roomPlugs'
@@ -17,13 +18,13 @@ const PLUGS_EVERY_MS = 15_000
 /** Today's kWh and cost are recorded every five minutes; there is no point asking more often. */
 const TODAY_EVERY_MS = 5 * 60_000
 
-function useLivePower() {
+export function useLivePower() {
   const [live, setLive] = useState<LivePower | null>(null)
   useEffect(() => followPower(setLive, () => {}), [])
   return live
 }
 
-function BackToEnergy() {
+export function BackToEnergy() {
   const navigate = useNavigate()
   const location = useLocation()
   return (
@@ -47,7 +48,7 @@ function Figure({ testId, label, value, warning }: { testId: string; label: stri
   )
 }
 
-function Figures({ now, kwh, cost, currency, warning }: { now: string; kwh: number | undefined; cost: number | undefined; currency: string; warning?: ReactNode }) {
+export function Figures({ now, kwh, cost, currency, warning }: { now: string; kwh: number | undefined; cost: number | undefined; currency: string; warning?: ReactNode }) {
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
       <Figure testId="usage-now" label="Now" value={now} />
@@ -57,8 +58,25 @@ function Figures({ now, kwh, cost, currency, warning }: { now: string; kwh: numb
   )
 }
 
+/** The small info icon beside a room's name: its figures are only what its plugs and meters measured. */
+function OnlyMeasured() {
+  return (
+    <Popover>
+      <PopoverTrigger
+        aria-label="About these figures"
+        className="inline-flex rounded-full text-muted-foreground hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none [&_svg]:size-5"
+      >
+        <Info />
+      </PopoverTrigger>
+      <PopoverContent data-testid="only-measured" className="max-w-80 text-sm">
+        {ONLY_MEASURED}
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 /** "Now": its power, "No reading" with nothing reporting, never an old figure; nothing yet while connecting. */
-const nowText = (live: LivePower | null, watts: number | null | undefined) => (live == null ? '–' : watts == null ? 'No reading' : formatPower(watts))
+export const nowText = (live: LivePower | null, watts: number | null | undefined) => (live == null ? '–' : watts == null ? 'No reading' : formatPower(watts))
 
 /** One room's electricity: what it is using and costing, each plug over time, and its plugs side by side. Admin only. */
 export function RoomEnergyPage() {
@@ -103,7 +121,10 @@ export function RoomEnergyPage() {
   return (
     <div className="flex flex-col gap-4">
       <BackToEnergy />
-      <h1 className="text-3xl font-bold tracking-tight">{room?.name ?? ' '}</h1>
+      <div className="flex items-center gap-2">
+        <h1 className="text-3xl font-bold tracking-tight">{room?.name ?? ' '}</h1>
+        <OnlyMeasured />
+      </div>
       <Figures
         now={nowText(live, roomPower?.watts)}
         kwh={plugs?.kwh}
@@ -144,6 +165,11 @@ export function EverythingElseEnergyPage() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Everything else</h1>
         <p className="text-muted-foreground">What no plug accounts for</p>
+        {(rest?.sharedCircuits?.length ?? 0) > 0 && (
+          <p data-testid="shared-circuits" className="text-sm text-muted-foreground">
+            {readsLow(rest!.sharedCircuits!)}
+          </p>
+        )}
       </div>
       <Figures
         now={nowText(live, live?.elseWatts)}

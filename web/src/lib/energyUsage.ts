@@ -31,6 +31,8 @@ const query = (window: UsageWindow, to?: number) => `window=${window}${to == nul
 export const usageApi = {
   room: (room: string, window: UsageWindow, to?: number) =>
     request<UsagePage>('GET', `/api/rooms/${encodeURIComponent(room)}/plugs/usage?${query(window, to)}`),
+  area: (area: string, window: UsageWindow, to?: number) =>
+    request<UsagePage>('GET', `/api/energy/areas/${encodeURIComponent(area)}/usage?${query(window, to)}`),
   everythingElse: (window: UsageWindow, to?: number) => request<UsagePage>('GET', `/api/energy/else/usage?${query(window, to)}`),
 }
 

@@ -10,6 +10,13 @@ export interface RoomPower {
   watts: number | null
 }
 
+export interface AreaPower {
+  area: string
+  name: string
+  /** Its clamp's power, or the sum of its plugs reporting now; null with no reading */
+  watts: number | null
+}
+
 export interface DevicePower {
   meter: string
   watts: number | null
@@ -21,6 +28,8 @@ export interface LivePower {
   at: string | null
   rooms: RoomPower[]
   devices: DevicePower[]
+  /** Energy areas (older services leave it out) */
+  areas?: AreaPower[]
   /** House W no room or device accounts for; null while watts is */
   elseWatts: number | null
 }

@@ -34,6 +34,12 @@ export interface Meter {
   monitored?: boolean
   /** Id of the room this monitored device is in; null or left out when in no room */
   room?: string | null
+  /** Id of the energy area this monitored plug is in; a plug is in one room or one area at most */
+  area?: string | null
+  /** Id of the energy area this meter measures as its whole-area meter */
+  measures?: string | null
+  /** False for a meter that reports power but no energy total: it can only measure an energy area */
+  reportsEnergy?: boolean
 }
 
 export type EnergyPeriod = 'today' | 'week' | 'month'
@@ -88,6 +94,25 @@ export interface EverythingElse {
   /** The longer of the house meter's and any plug's time with no reading */
   missingMinutes: number
   incomplete: boolean
+  /** Pairs of area names that share a circuit: it reads low by whatever both measure */
+  sharedCircuits?: string[][]
+}
+
+/** An energy area's use over the period: its clamp's if it has one, else the sum of its plugs. "Of which", never added. */
+export interface AreaEnergy {
+  area: string
+  name: string
+  kwh: number
+  cost: number
+  missingMinutes: number
+  incomplete: boolean
+  wholeMeter: string | null
+  plugs: { meter: string; kwh: number; cost: number }[]
+  /** With a clamp: what its plugs do not account for, never below 0 */
+  rest: number | null
+  restCost: number | null
+  /** Names of the areas it shares a circuit with */
+  overlaps: string[]
 }
 
 export interface EnergyDashboard {
@@ -115,6 +140,8 @@ export interface EnergyDashboard {
   rooms: RoomEnergy[]
   /** House electricity minus all monitored plugs; null without a house meter */
   everythingElse: EverythingElse | null
+  /** Energy areas, by name; "of which", never added */
+  areas?: AreaEnergy[]
 }
 
 /** A named thing with meters and no valves, such as "Lights". Not a room: it has no heating. */
@@ -122,6 +149,10 @@ export interface EnergyArea {
   /** From the name it was created with; a rename keeps it */
   id: string
   name: string
+  /** The clamp that measures all of it */
+  wholeMeter?: string | null
+  /** Ids of the areas it shares a circuit with */
+  overlaps?: string[]
 }
 
 const enc = encodeURIComponent
@@ -144,6 +175,11 @@ export const energyApi = {
   addArea: (name: string) => request<EnergyArea>('POST', '/api/energy/areas', { name }),
   renameArea: (id: string, name: string) => request<EnergyArea>('PATCH', `/api/energy/areas/${enc(id)}`, { name }),
   deleteArea: (id: string) => request<void>('DELETE', `/api/energy/areas/${enc(id)}`).then(() => true),
+  measureArea: (id: string, meter: string) => request<EnergyArea>('PUT', `/api/energy/areas/${enc(id)}/whole-meter/${enc(meter)}`),
+  putInArea: (id: string, meter: string) => request<unknown>('PUT', `/api/energy/areas/${enc(id)}/meters/${enc(meter)}`).then(() => true),
+  takeOutOfArea: (id: string, meter: string) => request<void>('DELETE', `/api/energy/areas/${enc(id)}/meters/${enc(meter)}`).then(() => true),
+  shareCircuit: (id: string, other: string) => request<unknown>('PUT', `/api/energy/areas/${enc(id)}/overlaps/${enc(other)}`).then(() => true),
+  stopSharingCircuit: (id: string, other: string) => request<unknown>('DELETE', `/api/energy/areas/${enc(id)}/overlaps/${enc(other)}`).then(() => true),
 }
 
 /** How the house meter is named to an admin: the button that picks it, its hint, and its role once chosen. */
@@ -151,6 +187,20 @@ export const MAIN_METER_BUTTON = 'Main meter (whole house)'
 export const MONITOR_BUTTON = 'Monitor this device'
 
 export const MONITOR_HINT = 'See what one appliance uses'
+export const MEASURE_AREA_BUTTON = 'Measure an energy area'
+export const MEASURE_AREA_HINT = 'Measures all of an area, such as the lights'
+export const areaPickerTitle = (meter: string) => `Which area does ${meter} measure?`
+
+/** "Some use is also counted in Garage/Office", on the dashboard of an area that shares a circuit. */
+export const alsoCountedIn = (names: string[]) => `Some use is also counted in ${names.join(' and ')}`
+
+/** Everything else's note for areas that share a circuit: it reads low by whatever both measure. */
+export const readsLow = (pairs: string[][]) =>
+  pairs.map(([a, b]) => `Reads low by whatever ${a} and ${b} both measure`).join('. ')
+
+/** The room dashboard's info note: only what is measured is counted. */
+export const ONLY_MEASURED =
+  "These figures are only what this room's registered plugs and meters measured. Anything in the room not on a plug or clamp, such as an oven, is not counted here and falls in \"Everything else\"."
 
 /** The room picker that follows "Monitor this device"; "Not now" leaves the plug in no room. */
 export const roomPickerTitle = (meter: string) => `Which room is ${meter} in?`

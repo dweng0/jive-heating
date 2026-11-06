@@ -19,9 +19,10 @@ const COLUMNS: { key: PlugColumn; label: string }[] = [
 const STICKY = 'sticky left-0 bg-card'
 
 /** Each plug in a room, sortable by any heading. Picking a plug's name shows its chart. Moved-out use stays last, so it all adds up. */
-export function PlugTable({ plugs, onPick }: { plugs: RoomPlugs; onPick: (meter: string) => void }) {
+export function PlugTable({ plugs, onPick, rest }: { plugs: RoomPlugs; onPick: (meter: string) => void; rest?: { name: string; kwh: number; cost: number } }) {
   const [sort, setSort] = useState<PlugSort>(FIRST_SORT)
-  const left = movedOut(plugs)
+  // An area with a clamp: what its plugs do not account for, in place of moved-out use. It has no chart.
+  const left = rest ?? movedOut(plugs)
   return (
     <Card>
       <CardContent className="overflow-x-auto p-0">
@@ -60,8 +61,8 @@ export function PlugTable({ plugs, onPick }: { plugs: RoomPlugs; onPick: (meter:
               )
             })}
             {left && (
-              <tr data-testid="plug-moved-out" className="text-muted-foreground">
-                <th scope="row" className={cn('px-4 py-3 text-left font-medium', STICKY)}>Moved out</th>
+              <tr data-testid={rest ? 'plug-rest' : 'plug-moved-out'} className="text-muted-foreground">
+                <th scope="row" className={cn('px-4 py-3 text-left font-medium', STICKY)}>{rest ? rest.name : 'Moved out'}</th>
                 <td className="px-4 py-3 text-right">–</td>
                 <td className="px-4 py-3 text-right">–</td>
                 <td className="px-4 py-3 text-right">{plugs.kwh > 0 ? `${Math.round((left.kwh / plugs.kwh) * 100)}%` : '–'}</td>

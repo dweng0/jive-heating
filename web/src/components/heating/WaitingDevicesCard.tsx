@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react'
-import { DoorOpen, Gauge, Heater, Thermometer } from 'lucide-react'
+import { DoorOpen, Gauge, Heater, LayoutGrid, Thermometer } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { api, type Sensor, type Valve } from '@/lib/api'
 import {
+  areaPickerTitle,
   energyApi,
   formatPower,
+  MEASURE_AREA_BUTTON,
+  MEASURE_AREA_HINT,
   MAIN_METER_BUTTON,
   MAIN_METER_HINT,
   meterKind,
@@ -16,6 +19,7 @@ import {
   NOT_NOW,
   ROOM_PICKER_HINT,
   roomPickerTitle,
+  type EnergyArea,
   type Meter,
 } from '@/lib/energy'
 import { useHome } from '@/lib/home'
@@ -32,13 +36,33 @@ export function WaitingDevicesCard({ onMonitored }: { onMonitored?: () => void }
   const [meters, setMeters] = useState<Meter[]>([])
   /** The plug just monitored, while its room is being picked. */
   const [placing, setPlacing] = useState<string | null>(null)
+  const [areas, setAreas] = useState<EnergyArea[]>([])
+  /** The meter whose area is being picked, after "Measure an energy area". */
+  const [measuring, setMeasuring] = useState<string | null>(null)
 
   useEffect(() => {
     // Each list is optional: an older service without meters still shows valves and sensors.
     api.valves(true).then(setValves, () => undefined)
     api.sensors(true).then(setSensors, () => undefined)
     energyApi.meters(true).then(setMeters, () => undefined)
+    energyApi.areas().then(setAreas, () => undefined)
   }, [])
+
+  async function measureArea(meter: string, area: EnergyArea) {
+    setMeasuring(null)
+    const done = await run(() => energyApi.measureArea(area.id, meter), "Couldn't choose the meter for the area")
+    if (done) {
+      setMeters((ms) => ms.filter((m) => m.name !== meter))
+      toast.success(`${meter} now measures ${area.name}`)
+    }
+  }
+
+  /** Puts [meter] in [area]; if that fails it stays monitored, in no room, and the error is shown. */
+  async function putInArea(meter: string, area: string) {
+    setPlacing(null)
+    await run(() => energyApi.putInArea(area, meter), "Couldn't put the plug in the area")
+    onMonitored?.()
+  }
 
   async function chooseForHouse(meter: string) {
     const settings = await run(() => energyApi.useForHouse(meter), "Couldn't choose the meter")
@@ -92,12 +116,46 @@ export function WaitingDevicesCard({ onMonitored }: { onMonitored?: () => void }
               <span className="min-w-0 flex-1 truncate font-medium">{r.name}</span>
             </button>
           ))}
+          {areas.map((a) => (
+            <button
+              key={`area-${a.id}`}
+              onClick={() => placing && putInArea(placing, a.id)}
+              className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-secondary focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+            >
+              <LayoutGrid className="size-4 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate font-medium">{a.name}</span>
+            </button>
+          ))}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setPlacing(null)}>
             {NOT_NOW}
           </Button>
         </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+
+  const areaPicker = (
+    <Dialog open={measuring !== null} onOpenChange={(open) => !open && setMeasuring(null)}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>{measuring && areaPickerTitle(measuring)}</DialogTitle>
+          <DialogDescription>It then measures all of the area's electricity.</DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-1">
+          {areas.length === 0 && <p className="py-2 text-sm text-muted-foreground">No areas yet. Add one from the Energy tab.</p>}
+          {areas.map((a) => (
+            <button
+              key={a.id}
+              onClick={() => measuring && measureArea(measuring, a)}
+              className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-secondary focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+            >
+              <LayoutGrid className="size-4 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate font-medium">{a.name}</span>
+            </button>
+          ))}
+        </div>
       </DialogContent>
     </Dialog>
   )
@@ -124,17 +182,28 @@ export function WaitingDevicesCard({ onMonitored }: { onMonitored?: () => void }
                 {meterKind(m)} · {m.stale || !m.online ? 'not reporting' : `${formatPower(m.power)} now`}
               </div>
             </div>
+            {/* A meter with power but no energy total can only measure an area. */}
+            {m.reportsEnergy !== false && (
+              <>
+                <div className="flex flex-col items-start gap-1">
+                  <Button variant="outline" onClick={() => chooseForHouse(m.name)}>
+                    {MAIN_METER_BUTTON}
+                  </Button>
+                  <span className="text-xs text-muted-foreground">{MAIN_METER_HINT}</span>
+                </div>
+                <div className="flex flex-col items-start gap-1">
+                  <Button variant="outline" onClick={() => monitor(m.name)}>
+                    {MONITOR_BUTTON}
+                  </Button>
+                  <span className="text-xs text-muted-foreground">{MONITOR_HINT}</span>
+                </div>
+              </>
+            )}
             <div className="flex flex-col items-start gap-1">
-              <Button variant="outline" onClick={() => chooseForHouse(m.name)}>
-                {MAIN_METER_BUTTON}
+              <Button variant="outline" onClick={() => setMeasuring(m.name)}>
+                {MEASURE_AREA_BUTTON}
               </Button>
-              <span className="text-xs text-muted-foreground">{MAIN_METER_HINT}</span>
-            </div>
-            <div className="flex flex-col items-start gap-1">
-              <Button variant="outline" onClick={() => monitor(m.name)}>
-                {MONITOR_BUTTON}
-              </Button>
-              <span className="text-xs text-muted-foreground">{MONITOR_HINT}</span>
+              <span className="text-xs text-muted-foreground">{MEASURE_AREA_HINT}</span>
             </div>
             <IgnoreButton name={m.name} onIgnore={ignore} />
           </div>
@@ -147,6 +216,7 @@ export function WaitingDevicesCard({ onMonitored }: { onMonitored?: () => void }
         ))}
       </CardContent>
       {picker}
+      {areaPicker}
     </Card>
   )
 }

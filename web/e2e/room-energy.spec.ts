@@ -130,8 +130,8 @@ test('a room card opens its dashboard, and back finds the Energy tab where it wa
 
   // The address can be reloaded, and back still goes to the Energy tab.
   await page.goto('/energy')
-  await card.scrollIntoViewIfNeeded()
   await page.getByRole('button', { name: 'Week' }).click()
+  await card.scrollIntoViewIfNeeded()
   const before = await page.evaluate(() => window.scrollY)
   await card.click()
   await expect(page.getByRole('heading', { name: 'Kitchen' })).toBeVisible()
@@ -443,4 +443,18 @@ test('everything else has cards and one chart, and no table', async ({ page }) =
   push(live({ watts: null, elseWatts: null }))
   await expect(page.getByTestId('usage-now')).toContainText('No reading')
   await expect(page.getByTestId('usage-cost').getByTestId('incomplete-warning')).toBeVisible()
+})
+
+// BDD: The room dashboard says it only counts what is measured
+test('an info icon beside the room name says only its plugs and meters are counted', async ({ page }) => {
+  await serve(page)
+  await page.goto('/energy/rooms/kitchen')
+  const info = page.getByRole('button', { name: 'About these figures' })
+  await expect(info).toBeVisible()
+  // A small icon, not a banner: the note is hidden until it is opened.
+  await expect(page.getByText(/such as an oven/)).toHaveCount(0)
+  await info.click()
+  const note = page.getByTestId('only-measured')
+  await expect(note).toContainText("only what this room's registered plugs and meters measured")
+  await expect(note).toContainText('such as an oven, is not counted here and falls in "Everything else"')
 })

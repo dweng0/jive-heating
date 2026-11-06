@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { Card, CardContent } from '@/components/ui/card'
-import { energyApi, energyPlace, formatCost, formatKwh, type EnergyDashboard } from '@/lib/energy'
+import { energyApi, formatCost, formatKwh, type EnergyDashboard } from '@/lib/energy'
+import { OtherAreas } from './OtherAreas'
+import { UseCard } from './UseCard'
 import {
   SWEEP_MS,
   dialFraction,
@@ -105,8 +106,11 @@ export function LivePowerSection() {
     }
   }, [])
 
-  // No house meter chosen: nothing to show live.
-  if (today && today.electricityMeter == null) return null
+  const areas = (
+    <OtherAreas live={live?.areas ?? []} connected={live != null} today={today} house={live?.watts ?? null} currency={today?.currency ?? 'GBP'} />
+  )
+  // No house meter chosen: nothing to show live but the areas.
+  if (today && today.electricityMeter == null) return areas
 
   const watts = live?.watts ?? null
   const rooms = live?.rooms ?? []
@@ -145,21 +149,26 @@ export function LivePowerSection() {
             const day = today?.devices?.find((e) => e.meter === d.meter)
             return <UseCard key={d.meter} testId={`live-device-${d.meter}`} name={d.meter} detail="Not in a room" watts={d.watts} house={watts} kwh={day?.kwh} cost={day?.cost} currency={currency} />
           })}
-          {/* The rest of the house: only while the house reading is live, as it is the house less the rest. */}
-          {live?.elseWatts != null && (
-            <UseCard
-              to="/energy/else"
-              testId="live-rest"
-              name="Everything else"
-              detail="What no plug accounts for"
-              watts={live.elseWatts}
-              house={watts}
-              kwh={today?.everythingElse?.kwh}
-              cost={today?.everythingElse?.cost}
-              currency={currency}
-              muted
-            />
-          )}
+        </div>
+      )}
+
+      {areas}
+
+      {/* The rest of the house: only while the house reading is live, as it is the house less the rest. */}
+      {live?.elseWatts != null && (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <UseCard
+            to="/energy/else"
+            testId="live-rest"
+            name="Everything else"
+            detail="What no plug accounts for"
+            watts={live.elseWatts}
+            house={watts}
+            kwh={today?.everythingElse?.kwh}
+            cost={today?.everythingElse?.cost}
+            currency={currency}
+            muted
+          />
         </div>
       )}
     </section>
@@ -263,68 +272,5 @@ function Sparkline({ points, bands }: { points: PowerPoint[]; bands: PowerBands 
         <span>Now</span>
       </div>
     </div>
-  )
-}
-
-function UseCard({
-  to,
-  testId,
-  name,
-  detail,
-  watts,
-  house,
-  kwh,
-  cost,
-  currency,
-  muted,
-}: {
-  /** Where picking the card goes: a room's or everything else's energy dashboard. */
-  to?: string
-  testId: string
-  name: string
-  detail?: string
-  watts: number | null
-  house: number | null
-  kwh: number | undefined
-  cost: number | undefined
-  currency: string
-  muted?: boolean
-}) {
-  // Share of the house's load now: only while both are live.
-  const share = watts != null && house != null && house > 0 ? Math.min(1, watts / house) : null
-  const card = (
-    <Card data-testid={testId} className={cn('h-full', to && 'transition-colors hover:bg-accent/40')}>
-      <CardContent className="flex flex-col gap-2 p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="truncate font-medium">{name}</div>
-            {detail && <div className="truncate text-xs text-muted-foreground">{detail}</div>}
-          </div>
-          <div data-testid="live-watts" className={cn('shrink-0 text-xl font-bold tabular-nums', watts == null && 'text-muted-foreground')}>
-            {formatWatts(watts)}
-          </div>
-        </div>
-        <div className="h-1.5 overflow-hidden rounded-full bg-secondary" title={share == null ? undefined : `${Math.round(share * 100)}% of the house now`}>
-          <div
-            data-testid="live-share"
-            data-share={share == null ? '' : Math.round(share * 100)}
-            className={cn('h-full rounded-full transition-[width] duration-700', muted ? 'bg-muted-foreground/50' : 'bg-[var(--power-neutral)]')}
-            style={{ width: `${(share ?? 0) * 100}%` }}
-          />
-        </div>
-        <div className="flex justify-between text-xs text-muted-foreground tabular-nums">
-          <span>{share == null ? '' : `${Math.round(share * 100)}% of the house`}</span>
-          <span data-testid="live-day">
-            Today {kwh == null ? '–' : formatKwh(kwh)} · <span className="font-semibold text-foreground">{formatCost(cost, currency)}</span>
-          </span>
-        </div>
-      </CardContent>
-    </Card>
-  )
-  if (!to) return card
-  return (
-    <Link to={to} aria-label={`${name} energy`} className="rounded-xl focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none" onClick={() => (energyPlace.scrollY = window.scrollY)}>
-      {card}
-    </Link>
   )
 }

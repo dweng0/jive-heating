@@ -1,5 +1,4 @@
 import { useEffect } from 'react'
-import { EnergyAreasCard } from '@/components/heating/EnergyAreasCard'
 import { EnergySection } from '@/components/heating/EnergySection'
 import { LivePowerSection } from '@/components/heating/LivePowerSection'
 import { energyPlace } from '@/lib/energy'
@@ -29,7 +28,6 @@ export function EnergyPage() {
       </div>
       <LivePowerSection />
       <EnergySection />
-      <EnergyAreasCard />
     </div>
   )
 }
