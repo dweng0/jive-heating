@@ -53,6 +53,28 @@ data class EnergyDay(
     val totalCost: Double,
     val missingMinutes: Int,
     val incomplete: Boolean,
+    /** Electricity minus the daily target (for today, the share of it gone so far); null with no target or house meter. */
+    val targetDeltaKwh: Double? = null,
+)
+
+/**
+ * The house's electricity against the daily target over the period. [expectedKwh] is the target for each day, today's
+ * only for the share of today gone; [deltaKwh] is [usedKwh] minus it, below zero under target. [projectedKwh] is where
+ * use is heading by the end of the period at the rate so far; null in its first 30 minutes. [incomplete] when readings
+ * are missing: [usedKwh] holds only what was recorded.
+ *
+ * openapi: EnergyTarget
+ */
+@Serializable
+data class EnergyTarget(
+    val kwh: Double,
+    val usedKwh: Double,
+    val expectedKwh: Double,
+    val deltaKwh: Double,
+    val deltaCost: Double,
+    val onTarget: Boolean,
+    val projectedKwh: Double?,
+    val incomplete: Boolean,
 )
 
 /**
@@ -174,6 +196,8 @@ data class EnergyDashboard(
     val everythingElse: EverythingElse? = null,
     /** Energy areas, by name. "Of which" the house's, like rooms, so never added to anything. */
     val areas: List<AreaEnergy> = emptyList(),
+    /** The house's electricity against the daily target; null with no target or no house meter. */
+    val target: EnergyTarget? = null,
 )
 
 /**
@@ -217,7 +241,7 @@ class EnergyDashboards(
             val date = firstDay.plusDays(i)
             val start = date.atStartOfDay(now.zone).toInstant()
             val end = minOf(date.plusDays(1).atStartOfDay(now.zone).toInstant(), now.toInstant())
-            day(date, start, end, now.toInstant(), boiler, samples, prices)
+            day(date, start, end, now.toInstant(), boiler, samples, prices, date.plusDays(1).atStartOfDay(now.zone).toInstant())
         }
         val boilerHours = days.sumOf { it.hours }
         val electricityKwh = if (prices.electricityMeter == null) null else days.sumOf { it.kwh ?: 0.0 }
@@ -289,6 +313,29 @@ class EnergyDashboards(
                 area(area, areaSamples.filter { it.room == area.id }, plugSamples.filter { it.area == area.id }, clamped, prices)
                     .copy(overlaps = overlapNames(area, areaList))
             },
+            target = target(days, prices, from.toInstant(), now.toInstant(), period),
+        )
+    }
+
+    /** The period against the daily target, or null with no target or no house meter. */
+    private fun target(days: List<Day>, prices: EnergySettings, from: Instant, now: Instant, period: DashboardPeriod): EnergyTarget? {
+        val daily = prices.dailyKwhTarget ?: return null
+        if (prices.electricityMeter == null) return null
+        val used = days.sumOf { it.kwh ?: 0.0 }
+        val expected = days.sumOf { it.share * daily }
+        val total = period.days * daily
+        val delta = used - expected
+        val gone = days.sumOf { it.share }
+        val projected = if (Duration.between(from, now) < Duration.ofMinutes(30) || gone <= 0.0) null else used / gone * period.days
+        return EnergyTarget(
+            kwh = round(total, 2),
+            usedKwh = round(used, 3),
+            expectedKwh = round(expected, 3),
+            deltaKwh = round(delta, 3),
+            deltaCost = round(delta * prices.electricityPencePerKwh, 1),
+            onTarget = delta <= 0.0,
+            projectedKwh = projected?.let { round(it, 2) },
+            incomplete = days.any { it.view.incomplete },
         )
     }
 
@@ -327,7 +374,7 @@ class EnergyDashboards(
     private fun staleMinutes(staleAt: Set<Instant>) = staleAt.size * MeterRecorder.SAMPLE_INTERVAL.toMinutes().toInt()
 
     /** A day's figures, with the unrounded hours and kWh the period totals add up. */
-    private class Day(val view: EnergyDay, val hours: Double, val kwh: Double?)
+    private class Day(val view: EnergyDay, val hours: Double, val kwh: Double?, val share: Double)
 
     private fun day(
         date: LocalDate,
@@ -337,6 +384,8 @@ class EnergyDashboards(
         boiler: List<heating.history.BoilerPeriod>,
         samples: List<MeterSample>,
         prices: EnergySettings,
+        /** The midnight the day ends at, even when [end] is now. */
+        dayEnd: Instant,
     ): Day {
         val hours = boiler.filter { it.state in BURNING }.sumOf { period ->
             overlap(period.from, period.to ?: now, start, end).toMillis()
@@ -346,6 +395,10 @@ class EnergyDashboards(
         val missing = missingMinutes(start, end, now, samples)
         val gasCost = hours * prices.boilerAverageKw * prices.gasPencePerKwh
         val electricityCost = kwh?.let { it * prices.electricityPencePerKwh }
+        // The share of the day gone: 1 for a past day, the hours so far over the day's length (23 or 25 on a clock change) for today.
+        val length = Duration.between(start, dayEnd)
+        val share = (Duration.between(start, end).toMillis().toDouble() / length.toMillis()).coerceIn(0.0, 1.0)
+        val targetDelta = if (kwh == null) null else prices.dailyKwhTarget?.let { kwh - it * share }
         val standing = prices.gasStandingPencePerDay + (if (prices.electricityMeter == null) 0.0 else prices.electricityStandingPencePerDay)
         return Day(
             EnergyDay(
@@ -359,9 +412,11 @@ class EnergyDashboards(
                 totalCost = round(gasCost + (electricityCost ?: 0.0) + standing, 1),
                 missingMinutes = missing,
                 incomplete = missing > 0,
+                targetDeltaKwh = targetDelta?.let { round(it, 3) },
             ),
             hours,
             kwh,
+            share,
         )
     }
 

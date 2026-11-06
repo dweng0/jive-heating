@@ -24,6 +24,8 @@ data class EnergySettings(
     val currency: String = "GBP",
     /** Things the admin should know, such as "Main Clamp was removed from Zigbee2MQTT". Choosing a meter clears them. */
     val notices: List<String> = emptyList(),
+    /** kWh a day the household aims to use on the house meter; null for no target. */
+    val dailyKwhTarget: Double? = null,
 )
 
 /** Throws a 400 unless every price is zero or more, the boiler rate is over 0 and at most 100 kW, the currency is a known ISO 4217 code, and the meter [isMeter]. */
@@ -40,6 +42,9 @@ fun EnergySettings.validated(isMeter: (String) -> Boolean): EnergySettings {
         throw ApiException.badRequest("boilerAverageKw must be over 0 and at most 100")
     }
     if (runCatching { java.util.Currency.getInstance(currency) }.isFailure) throw ApiException.badRequest("unknown currency $currency")
+    if (dailyKwhTarget != null && (!dailyKwhTarget.isFinite() || dailyKwhTarget <= 0 || dailyKwhTarget > 1000)) {
+        throw ApiException.badRequest("dailyKwhTarget must be over 0 and at most 1000")
+    }
     if (electricityMeter != null && !isMeter(electricityMeter)) throw ApiException.badRequest("meter not found")
     return this
 }

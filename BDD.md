@@ -2617,7 +2617,7 @@ Engineering rules (apply to every scenario):
         Scenario: Days in a week or month are compared with the target
             Given dailyKwhTarget is 12.0 and the house used 10.0 kWh on Monday and 14.0 kWh on Tuesday
             When an admin sends GET /api/dashboard?period=week
-            Then Monday has deltaKwh -2.0 and Tuesday deltaKwh 2.0, and "target" sums the days: kwh 84.0 over 7 days
+            Then Monday has targetDeltaKwh -2.0 and Tuesday targetDeltaKwh 2.0, and "target" sums the days: kwh 84.0 over 7 days
             And today's day is compared with the share of today gone, as in period today
 
         Scenario: The Energy tab shows the delta for today

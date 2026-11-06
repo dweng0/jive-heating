@@ -177,6 +177,12 @@ private fun EnergySettings.patched(body: JsonObject): EnergySettings {
             else -> (code as? JsonPrimitive)?.takeIf { it.isString }?.content
                 ?: throw ApiException.badRequest("currency must be a currency code")
         },
+        dailyKwhTarget = when (val target = body["dailyKwhTarget"]) {
+            null -> dailyKwhTarget
+            is JsonNull -> null
+            else -> (target as? JsonPrimitive)?.takeUnless { it.isString }?.doubleOrNull
+                ?: throw ApiException.badRequest("dailyKwhTarget must be a number")
+        },
         electricityMeter = when (val meter = body["electricityMeter"]) {
             null -> electricityMeter
             JsonNull -> null
