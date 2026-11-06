@@ -1883,6 +1883,13 @@ Engineering rules (apply to every scenario):
             Then 0.1 kWh is recorded for "Fridge Plug" for that five minutes
             And counter resets and stale readings are handled the same way as the main meter
 
+        Scenario: A plug whose energy total dips a little is not taken as reset
+            Given "Washing Machine" is monitored and reads 30.86 kWh
+            When it reads 30.75 kWh five minutes later (its total stepped back, it was not reset)
+            Then 0 kWh is recorded for those five minutes, never 30.75 kWh
+            And its use counts on from 30.86, so reading 30.95 next records 0.09 kWh
+            And a total that drops by more than 1 kWh, or to under half of what it was, is still a reset and counts on from the new total
+
         Scenario: The energy dashboard lists monitored devices without double counting
             Given "Fridge Plug" used 1.2 kWh today and the main meter recorded 8.0 kWh
             When an admin sends GET /api/dashboard?period=today

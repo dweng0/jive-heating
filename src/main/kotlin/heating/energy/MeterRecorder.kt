@@ -101,7 +101,8 @@ class MeterRecorder(
             if (staleSince != null && previous != null && reading >= previous && day(staleSince, zone) == day(at, zone)) {
                 history.coverDeviceStale(device, staleSince, at)
             }
-            lastDevices[device] = reading
+            // A total that dipped a little keeps counting from the higher one, so a step back is never counted again.
+            lastDevices[device] = if (previous != null && dipped(reading, previous)) previous else reading
         }
 
         recordAreas(at, previousSample, hours)
@@ -149,12 +150,19 @@ class MeterRecorder(
     /** The household day a sample counts in: it covers the five minutes before it, so one at midnight is the day before. */
     private fun day(at: Instant, zone: ZoneId) = at.minusMillis(1).atZone(zone).toLocalDate()
 
-    /** The kWh since [previous]; a total that dropped (a reset) counts on from the new total. */
+    /**
+     * The kWh since [previous]. A total that dipped a little (some plugs' totals step back) used nothing; one that dropped
+     * further (a reset) counts on from the new total.
+     */
     private fun used(counter: Double, previous: Double?): Double = when {
         previous == null -> 0.0
         counter >= previous -> counter - previous
+        dipped(counter, previous) -> 0.0
         else -> counter
     }
+
+    /** A total below [previous] by at most 1 kWh, and at least half of it: a step back, not a reset. */
+    private fun dipped(counter: Double, previous: Double) = counter < previous && previous - counter <= 1.0 && counter >= previous / 2
 
     private fun due(last: Instant?, at: Instant, every: Duration) = last == null || Duration.between(last, at) >= every
 

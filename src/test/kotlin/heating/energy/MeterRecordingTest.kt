@@ -145,4 +145,46 @@ class MeterRecordingTest {
         minutes(t, 5)
         assertEquals(0.4, fridgeKwh(t)!!, 1e-9)
     }
+
+    private fun washerKwh(t: TestHeating): Double? =
+        t.app.energyHistory.deviceSamples("Washing Machine", Instant.EPOCH, t.clock.instant()).last().kwh
+
+    // BDD: A plug whose energy total dips a little is not taken as reset
+    @Test
+    fun `a plug whose energy total dips a little is not taken as reset`() {
+        val t = TestHeating()
+        t.discover(meters = listOf("Main Clamp", "Washing Machine"))
+        houseMeter(t, "Main Clamp")
+        t.api { client -> assertEquals(HttpStatusCode.OK, client.put("/api/meters/Washing%20Machine/monitored").status) }
+
+        t.meterState("Washing Machine", """{"energy":30.86,"power":5}""")
+        minutes(t, 5)
+        // It steps back: nothing used, never the whole total.
+        t.meterState("Washing Machine", """{"energy":30.75,"power":5}""")
+        minutes(t, 5)
+        assertEquals(0.0, washerKwh(t)!!, 1e-9)
+        // Still below where it was: nothing yet.
+        t.meterState("Washing Machine", """{"energy":30.85,"power":5}""")
+        minutes(t, 5)
+        assertEquals(0.0, washerKwh(t)!!, 1e-9)
+        // Counts on from the higher total.
+        t.meterState("Washing Machine", """{"energy":30.95,"power":5}""")
+        minutes(t, 5)
+        assertEquals(0.09, washerKwh(t)!!, 1e-9)
+
+        // A drop of more than 1 kWh is a reset: counts on from the new total.
+        t.meterState("Washing Machine", """{"energy":29.5,"power":5}""")
+        minutes(t, 5)
+        assertEquals(29.5, washerKwh(t)!!, 1e-9)
+        // So is a drop to under half, however small.
+        t.meterState("Washing Machine", """{"energy":40.0,"power":5}""")
+        minutes(t, 5)
+        t.meterState("Washing Machine", """{"energy":0.4,"power":5}""")
+        minutes(t, 5)
+        t.meterState("Washing Machine", """{"energy":0.8,"power":5}""")
+        minutes(t, 5)
+        t.meterState("Washing Machine", """{"energy":0.3,"power":5}""")
+        minutes(t, 5)
+        assertEquals(0.3, washerKwh(t)!!, 1e-9)
+    }
 }
