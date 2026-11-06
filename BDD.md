@@ -2489,6 +2489,201 @@ Engineering rules (apply to every scenario):
             And recorded samples are kept, and the house figure does not change
             And from then on "Everything else" no longer subtracts "Garage Clamp", while past periods still do
 
+    Feature: Two-clamp meters
+        As the household admin
+        I want each clamp of a two-clamp meter to be a meter of its own
+        So that one device can measure the whole house on one clamp and all the lights on the other
+
+        Some meters, such as the Tuya PJ-1203A, have two clamps, A and B, on one Zigbee device. Zigbee2MQTT reports
+        them as power_a, energy_a, power_b and energy_b (and power_ab, their difference). Each clamp is a meter named
+        after the device and its letter, such as "Mains and lights A", and can be given any job a meter can have.
+
+        Scenario: A two-clamp meter is discovered as two meters
+            Given the bridge device list contains "Mains and lights", which exposes power_a, energy_a, power_b and energy_b but no power
+            When a client sends GET /api/meters
+            Then it lists "Mains and lights A" and "Mains and lights B", each with device "Mains and lights" and its clamp "A" or "B"
+            And "Mains and lights" itself is not listed, and a one-clamp meter has device equal to its name and clamp null
+
+        Scenario: Each clamp's readings come from the device's state
+            Given "Mains and lights" is discovered
+            When "zigbee2mqtt/Mains and lights" publishes {"power_a":535.2,"energy_a":0.04,"power_b":25.5,"energy_b":0,"power_ab":509.7}
+            Then GET /api/meters shows "Mains and lights A" at 535.2 W and 0.04 kWh, and "Mains and lights B" at 25.5 W and 0 kWh
+            And power_ab is not used
+            And a message carrying only clamp A's readings leaves clamp B's as they were
+
+        Scenario: A clamp fitted the wrong way round is still counted as use
+            Given "Mains and lights" reports {"power_b":25.5,"energy_flow_b":"producing"}, or {"power_b":-25.5}
+            When clamp B is recorded for five minutes
+            Then it counts 25.5 W of use, never negative
+            And GET /api/meters shows "Mains and lights B" with reversed true
+            And the app says "This clamp reads backwards. Its use is still counted."
+
+        Scenario: Each clamp does its own job
+            Given "Mains and lights A" is the house meter and "Mains and lights B" measures energy area "Lights"
+            When A reports 600 W and B reports 60 W for five minutes
+            Then history records 0.05 kWh for the house and 0.005 kWh for "Lights"
+            And "Everything else" is the house minus "Lights", as for any whole-area meter
+
+        Scenario: Both clamps go offline or leave together
+            Given "Mains and lights A" is the house meter and "Mains and lights B" measures "Lights"
+            When Zigbee2MQTT says "Mains and lights" is offline
+            Then both clamps are shown offline, and their minutes are missing, not 0 kWh
+            When "Mains and lights" is unpaired
+            Then electricityMeter is null and "Lights" has no whole-area meter, with the notice "Mains and lights was removed from Zigbee2MQTT" once
+
+    Feature: Energy management
+        As the household admin
+        I want one page where I set up everything that measures electricity
+        So that I can add, change or remove the house meter, areas, clamps and plugs without hunting through the app
+
+        Scenario: Admins have an energy management page
+            Given admin "jane" is on the Energy tab of the web app
+            When they choose "Manage"
+            Then /energy/manage opens with sections "Main meter", "Daily target", "Areas", "Monitored devices" and "Waiting to be set up"
+            And each meter shows its label, power now, and whether it is offline or stale
+            And a member sent to /energy/manage goes to the Rooms screen, and is never shown "Manage"
+
+        Scenario: An admin names a meter
+            Given "Mains and lights A" is discovered
+            When admin "jane" chooses "Rename" on it and enters "Mains"
+            Then PUT /api/meters/Mains and lights A/label is sent with {"label":"Mains"}
+            And GET /api/meters shows label "Mains", and the label is used wherever the meter is shown
+            And an empty label goes back to the Zigbee2MQTT name, a label over 40 characters gets 400, and a member gets 403
+            And the label is kept after a restart, and dropped when the meter leaves Zigbee2MQTT
+
+        Scenario: An admin changes or removes the main meter from the page
+            Given "CCU Clamp" is the house meter and "Mains and lights A" is waiting to be set up
+            When admin "jane" chooses "Change" under "Main meter" and picks "Mains and lights A"
+            Then PUT /api/meters/Mains and lights A/house is sent, and "CCU Clamp" is waiting to be set up again
+            And "Stop using" sends DELETE /api/meters/Mains and lights A/house after a confirmation
+            And only meters that report power and are not measuring something else are offered
+
+        Scenario: An admin sets up areas from the page
+            Given admin "jane" is on /energy/manage
+            Then under "Areas" they can add, rename and delete an area (deleting asks to confirm)
+            And choose, replace or remove its whole-area meter, add or remove its plugs, and set "Shares a circuit with"
+            And each area shows its whole-area meter's power now, or "Sum of its plugs" when it has none
+
+        Scenario: A meter is given a new job in one step
+            Given "CCU Clamp" is the house meter
+            When admin "jane" chooses "Change job" on it and picks "Monitor in a room", then "Kitchen", and confirms
+            Then it stops being the house meter and is monitored in "Kitchen", in one request: PUT /api/meters/CCU Clamp/job with {"job":"monitored","room":"kitchen"}
+            And the jobs are "house", "area" (with an area id), "monitored" (with an optional room or area id) and "none"
+            And a job the meter cannot do gets 422 and changes nothing, and a member gets 403
+
+        Scenario: A meter's new job does not rewrite what it recorded
+            Given "CCU Clamp" recorded 5.0 kWh as the house meter this morning, then became monitored in "Kitchen"
+            When an admin reads today's dashboard
+            Then the house's electricityKwh still holds the morning's 5.0 kWh, and "Kitchen" counts only what was recorded after the change
+
+        Scenario: An admin stops monitoring a device
+            Given "Desk Plug" is monitored in "Garage/Office"
+            When admin "jane" chooses "Stop monitoring" on /energy/manage and confirms
+            Then DELETE /api/meters/Desk Plug/monitored is sent and it is waiting to be set up again
+            And its recorded use is kept and still counted for when it was recorded
+
+    Feature: Daily energy target
+        As the household admin
+        I want to set how much electricity we aim to use each day
+        So that I can see during the day whether we are on target
+
+        The target is for the house meter's electricity. Expected use so far is the target times the share of the day
+        gone, so at 12:00 half the target is expected. The delta is use so far minus expected use so far: below zero is
+        under target.
+
+        Scenario: An admin sets a daily target
+            When admin "jane" sends PUT /api/settings/energy with dailyKwhTarget 12.0
+            Then GET /api/settings/energy has dailyKwhTarget 12.0, kept after a restart, and null (the default) means no target
+            And a target of 0 or less, or over 1000, gets 400, and a member gets 403
+            And on /energy/manage "Daily target" shows "12.0 kWh a day" with its cost at today's price, such as "£3.24"
+
+        Scenario: Today's dashboard says whether we are on target
+            Given dailyKwhTarget is 12.0 and the house meter has recorded 5.0 kWh by 12:00
+            When an admin sends GET /api/dashboard?period=today at 12:00
+            Then "target" has kwh 12.0, usedKwh 5.0, expectedKwh 6.0, deltaKwh -1.0, deltaCost (-1.0 kWh at the electricity price), onTarget true and projectedKwh 10.0
+            And with 7.0 kWh used it has deltaKwh 1.0 and onTarget false
+            And projectedKwh is use so far divided by the share of the day gone, and null in the first 30 minutes
+
+        Scenario: No target or no house meter means no target figures
+            Given no daily target is set, or no house meter is chosen
+            When an admin sends GET /api/dashboard?period=today
+            Then "target" is null
+
+        Scenario: Missing readings are said, not guessed
+            Given dailyKwhTarget is 12.0 and the house meter had no reading from 09:00 to 10:00
+            When an admin sends GET /api/dashboard?period=today
+            Then "target" has incomplete true and usedKwh counts only what was recorded
+
+        Scenario: Days in a week or month are compared with the target
+            Given dailyKwhTarget is 12.0 and the house used 10.0 kWh on Monday and 14.0 kWh on Tuesday
+            When an admin sends GET /api/dashboard?period=week
+            Then Monday has deltaKwh -2.0 and Tuesday deltaKwh 2.0, and "target" sums the days: kwh 84.0 over 7 days
+            And today's day is compared with the share of today gone, as in period today
+
+        Scenario: The Energy tab shows the delta for today
+            Given dailyKwhTarget is 12.0, and at 12:00 the house has used 5.0 kWh
+            When admin "jane" opens the Energy tab on the web app with Today chosen
+            Then a target card says "1.0 kWh under target" in green, with "5.0 of 12.0 kWh, on track for 10.0 kWh"
+            And a bar shows use so far against a mark for where use should be by now
+            And over target it says "1.0 kWh over target" in amber, and with readings missing it adds "Some readings are missing"
+            And for week and month each day's bar has a target line, and days over target are marked
+            And with no target set it offers "Set a daily target", which goes to /energy/manage
+
+    Feature: Who is signed in
+        As the household admin
+        I want to see who is signed in, on what, and when they were last active
+        So that I can tell whether an old phone is still signed in and sign it out
+
+        Each sign-in starts a session: one device signed in once. Its token carries the session's id. Sessions from
+        before this feature, whose tokens carry no id, keep working and are shown as "Earlier sign-in".
+
+        Scenario: A sign-in starts a session the admin can see
+            Given "sam" signs in on the web app in Chrome on Android
+            When admin "jane" sends GET /api/admin/users/{sam's id}/sessions
+            Then it lists one session with an id, device "Chrome on Android", signedInAt, lastSeen and signedOutAt null
+            And the Android app's sessions say "Android app"
+            And no token, password or address is in the response
+
+        Scenario: Each person shows whether they are active
+            Given "sam" last used the app 2 minutes ago and "kim" last used it 3 days ago and then signed out
+            When admin "jane" sends GET /api/admin/users
+            Then "sam" has activeNow true, lastSeen 2 minutes ago and sessions 1
+            And "kim" has activeNow false, lastSeen 3 days ago and sessions 0
+            And activeNow means a request in the last 5 minutes, and sessions counts sessions not signed out or expired
+
+        Scenario: Last seen is kept without writing on every request
+            Given "sam" makes 100 requests in one minute
+            Then the session's lastSeen is updated at most once a minute, and survives a restart
+
+        Scenario: Signing out ends only that session
+            Given "sam" is signed in on two devices
+            When "sam" signs out on one of them
+            Then that session has signedOutAt set and its token returns 401, and the other device keeps working
+
+        Scenario: An admin signs a device out
+            Given "sam" is signed in on two devices
+            When admin "jane" chooses "Sign out" on one of "sam"'s sessions
+            Then DELETE /api/admin/users/{sam's id}/sessions/{session id} is sent and that token returns 401
+            And "Sign out everywhere" on "sam" sends DELETE /api/admin/users/{sam's id}/sessions and every token of "sam" returns 401
+            And a member gets 403
+
+        Scenario: Ended sessions are listed until they are old
+            Given "sam" signed out 10 days ago and a token of "sam" expired yesterday
+            When admin "jane" lists "sam"'s sessions
+            Then both are listed as signed out, the expired one at its expiry
+            And sessions that ended more than 30 days ago are no longer listed
+
+        Scenario: Signing in and out is in the activity feed
+            When "sam" signs in on Chrome on Android, signs out, or is signed out by "jane"
+            Then the activity feed shows "sam signed in on Chrome on Android", "sam signed out" or "jane signed sam out"
+            And wrong passwords are not in the feed
+
+        Scenario: The People page shows who is signed in
+            Given admin "jane" opens People on the web app
+            Then each person shows "Active now", "Last seen 3 hours ago" or "Not signed in"
+            And opening a person lists their sessions with device, signed in, last seen and a "Sign out" button
+            And the session "jane" is using says "This device" and has no "Sign out" button
+
 # Deferred (not to be built yet)
 # - Mirror schedules to the valve weekly_schedule as a fallback when the service is down
 # - Open-window alerts (TRVZB exposes the setting, not a state; needs inference)
@@ -2500,3 +2695,5 @@ Engineering rules (apply to every scenario):
 # - Prices that change over time (the dashboard uses the current prices for the whole period)
 # - Room electricity beside room heating hours (tag a plug as a heater: portable heaters, towel rails)
 # - Valve not responding: a state on the zone view beside the feed event (needs an openapi change)
+# - Energy management, daily target and who is signed in on the Android app
+# - A notification when the day ends over the daily target
