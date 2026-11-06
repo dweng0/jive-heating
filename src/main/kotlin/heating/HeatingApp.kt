@@ -1,5 +1,6 @@
 package heating
 
+import heating.activity.displayName
 import heating.notify.ActionTracker
 import heating.notify.HeatingAlerts
 import heating.notify.NotificationSettings
@@ -92,7 +93,12 @@ class HeatingApp(
     val demand = DemandControl(bus, rooms, valves, zones, commander, changes, ::now, roomSensors::temperatureOf, config.boilerMinRun, config.boilerMinRest, activity)
     val history = HistoryRepository(config.dbPath)
     val historyRecorder = HistoryRecorder(history, changes, clock::instant, ::roomSamples, { demand.state().state })
-    val users = UserService(UserRepository(store), Passwords(config.passwordIterations), config.apiToken, clock::instant)
+    val users = UserService(UserRepository(store), Passwords(config.passwordIterations), config.apiToken, clock::instant, heating.auth.SessionRepository(store)).also { users ->
+        users.onSession { e ->
+            val detail = if (e.value == "out") e.detail?.let { displayName(it) } else e.detail
+            activity.record("session", displayName(e.username), null, kotlinx.serialization.json.JsonPrimitive(e.value), detail, adminOnly = true)
+        }
+    }
     val notificationSettings = NotificationSettings(store)
     val webPush = heating.notify.WebPush(store, config.webPushContact, webPushHttp, clock::instant)
     val ignoredDevices = heating.devices.IgnoredDevices(store)

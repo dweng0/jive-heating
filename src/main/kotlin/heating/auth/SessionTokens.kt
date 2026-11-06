@@ -7,18 +7,21 @@ import java.util.Base64
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
-/** What a valid session token says: whose it is, until when, and which session version it was minted under. */
-data class Session(val userId: String, val expires: Instant, val version: Int)
+/**
+ * What a valid session token says: whose it is, until when, which session version it was minted under, and which
+ * session (sign-in) it is; [sessionId] is null for a token from before sessions were kept.
+ */
+data class Session(val userId: String, val expires: Instant, val version: Int, val sessionId: String? = null)
 
 /**
- * Signed session tokens, `<payload>.<hmac>` in base64url, payload `<userId>:<expiry epoch s>:<version>`.
- * Nothing is stored per session: bumping a user's session version ends every token minted before.
+ * Signed session tokens, `<payload>.<hmac>` in base64url, payload `<userId>:<expiry epoch s>:<version>:<sessionId>`
+ * (older tokens have no session id). Bumping a user's session version ends every token minted before.
  */
 class SessionTokens(private val secret: ByteArray, private val now: () -> Instant) {
 
-    fun issue(userId: String, version: Int): String {
+    fun issue(userId: String, version: Int, sessionId: String? = null): String {
         val expires = now().plus(LIFETIME).epochSecond
-        val payload = encoder.encodeToString("$userId:$expires:$version".toByteArray())
+        val payload = encoder.encodeToString(listOfNotNull(userId, expires, version, sessionId).joinToString(":").toByteArray())
         return "$payload.${sign(payload)}"
     }
 
@@ -30,11 +33,11 @@ class SessionTokens(private val secret: ByteArray, private val now: () -> Instan
         val signature = token.substring(dot + 1)
         if (!MessageDigest.isEqual(sign(payload).toByteArray(), signature.toByteArray())) return null
         val parts = runCatching { String(decoder.decode(payload)) }.getOrNull()?.split(':') ?: return null
-        if (parts.size != 3) return null
+        if (parts.size != 3 && parts.size != 4) return null
         val expires = parts[1].toLongOrNull()?.let(Instant::ofEpochSecond) ?: return null
         val version = parts[2].toIntOrNull() ?: return null
         if (!now().isBefore(expires)) return null
-        return Session(parts[0], expires, version)
+        return Session(parts[0], expires, version, parts.getOrNull(3))
     }
 
     private fun sign(payload: String): String {

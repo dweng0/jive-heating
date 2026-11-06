@@ -15,7 +15,22 @@
           "username": { "type": "string" },
           "admin": { "type": "boolean" },
           "createdAt": { "type": "string", "format": "date-time", "nullable": true },
-          "rooms": { "type": "array", "items": { "type": "string" }, "description": "Ids of every room this user can see now; every room for an admin" }
+          "rooms": { "type": "array", "items": { "type": "string" }, "description": "Ids of every room this user can see now; every room for an admin" },
+          "lastSeen": { "type": "string", "format": "date-time", "nullable": true, "description": "GET /api/admin/users only: last request with any of their sessions (written at most once a minute)" },
+          "activeNow": { "type": "boolean", "nullable": true, "description": "GET /api/admin/users only: a request in the last 5 minutes" },
+          "sessions": { "type": "integer", "nullable": true, "description": "GET /api/admin/users only: sessions not signed out or expired" }
+        }
+      },
+      "UserSession": {
+        "type": "object", "required": ["id", "device", "signedInAt", "lastSeen", "signedOutAt", "current"],
+        "description": "One sign-in on one device. No token or address is kept. Tokens from before sessions were kept show as device 'Earlier sign-in'",
+        "properties": {
+          "id": { "type": "string" },
+          "device": { "type": "string", "description": "e.g. 'Chrome on Android', 'Android app'" },
+          "signedInAt": { "type": "string", "format": "date-time" },
+          "lastSeen": { "type": "string", "format": "date-time" },
+          "signedOutAt": { "type": "string", "format": "date-time", "nullable": true, "description": "When it was signed out, or expired; null while live" },
+          "current": { "type": "boolean", "description": "The session the caller is using" }
         }
       },
       "Session": {
@@ -965,6 +980,15 @@
         } } } } },
         "responses": { "201": { "description": "user", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/User" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "403": { "description": "not an admin" }, "409": { "description": "username taken" } }
       }
+    },
+    "/api/admin/users/{id}/sessions": {
+      "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+      "get": { "summary": "A user's sessions, newest first: live ones and those ended in the last 30 days (admin only)", "responses": { "200": { "description": "sessions", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/UserSession" } } } } }, "404": { "$ref": "#/components/responses/NotFound" } } },
+      "delete": { "summary": "Sign the user out everywhere (admin only)", "responses": { "204": { "description": "signed out" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/api/admin/users/{id}/sessions/{session}": {
+      "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }, { "name": "session", "in": "path", "required": true, "schema": { "type": "string" } }],
+      "delete": { "summary": "Sign one device out (admin only); 404 if it is not a live session of that user", "responses": { "204": { "description": "signed out" }, "404": { "$ref": "#/components/responses/NotFound" } } }
     },
     "/api/admin/users/{id}": {
       "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],

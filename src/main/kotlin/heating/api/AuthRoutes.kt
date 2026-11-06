@@ -5,6 +5,9 @@ import heating.ApiException
 import heating.HeatingApp
 import heating.auth.Caller
 import heating.auth.User
+import heating.auth.deviceOf
+import io.ktor.http.auth.HttpAuthHeader
+import io.ktor.server.request.userAgent
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.auth.principal
@@ -29,6 +32,23 @@ data class UserView(
     val createdAt: String? = null,
     /** Ids of every room this user can see now: all of them for an admin. */
     val rooms: List<String> = emptyList(),
+    /** Admin's user list only: the last request made with any of their sessions. */
+    val lastSeen: String? = null,
+    /** Admin's user list only: a request in the last five minutes. */
+    val activeNow: Boolean? = null,
+    /** Admin's user list only: sessions not signed out or expired. */
+    val sessions: Int? = null,
+)
+
+/** One sign-in on one device, for the admin. [current] is the session the caller is using. openapi: UserSession */
+@Serializable
+data class UserSessionView(
+    val id: String,
+    val device: String,
+    val signedInAt: String,
+    val lastSeen: String,
+    val signedOutAt: String?,
+    val current: Boolean,
 )
 
 @Serializable
@@ -69,16 +89,19 @@ fun Route.publicAuthRoutes(heating: HeatingApp) = route("/api/auth") {
     get("/status") { call.respond(AuthStatus(heating.users.setupRequired())) }
     post("/setup") {
         val body = call.receive<SetupRequest>()
-        val (token, user) = heating.users.setup(body.serviceToken, body.username, body.password)
+        val (token, user) = heating.users.setup(body.serviceToken, body.username, body.password, deviceOf(call.request.userAgent()))
         call.respond(HttpStatusCode.Created, heating.session(call, token, user, body.web))
     }
     post("/login") {
         val body = call.receive<LoginRequest>()
-        val (token, user) = heating.users.login(call.address(), body.username, body.password)
+        val (token, user) = heating.users.login(call.address(), body.username, body.password, deviceOf(call.request.userAgent()))
         call.respond(heating.session(call, token, user, body.web))
     }
     post("/logout") {
+        // Push needs the session to say whose subscription it is, so it goes before the session ends.
         heating.forgetWebPushOnSignOut(call)
+        // Ends this device's session; the cookie or bearer token says which.
+        (WebSession.authHeader(call) as? HttpAuthHeader.Single)?.blob?.let(heating.users::signOut)
         call.response.cookies.append(WebSession.cleared())
         call.respond(HttpStatusCode.NoContent)
     }
@@ -107,7 +130,27 @@ fun Route.authRoutes(heating: HeatingApp) {
     route("/api/admin/users") {
         get {
             call.requireAdmin()
-            call.respond(heating.users.list().map { heating.userView(it) })
+            call.respond(heating.users.list().map { user ->
+                val presence = heating.users.presence(user.id)
+                heating.userView(user).copy(lastSeen = presence.lastSeen?.toString(), activeNow = presence.activeNow, sessions = presence.sessions)
+            })
+        }
+        get("/{id}/sessions") {
+            call.requireAdmin()
+            val current = call.caller().sessionId
+            call.respond(heating.users.sessionsOf(call.parameters["id"]!!).map {
+                UserSessionView(it.id, it.device, it.signedInAt, it.lastSeen, it.signedOutAt, it.id == current)
+            })
+        }
+        delete("/{id}/sessions/{session}") {
+            call.requireAdmin()
+            heating.users.signOutSession(call.parameters["id"]!!, call.parameters["session"]!!, call.caller())
+            call.respond(HttpStatusCode.NoContent)
+        }
+        delete("/{id}/sessions") {
+            call.requireAdmin()
+            heating.users.signOutEverywhere(call.parameters["id"]!!, call.caller())
+            call.respond(HttpStatusCode.NoContent)
         }
         post {
             call.requireAdmin()
