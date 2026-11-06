@@ -224,9 +224,9 @@ test('today shows how far under or over target the house is', async ({ page }) =
     target: { kwh: 12, usedKwh: 5, expectedKwh: 6, deltaKwh: -1, deltaCost: -27, onTarget: true, projectedKwh: 10, incomplete: false },
   })
   await page.goto('/energy')
-  await expect(page.getByTestId('target-delta')).toHaveText('1.0 kWh under target')
+  await expect(page.getByTestId('target-delta')).toHaveText('1.0 kWh under pace')
   await expect(page.getByTestId('target-delta')).toHaveAttribute('data-on-target', 'true')
-  await expect(page.getByTestId('target-progress')).toHaveText('5.0 of 12.0 kWh, on track for 10.0 kWh')
+  await expect(page.getByTestId('target-progress')).toHaveText('5.0 of 12.0 kWh, 7.0 kWh left today, on track for 10.0 kWh')
   await expect(page.getByTestId('target-expected')).toBeAttached()
 })
 
@@ -237,7 +237,7 @@ test('over target says so, with missing readings; no target offers to set one', 
     target: { kwh: 12, usedKwh: 7, expectedKwh: 6, deltaKwh: 1, deltaCost: 27, onTarget: false, projectedKwh: 14, incomplete: true },
   })
   await page.goto('/energy')
-  await expect(page.getByTestId('target-delta')).toHaveText('1.0 kWh over target')
+  await expect(page.getByTestId('target-delta')).toHaveText('1.0 kWh over pace')
   await expect(page.getByTestId('energy-target')).toContainText('Some readings are missing')
 })
 

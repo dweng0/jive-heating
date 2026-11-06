@@ -2619,9 +2619,10 @@ Engineering rules (apply to every scenario):
         Scenario: The Energy tab shows the delta for today
             Given dailyKwhTarget is 12.0, and at 12:00 the house has used 5.0 kWh
             When admin "jane" opens the Energy tab on the web app with Today chosen
-            Then a target card says "1.0 kWh under target" in green, with "5.0 of 12.0 kWh, on track for 10.0 kWh"
+            Then a target card says "1.0 kWh under pace" in green, with "5.0 of 12.0 kWh, 7.0 kWh left today, on track for 10.0 kWh"
             And a bar shows use so far against a mark for where use should be by now
-            And over target it says "1.0 kWh over target" in amber, and with readings missing it adds "Some readings are missing"
+            And over pace it says "1.0 kWh over pace" in amber (ahead of where use should be by now, not over the day's target), and with readings missing it adds "Some readings are missing"
+            And once the day's target is used up it says how far past it, such as "0.4 kWh past the target"
             And for week and month each day's bar has a target line, and days over target are marked
             And with no target set it offers "Set a daily target", which goes to /energy/manage
 

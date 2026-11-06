@@ -123,7 +123,7 @@ function TargetCard({ target, today }: { target: EnergyTarget; today: boolean })
           </div>
           <div className="min-w-0 flex-1">
             <div data-testid="target-delta" data-on-target={under} className={cn('text-lg font-bold tabular-nums', under ? 'text-green-600 dark:text-green-500' : 'text-amber-600 dark:text-amber-500')}>
-              {targetDelta(target.deltaKwh)}
+              {targetDelta(target.deltaKwh, today)}
             </div>
             <div data-testid="target-progress" className="text-sm text-muted-foreground">
               {today ? targetProgress(target) : `${target.usedKwh.toFixed(1)} of ${target.kwh.toFixed(1)} kWh`}

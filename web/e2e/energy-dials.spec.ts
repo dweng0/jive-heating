@@ -173,6 +173,8 @@ test('the fuel gauge drains towards the daily target', async ({ page }) => {
   await expect(gauge.getByTestId('fuel-used')).toContainText('£1.35')
   await expect(gauge.getByTestId('fuel-pace-line')).toHaveText('1.0 kWh under pace')
   await expect(gauge.getByTestId('fuel-low')).toHaveAttribute('data-on', 'false')
+  // The arc is the fuel left, from E to the needle.
+  await expect(gauge.getByTestId('fuel-level')).toHaveCount(1)
 })
 
 test('the fuel gauge warns when low and rests on E past the target', async ({ page }) => {

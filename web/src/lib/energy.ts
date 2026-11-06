@@ -329,12 +329,20 @@ export function formatPower(watts: number | null | undefined): string {
 
 export const NO_METER = 'Choose an electricity meter to see electricity use'
 
-/** "1.0 kWh under target" or "1.0 kWh over target". */
-export const targetDelta = (deltaKwh: number) => `${Math.abs(deltaKwh).toFixed(1)} kWh ${deltaKwh <= 0 ? 'under' : 'over'} target`
+/**
+ * Today, against where use should be by now: "1.0 kWh under pace" or "1.0 kWh over pace" (over pace is not over the
+ * day's target). A whole day, week or month: "1.0 kWh under target" or "1.0 kWh over target".
+ */
+export const targetDelta = (deltaKwh: number, today = false) =>
+  `${Math.abs(deltaKwh).toFixed(1)} kWh ${deltaKwh <= 0 ? 'under' : 'over'} ${today ? 'pace' : 'target'}`
 
-/** "5.0 of 12.0 kWh, on track for 10.0 kWh". */
+/** What is left of today's target: "7.0 kWh left today", or "1.0 kWh past the target" once it is used up. */
+export const targetLeft = (t: Pick<EnergyTarget, 'usedKwh' | 'kwh'>) =>
+  t.usedKwh <= t.kwh ? `${(t.kwh - t.usedKwh).toFixed(1)} kWh left today` : `${(t.usedKwh - t.kwh).toFixed(1)} kWh past the target`
+
+/** "5.0 of 12.0 kWh, 7.0 kWh left today, on track for 10.0 kWh". */
 export const targetProgress = (t: Pick<EnergyTarget, 'usedKwh' | 'kwh' | 'projectedKwh'>) =>
-  `${t.usedKwh.toFixed(1)} of ${t.kwh.toFixed(1)} kWh${t.projectedKwh == null ? '' : `, on track for ${t.projectedKwh.toFixed(1)} kWh`}`
+  `${t.usedKwh.toFixed(1)} of ${t.kwh.toFixed(1)} kWh, ${targetLeft(t)}${t.projectedKwh == null ? '' : `, on track for ${t.projectedKwh.toFixed(1)} kWh`}`
 
 export const SET_TARGET = 'Set a daily target'
 export const READINGS_MISSING = 'Some readings are missing'

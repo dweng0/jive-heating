@@ -257,11 +257,23 @@ function FuelGauge({ today, admin }: { today: EnergyDashboard | null; admin: boo
     <div data-testid="fuel-gauge" data-left={f ? f.left.toFixed(3) : ''} data-pace={f ? f.pace.toFixed(3) : ''} data-low={f?.low ? 'true' : 'false'} className="flex flex-col items-center gap-1">
       <svg viewBox="0 0 200 130" className="w-full max-w-48" aria-hidden>
         <path d={arc(180, 360, 66, 100, 96)} fill="none" stroke="var(--secondary)" strokeWidth="10" strokeLinecap="round" />
-        {f && <path d={arc(180, 180 + 36, 66, 100, 96)} fill="none" stroke="var(--power-high)" strokeWidth="10" strokeLinecap="round" opacity="0.7" />}
+        {/* The fuel left: from E to the needle, green when plenty, amber under half, red when low. */}
+        {f && shown > 0.005 && (
+          <path
+            data-testid="fuel-level"
+            d={arc(180, angle(shown), 66, 100, 96)}
+            fill="none"
+            stroke={f.low ? 'var(--power-high)' : f.left < 0.5 ? 'var(--power-mid)' : 'var(--power-low)'}
+            strokeWidth="10"
+            strokeLinecap="round"
+            className="transition-[stroke] duration-700"
+          />
+        )}
+        {/* Where the needle should be by now: a small notch outside the arc. */}
         {f && (() => {
-          const a = point(angle(f.pace), 56, 100, 96)
-          const b = point(angle(f.pace), 78, 100, 96)
-          return <line data-testid="fuel-pace" x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="var(--foreground)" strokeWidth="3" strokeLinecap="round" />
+          const a = point(angle(f.pace), 74, 100, 96)
+          const b = point(angle(f.pace), 84, 100, 96)
+          return <line data-testid="fuel-pace" x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="var(--muted-foreground)" strokeWidth="2.5" strokeLinecap="round" />
         })()}
         <text x="22" y="122" textAnchor="middle" className="fill-muted-foreground text-[14px] font-semibold">E</text>
         <text x="178" y="122" textAnchor="middle" className="fill-muted-foreground text-[14px] font-semibold">F</text>
