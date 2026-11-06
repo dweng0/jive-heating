@@ -245,7 +245,7 @@ test('over target says so, with missing readings; no target offers to set one', 
 test('with no target the Energy tab offers to set one, and week bars mark days over target', async ({ page }) => {
   await serve(page, { meters: [meter('Main Clamp', { inUse: true })] })
   await page.goto('/energy')
-  await page.getByRole('link', { name: 'Set a daily target' }).click()
+  await page.getByTestId('energy').getByRole('link', { name: 'Set a daily target' }).click()
   await expect(page).toHaveURL(/\/energy\/manage$/)
 
   const day = (date: string, kwh: number, delta: number) => ({
@@ -257,7 +257,7 @@ test('with no target the Energy tab offers to set one, and week bars mark days o
     days: [day('2026-11-09', 10, -2), day('2026-11-10', 14, 2)],
   })
   await page.goto('/energy')
-  await page.getByRole('button', { name: 'Week' }).click()
+  await page.getByRole('group', { name: 'Energy period' }).getByRole('button', { name: 'Week' }).click()
   await expect(page.getByTestId('day-target')).toHaveCount(2)
   await expect(page.locator('[data-testid="energy-day"][data-over-target="true"]')).toHaveCount(1)
 })

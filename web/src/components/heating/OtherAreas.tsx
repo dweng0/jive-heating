@@ -12,16 +12,19 @@ const byName = (areas: EnergyArea[]) => [...areas].sort((a, b) => a.name.localeC
 
 /**
  * "Other areas" on the Energy tab, below the room cards and above "Everything else": a live card per energy area,
- * each opening its dashboard, and "Add area". With no areas there is only "Add area". Admins only.
+ * each opening its dashboard, and "Add area". With no areas there is only "Add area". For people with energy access who
+ * are not admins: the cards only, from the live areas, opening nothing.
  */
-export function OtherAreas({ live, connected, today, house, currency }: { live: AreaPower[]; connected: boolean; today: EnergyDashboard | null; house: number | null; currency: string }) {
+export function OtherAreas(props: { live: AreaPower[]; connected: boolean; today: EnergyDashboard | null; house: number | null; currency: string; admin?: boolean }) {
+  const { live, connected, today, house, currency, admin = true } = props
   const { run } = useHome()
-  const [areas, setAreas] = useState<EnergyArea[]>([])
+  const [loadedAreas, setAreas] = useState<EnergyArea[]>([])
   const [adding, setAdding] = useState(false)
+  const areas = admin ? loadedAreas : byName(live.map((a) => ({ id: a.area, name: a.name }) as EnergyArea))
 
   useEffect(() => {
-    energyApi.areas().then((a) => setAreas(byName(a)), () => undefined)
-  }, [])
+    if (admin) energyApi.areas().then((a) => setAreas(byName(a)), () => undefined)
+  }, [admin])
 
   async function add(name: string) {
     const area = await run(() => energyApi.addArea(name), "Couldn't add the area")
@@ -29,7 +32,7 @@ export function OtherAreas({ live, connected, today, house, currency }: { live: 
     return !!area
   }
 
-  const addButton = (
+  const addButton = admin && (
     <Button variant="outline" onClick={() => setAdding(true)}>
       <Plus />
       Add area
@@ -39,7 +42,7 @@ export function OtherAreas({ live, connected, today, house, currency }: { live: 
   return (
     <section data-testid="energy-areas" className="flex flex-col gap-3">
       {areas.length === 0 ? (
-        <div>{addButton}</div>
+        admin && <div>{addButton}</div>
       ) : (
         <>
           <div className="flex flex-wrap items-end justify-between gap-3">
@@ -49,14 +52,14 @@ export function OtherAreas({ live, connected, today, house, currency }: { live: 
             </div>
             {addButton}
           </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
             {areas.map((a) => {
               const now = live.find((p) => p.area === a.id)
               const day = today?.areas?.find((d) => d.area === a.id)
               return (
                 <UseCard
                   key={a.id}
-                  to={`/energy/areas/${encodeURIComponent(a.id)}`}
+                  to={admin ? `/energy/areas/${encodeURIComponent(a.id)}` : undefined}
                   testId={`live-area-${a.id}`}
                   name={a.name}
                   watts={now?.watts ?? null}

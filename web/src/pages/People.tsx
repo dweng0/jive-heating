@@ -94,6 +94,7 @@ export function PeoplePage() {
                       </div>
                       <div className="text-xs text-muted-foreground">
                         {roomsSummary(u)}
+                        {!u.admin && u.energy && ' · Energy'}
                         {u.createdAt && ` · added ${new Date(u.createdAt).toLocaleDateString()}`}
                       </div>
                     </div>
@@ -204,15 +205,32 @@ function RoomsDialog({ user, onClose, onSaved }: { user: User | null; onClose: (
     if (saved) onSaved(saved)
   }
 
+  async function setEnergy(energy: boolean) {
+    if (!user?.id) return
+    setSaving(true)
+    const saved = await run(() => api.setUserEnergy(user.id!, energy), "Couldn't change their energy access")
+    setSaving(false)
+    if (saved) onSaved(saved)
+  }
+
   return (
     <Dialog open={user != null} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle>{user?.username}'s rooms</DialogTitle>
+          <DialogTitle>{user?.username}'s access</DialogTitle>
           <DialogDescription>
             {user?.admin ? 'Sees every room. Admins see and control the whole house.' : 'They see and control only the ticked rooms. Changes save straight away.'}
           </DialogDescription>
         </DialogHeader>
+        {user && !user.admin && (
+          <label htmlFor="energy-access" className="flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2.5">
+            <span className="flex-1">
+              <span className="block font-medium">Energy</span>
+              <span className="block text-xs text-muted-foreground">See the Energy tab: use, cost and the dials. They can't change meters or prices.</span>
+            </span>
+            <Switch id="energy-access" checked={user.energy === true} disabled={saving} onCheckedChange={(c) => void setEnergy(c === true)} />
+          </label>
+        )}
         {user && !user.admin && (
           <div className="flex flex-col gap-1">
             {rooms.length === 0 && <p className="py-2 text-sm text-muted-foreground">There are no rooms yet.</p>}

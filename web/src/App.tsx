@@ -49,7 +49,7 @@ export default function App() {
             <Routes>
               <Route path="/" element={<RoomsPage />} />
               <Route path="/dashboard" element={auth.me.admin ? <DashboardPage /> : <Navigate to="/" replace />} />
-              <Route path="/energy" element={auth.me.admin ? <EnergyPage /> : <Navigate to="/" replace />} />
+              <Route path="/energy" element={auth.me.admin || auth.me.energy ? <EnergyPage /> : <Navigate to="/" replace />} />
               <Route path="/energy/manage" element={auth.me.admin ? <EnergyManagePage /> : <Navigate to="/" replace />} />
               <Route path="/energy/rooms/:id" element={auth.me.admin ? <RoomEnergyPage /> : <Navigate to="/" replace />} />
               <Route path="/energy/areas/:id" element={auth.me.admin ? <AreaEnergyPage /> : <Navigate to="/" replace />} />

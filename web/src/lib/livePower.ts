@@ -1,7 +1,8 @@
 // The live power dial: the house meter's watts streamed on /ws/power, and its colour bands and last 30
-// minutes from GET /api/power. Mirrors the LivePower and PowerSummary schemas in openapi.json. Admin only.
+// minutes from GET /api/power. Mirrors the LivePower and PowerSummary schemas in openapi.json. Admins and energy access.
 
 import { request } from './api'
+import type { TodayPeak } from './energyDials'
 
 export interface RoomPower {
   room: string
@@ -50,6 +51,8 @@ export interface PowerSummary {
   /** Null with under a day of readings: one neutral colour */
   bands: PowerBands | null
   recent: PowerPoint[]
+  /** Highest five-minute house power since midnight; null before today's first sample (older services leave it out) */
+  todayPeak?: TodayPeak | null
 }
 
 export const powerApi = {

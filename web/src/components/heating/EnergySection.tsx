@@ -6,6 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { NO_METER, READINGS_MISSING, SET_TARGET, targetDelta, targetProgress, type EnergyTarget, energyApi, energyPlace, formatCost, formatKwh, plugNowWarning, type DeviceEnergy, type EnergyDashboard, type RoomEnergy, type EverythingElse, type EnergyDay, type EnergyPeriod } from '@/lib/energy'
 import { IncompleteWarning } from './IncompleteWarning'
 import { cn } from '@/lib/utils'
+import { useHome } from '@/lib/home'
 
 const PERIODS: { value: EnergyPeriod; label: string }[] = [
   { value: 'today', label: 'Today' },
@@ -15,6 +16,7 @@ const PERIODS: { value: EnergyPeriod; label: string }[] = [
 
 /** Gas, electricity, standing charges and total for today, the last week or month, with a bar per day. */
 export function EnergySection() {
+  const { me } = useHome()
   const [period, choosePeriod] = useState<EnergyPeriod>(energyPlace.period)
   const setPeriod = (p: EnergyPeriod) => {
     energyPlace.period = p
@@ -86,7 +88,7 @@ export function EnergySection() {
           {shown.target ? (
             <TargetCard target={shown.target} today={period === 'today'} />
           ) : (
-            shown.electricityMeter != null && (
+            shown.electricityMeter != null && me.admin && (
               <Link to="/energy/manage" className="text-sm font-medium text-primary underline-offset-4 hover:underline">
                 {SET_TARGET}
               </Link>

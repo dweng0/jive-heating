@@ -1,6 +1,6 @@
 # BDD Status
 
-Checked 396 scenario(s) across 111 test file(s).
+Checked 407 scenario(s) across 115 test file(s).
 
 
 ## Feature: Service foundation
@@ -416,11 +416,10 @@ Checked 396 scenario(s) across 111 test file(s).
 ## Feature: Live power
 
 - [x] The house power streams live
-- [x] The live power channel is admin only
+- [x] The live power channel needs energy access
 - [x] A stale house reading is not shown as live
 - [x] The dial moves smoothly
 - [x] The dial colours follow the household's own use
-- [x] The dial shows today's use
 - [x] Room cards show live and daily use
 - [x] Everything else is the unattributed remainder
 - [x] Energy has its own tab
@@ -525,5 +524,26 @@ Checked 396 scenario(s) across 111 test file(s).
 - [x] Signing in and out is in the activity feed
 - [x] The People page shows who is signed in
 
+## Feature: Energy access
+
+- [x] An admin gives a member energy access
+- [x] Energy access lets a member read the Energy tab and nothing more
+- [x] The Energy tab shows for people with energy access
+
+## Feature: Energy dials
+
+- [x] The house dial shows the whole house now
+- [x] The second dial follows the busiest room or area
+- [x] The second dial does not flicker between close rooms
+- [x] The fuel gauge drains towards the daily target
+- [x] Today's peak is the highest five-minute power since midnight
+- [x] Today's peak says what was using the power
+
+## Feature: Energy history chart
+
+- [x] The house's use over a day, week, month or year
+- [x] The chart can be dragged back in time
+- [x] The chart says what each point used and cost
+
 ---
-**396/396 scenarios covered.**
+**407/407 scenarios covered.**

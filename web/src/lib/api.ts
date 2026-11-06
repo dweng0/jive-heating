@@ -124,6 +124,8 @@ export interface User {
   activeNow?: boolean | null
   /** Admin's list only: sessions not signed out or expired */
   sessions?: number | null
+  /** May read the Energy tab: always for an admin (older services leave it out) */
+  energy?: boolean
 }
 
 /** One sign-in on one device, for the admin. */
@@ -307,6 +309,7 @@ export const api = {
   signOutEverywhere: (id: string) => request<void>('DELETE', `/api/admin/users/${enc(id)}/sessions`),
   /** Replace the rooms a member can see (the full list). Admins see every room and answer 409. */
   setUserRooms: (id: string, rooms: string[]) => request<User>('PUT', `/api/admin/users/${enc(id)}/rooms`, { rooms }),
+  setUserEnergy: (id: string, energy: boolean) => request<User>('PUT', `/api/admin/users/${enc(id)}/energy`, { energy }),
 
   // Whole house
   houseMode: (mode: Mode, target?: number) => request<Room[]>('POST', '/api/house', { mode, target }),

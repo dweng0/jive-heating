@@ -134,19 +134,6 @@ test('with under a day of readings the dial is one neutral colour', async ({ pag
   await expect(dial.getByTestId('power-bands')).toHaveCount(0)
 })
 
-// BDD: The dial shows today's use
-test("under the dial are today's kWh, cost and the last 30 minutes", async ({ page }) => {
-  const { push } = await serve(page)
-  await page.goto('/energy')
-  const section = page.getByTestId('live-power')
-  await expect(section.getByTestId('live-today')).toContainText('8.0 kWh')
-  await expect(section.getByTestId('live-today')).toContainText('£2.16')
-  // Five readings from the service, then the one on connect.
-  await expect(section.getByTestId('power-sparkline')).toHaveAttribute('data-points', '6')
-  push(live(900))
-  await expect(section.getByTestId('power-sparkline')).toHaveAttribute('data-points', '7')
-})
-
 // BDD: Room cards show live and daily use
 test('room cards show live watts, today and their share of the house', async ({ page }) => {
   const { push } = await serve(page, { first: live(2000, { lounge: 500, fridge: 100, elseWatts: 1400 }) })

@@ -3,7 +3,7 @@ import { expect, test, type Page, type WebSocketRoute } from '@playwright/test'
 // Room access, against a mocked service: every /api call and /ws is answered here, so these
 // tests do not depend on the real service or on the order of heating.spec.ts.
 
-interface MockUser { id: string; username: string; admin: boolean; rooms: string[] }
+interface MockUser { id: string; username: string; admin: boolean; rooms: string[]; energy?: boolean }
 
 const zone = (id: string) => ({
   id,
@@ -68,6 +68,7 @@ async function serve(page: Page, me: MockUser, others: MockUser[] = []) {
   const users = [me, ...others]
   const forbidden: string[] = []
   const roomPuts: { id: string; rooms: string[] }[] = []
+  const energyPuts: { id: string; energy: boolean }[] = []
   const sockets: WebSocketRoute[] = []
   await page.routeWebSocket('**/ws', (ws) => {
     sockets.push(ws)
@@ -97,10 +98,18 @@ async function serve(page: Page, me: MockUser, others: MockUser[] = []) {
       roomPuts.push({ id: user.id, rooms: user.rooms })
       return route.fulfill({ json: user })
     }
+    const energy = pathname.match(/^\/api\/admin\/users\/([^/]+)\/energy$/)
+    if (energy && method === 'PUT') {
+      const user = users.find((u) => u.id === decodeURIComponent(energy[1]))!
+      user.energy = (request.postDataJSON() as { energy: boolean }).energy
+      energyPuts.push({ id: user.id, energy: user.energy })
+      return route.fulfill({ json: user })
+    }
+    if (/^\/api\/admin\/users\/[^/]+\/sessions$/.test(pathname)) return route.fulfill({ json: [] })
     return route.fulfill({ status: 404, json: { error: `not mocked: ${method} ${pathname}` } })
   })
   const live = (event: object) => sockets.forEach((ws) => ws.send(JSON.stringify(event)))
-  return { forbidden, roomPuts, live }
+  return { forbidden, roomPuts, energyPuts, live }
 }
 
 const jane: MockUser = { id: 'u-jane', username: 'jane', admin: true, rooms: ALL }
@@ -204,4 +213,29 @@ test('a member with no rooms is told to ask an admin', async ({ page }) => {
   await expect(page.getByText('No rooms yet. Ask an admin to give you access.')).toBeVisible()
   await expect(page.getByRole('button', { name: /Add (your first )?room/ })).toHaveCount(0)
   expect(forbidden).toEqual([])
+})
+
+// BDD: The Energy tab shows for people with energy access
+test('an admin turns energy on or off for a member on the people screen', async ({ page }) => {
+  const sam: MockUser = { id: 'u-sam', username: 'sam', admin: false, rooms: ['bedroom'], energy: false }
+  const { energyPuts } = await serve(page, { ...jane, energy: true }, [sam])
+  await page.goto('/people')
+  await page.getByRole('button', { name: 'Rooms for jane' }).click()
+  const dialog = page.getByRole('dialog')
+  // Admins always have it: no switch.
+  await expect(dialog.getByRole('switch')).toHaveCount(0)
+  await page.keyboard.press('Escape')
+
+  await page.getByRole('button', { name: 'Rooms for sam' }).click()
+  const energy = dialog.getByRole('switch', { name: /Energy/ })
+  await expect(energy).not.toBeChecked()
+  await energy.click()
+  await expect(energy).toBeChecked()
+  expect(energyPuts).toEqual([{ id: 'u-sam', energy: true }])
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('person-u-sam')).toContainText('Energy')
+  await page.getByRole('button', { name: 'Rooms for sam' }).click()
+  await energy.click()
+  await expect(energy).not.toBeChecked()
+  expect(energyPuts.at(-1)).toEqual({ id: 'u-sam', energy: false })
 })

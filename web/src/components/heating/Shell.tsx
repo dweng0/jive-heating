@@ -25,7 +25,7 @@ export function Shell({ children, onSignOut }: { children: ReactNode; onSignOut:
   return (
     <div className="min-h-svh">
       <header className="sticky top-0 z-30 border-b border-border/60 bg-background/80 backdrop-blur-xl">
-        <div className="mx-auto flex h-16 max-w-6xl items-center gap-4 px-4 sm:px-6">
+        <div className="mx-auto flex h-16 max-w-6xl xl:max-w-7xl 2xl:max-w-[100rem] items-center gap-4 px-4 sm:px-6">
           <NavLink to="/" className="flex items-center gap-2.5 font-bold tracking-tight">
             <span className="flex size-9 items-center justify-center rounded-xl bg-heat text-primary-foreground shadow-md shadow-heat/30">
               <Flame className="size-5" />
@@ -36,7 +36,7 @@ export function Shell({ children, onSignOut }: { children: ReactNode; onSignOut:
           <nav className="ml-4 hidden items-center gap-1 sm:flex">
             <TopLink to="/">Rooms</TopLink>
             {me.admin && <TopLink to="/dashboard">Dashboard</TopLink>}
-            {me.admin && <TopLink to="/energy">Energy</TopLink>}
+            {(me.admin || me.energy) && <TopLink to="/energy">Energy</TopLink>}
             {me.admin && <TopLink to="/people">People</TopLink>}
           </nav>
 
@@ -107,7 +107,7 @@ export function Shell({ children, onSignOut }: { children: ReactNode; onSignOut:
 
       {holiday && (
         <div className="border-b border-heat/20 bg-heat-container text-heat-text">
-          <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-2.5 text-sm sm:px-6">
+          <div className="mx-auto flex max-w-6xl xl:max-w-7xl 2xl:max-w-[100rem] items-center gap-3 px-4 py-2.5 text-sm sm:px-6">
             <Palmtree className="size-4 shrink-0" />
             <span className="font-medium">
               {holiday.active ? 'Holiday' : 'Holiday from ' + dateTime(holiday.from)}: every room at {formatTemp(holiday.target)} until{' '}
@@ -120,7 +120,7 @@ export function Shell({ children, onSignOut }: { children: ReactNode; onSignOut:
         </div>
       )}
 
-      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">{children}</main>
+      <main className="mx-auto max-w-6xl xl:max-w-7xl 2xl:max-w-[100rem] px-4 py-8 sm:px-6">{children}</main>
       {me.admin && <HolidayDialog open={holidayOpen} onOpenChange={setHolidayOpen} />}
     </div>
   )
