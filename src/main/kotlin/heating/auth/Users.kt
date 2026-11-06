@@ -10,6 +10,7 @@ import java.util.Base64
 /**
  * Someone who can sign in. [sessionVersion] is bumped to end all of their sessions at once.
  * [rooms] are the room ids a member can see; null for users from before room access, who see every room.
+ * [energy] lets a member read the Energy tab; admins always can.
  */
 @Serializable
 data class User(
@@ -20,6 +21,7 @@ data class User(
     val createdAt: String,
     val sessionVersion: Int = 0,
     val rooms: List<String>? = null,
+    val energy: Boolean = false,
 )
 
 /** Persists all users as one JSON document, plus the secret session tokens are signed with. */

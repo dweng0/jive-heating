@@ -197,6 +197,20 @@ class EnergyHistory(path: String) {
             }
         }
 
+    /** Every monitored device's sample taken at exactly [at]: they are taken together with the house's. */
+    @Synchronized
+    fun deviceSamplesAt(at: Instant): List<MeterSample> =
+        connection.prepareStatement("SELECT meter, counter, kwh, room, watts, area FROM device_samples WHERE at = ?").use { s ->
+            s.setLong(1, at.toEpochMilli())
+            s.executeQuery().use { rs ->
+                buildList {
+                    while (rs.next()) {
+                        add(MeterSample(at, rs.getString(1), rs.getNullableDouble(2), rs.getNullableDouble(3), rs.getString(4), rs.getNullableDouble(5), rs.getString(6)))
+                    }
+                }
+            }
+        }
+
     /** Samples of every monitored device recorded in [room] with [from] < at <= [to], oldest first. */
     @Synchronized
     fun roomSamples(room: String, from: Instant, to: Instant): List<MeterSample> =

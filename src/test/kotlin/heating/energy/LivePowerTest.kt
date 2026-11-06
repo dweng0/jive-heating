@@ -91,9 +91,9 @@ class LivePowerTest {
         return (e.cause as WebSocketHandshakeException).response.statusCode()
     }
 
-    // BDD: The live power channel is admin only
+    // BDD: The live power channel needs energy access
     @Test
-    fun `the live power channel is admin only`() {
+    fun `the live power channel needs energy access`() {
         val t = TestHeating()
         t.discover(meters = listOf("Main Clamp"))
         var sam = ""
@@ -208,7 +208,6 @@ class LivePowerTest {
         assertEquals(JsonNull, power(t)["bands"])
     }
 
-    // BDD: The dial shows today's use
     @Test
     fun `the dial shows the last 30 minutes of watts`() {
         val t = TestHeating()

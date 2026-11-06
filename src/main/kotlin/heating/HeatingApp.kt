@@ -116,6 +116,7 @@ class HeatingApp(
     val energyDashboards = heating.energy.EnergyDashboards(history, energyHistory, energySettings, monitoredMeters, meters, rooms::list, ::now, energyAreas::list)
     val roomPlugs = heating.energy.RoomPlugsReport(energyHistory, energySettings, monitoredMeters, meters, ::now)
     val roomEnergyHistory = heating.energy.RoomEnergyHistoryReport(energyHistory, config.timezone, clock)
+    val houseHistory = heating.energy.HouseHistoryReport(energyHistory, energySettings, config.timezone, clock)
     val energyUsage = heating.energy.EnergyUsageReport(energyHistory, energySettings, monitoredMeters, config.timezone, clock, energyAreas::list)
     val alerts = HeatingAlerts(
         users, notificationSettings, push, actions, pushExecutor, clock::instant,

@@ -38,6 +38,8 @@ data class UserView(
     val activeNow: Boolean? = null,
     /** Admin's user list only: sessions not signed out or expired. */
     val sessions: Int? = null,
+    /** May read the Energy tab: always for an admin. */
+    val energy: Boolean = admin,
 )
 
 /** One sign-in on one device, for the admin. [current] is the session the caller is using. openapi: UserSession */
@@ -73,6 +75,9 @@ data class CreateUserRequest(val username: String, val password: String, val adm
 data class SetRoomsRequest(val rooms: List<String>)
 
 @Serializable
+data class SetEnergyRequest(val energy: Boolean)
+
+@Serializable
 data class PatchUserRequest(val password: String? = null, val admin: Boolean? = null)
 
 /** The rooms someone sees: every room when [rooms] is null (an admin, or a user from before room access). */
@@ -80,9 +85,10 @@ private fun HeatingApp.visibleRooms(rooms: Collection<String>?): List<String> =
     this.rooms.list().map { it.id }.filter { rooms == null || it in rooms }
 
 fun HeatingApp.userView(user: User) =
-    UserView(user.id, user.username, user.admin, user.createdAt, visibleRooms(if (user.admin) null else user.rooms))
+    UserView(user.id, user.username, user.admin, user.createdAt, visibleRooms(if (user.admin) null else user.rooms), energy = user.admin || user.energy)
 
-private fun HeatingApp.callerView(caller: Caller) = UserView(caller.userId, caller.username, caller.admin, rooms = visibleRooms(caller.rooms))
+private fun HeatingApp.callerView(caller: Caller) =
+    UserView(caller.userId, caller.username, caller.admin, rooms = visibleRooms(caller.rooms), energy = caller.energy)
 
 /** Routes anyone may call: whether setup is needed, first-admin setup, and sign-in. */
 fun Route.publicAuthRoutes(heating: HeatingApp) = route("/api/auth") {
@@ -169,6 +175,13 @@ fun Route.authRoutes(heating: HeatingApp) {
             val body = call.receive<SetRoomsRequest>()
             val known = heating.rooms.list().associate { it.id to it.name }
             val user = call.acting { heating.users.setRooms(call.parameters["id"]!!, body.rooms, known) }
+            heating.changes.emit(Change.AccessChanged(user.id))
+            call.respond(heating.userView(user))
+        }
+        put("/{id}/energy") {
+            call.requireAdmin()
+            val body = call.receive<SetEnergyRequest>()
+            val user = call.acting { heating.users.setEnergy(call.parameters["id"]!!, body.energy) }
             heating.changes.emit(Change.AccessChanged(user.id))
             call.respond(heating.userView(user))
         }

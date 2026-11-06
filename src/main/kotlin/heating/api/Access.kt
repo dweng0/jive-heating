@@ -21,6 +21,8 @@ import io.ktor.server.routing.RoutingResolveContext
  *   A room the caller cannot see answers 404, exactly as a room that does not exist;
  * - [adminOnly]: the whole house and fitting out rooms. Members get 403. Inside [roomScoped] the
  *   404 comes first, so a member learns nothing about rooms they cannot see.
+ * - [energyReaders]: reading the Energy tab (dials, history chart, totals). Admins, and members an admin
+ *   gave energy access; other members get 403.
  * Admins and the service token pass every check.
  */
 
@@ -29,6 +31,9 @@ fun Route.roomScoped(build: Route.() -> Unit): Route = guarded(RoomScope, build)
 
 /** Routes only admins may use: everyone else gets 403. */
 fun Route.adminOnly(build: Route.() -> Unit): Route = guarded(AdminOnly, build)
+
+/** Routes for reading the Energy tab: admins and members with energy access; everyone else gets 403. */
+fun Route.energyReaders(build: Route.() -> Unit): Route = guarded(EnergyReaders, build)
 
 /** For a route that is admin-only only for some requests, such as renaming through PATCH. */
 fun ApplicationCall.requireAdmin() {
@@ -48,6 +53,13 @@ private val AdminOnly: RouteScopedPlugin<Unit> = createRouteScopedPlugin("AdminO
         // No caller: authentication itself answers 401.
         val caller = call.principal<Caller>() ?: return@on
         if (!caller.admin) throw ApiException(HttpStatusCode.Forbidden, "admins only")
+    }
+}
+
+private val EnergyReaders: RouteScopedPlugin<Unit> = createRouteScopedPlugin("EnergyReaders") {
+    on(AuthenticationChecked) { call ->
+        val caller = call.principal<Caller>() ?: return@on
+        if (!caller.energy) throw ApiException(HttpStatusCode.Forbidden, "energy access only")
     }
 }
 

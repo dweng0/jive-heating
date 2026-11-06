@@ -21,6 +21,8 @@ data class Caller(
     val rooms: Set<String>? = null,
     /** The session (sign-in) the caller's token belongs to; null for the service token. */
     val sessionId: String? = null,
+    /** May read the Energy tab: every admin, and members an admin gave energy access. */
+    val energy: Boolean = admin,
 ) {
     fun canSee(roomId: String) = rooms == null || roomId in rooms
 }
@@ -116,7 +118,7 @@ class UserService(
         val user = synchronized(this) { users.find { it.id == session.userId } } ?: return null
         if (user.sessionVersion != session.version) return null
         val id = seen(session) ?: return null
-        return Caller(user.id, user.username, user.admin, if (user.admin) null else user.rooms?.toSet(), id)
+        return Caller(user.id, user.username, user.admin, if (user.admin) null else user.rooms?.toSet(), id, user.admin || user.energy)
     }
 
     /**
@@ -254,6 +256,16 @@ class UserService(
         val updated = user.copy(rooms = rooms.distinct())
         save(users.map { if (it.id == id) updated else it })
         actionLog.info("user {} rooms set to {}{}", user.username, roomNames(updated.rooms!!, known), Actor.by())
+        updated
+    }
+
+    /** Gives member [id] energy access (read the Energy tab), or takes it away. Admins always have it. */
+    fun setEnergy(id: String, energy: Boolean): User = synchronized(this) {
+        val user = users.find { it.id == id } ?: throw ApiException.notFound("no such user")
+        if (user.admin) throw ApiException.conflict("admins always have energy access")
+        val updated = user.copy(energy = energy)
+        save(users.map { if (it.id == id) updated else it })
+        actionLog.info("user {} energy access {}{}", user.username, if (energy) "given" else "taken away", Actor.by())
         updated
     }
 

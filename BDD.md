@@ -1689,7 +1689,7 @@ Engineering rules (apply to every scenario):
             Then electricityKwh and electricityCost are null and totalCost counts gas only
 
         Scenario: Only admins see the energy dashboard
-            Given member "sam" is signed in
+            Given member "sam" is signed in without energy access
             When "sam" sends GET /api/dashboard
             Then the response status is 403
 
@@ -2049,7 +2049,7 @@ Engineering rules (apply to every scenario):
         I want to see how much electricity the house is using right now
         So that I can tell at a glance what is switched on
 
-        Live power is admin only and has its own WebSocket channel, /ws/power, apart from the
+        Live power is for admins and people with energy access, and has its own WebSocket channel, /ws/power, apart from the
         change events on /ws: clamp readings arrive every few seconds and only the open Energy tab needs them.
         The dial, the room cards and the "Everything else" card are on the web app and the Android app.
         Gas has no whole-house reading, so it is not shown.
@@ -2060,8 +2060,8 @@ Engineering rules (apply to every scenario):
             Then the first message is the house watts, 1200, and when it was read
             And every later house meter reading is sent as a new message
 
-        Scenario: The live power channel is admin only
-            When a member, or a caller who is not signed in, connects to /ws/power
+        Scenario: The live power channel needs energy access
+            When a member without energy access, or a caller who is not signed in, connects to /ws/power
             Then the connection is refused
 
         Scenario: A stale house reading is not shown as live
@@ -2082,10 +2082,6 @@ Engineering rules (apply to every scenario):
             And amber is between
             And with under 24 hours of readings the dial is one neutral colour
 
-        Scenario: The dial shows today's use
-            When admin "jane" views the live dial
-            Then under it are today's kWh, today's cost (in the household's currency) and a sparkline of the last 30 minutes of watts
-
         Scenario: Room cards show live and daily use
             Given "Lounge" has 2 monitored plugs
             When admin "jane" views the live dial
@@ -2102,9 +2098,9 @@ Engineering rules (apply to every scenario):
         Scenario: Energy has its own tab
             When admin "jane" opens the web app or the Android app
             Then there is an Energy tab beside the Dashboard
-            And it shows the live dial first, then the energy totals for today, week or month
+            And it shows the dials first, then the history chart, the room and area cards and the energy totals for today, week or month
             And the Dashboard shows only heating
-            And members have no Energy tab
+            And members without energy access have no Energy tab
 
         Scenario: The dial's scale fits the household's biggest appliances
             Given the oven, shower or tumble dryer can take the house to 6 or 7 kW
@@ -2683,6 +2679,118 @@ Engineering rules (apply to every scenario):
             Then each person shows "Active now", "Last seen 3 hours ago" or "Not signed in"
             And opening a person lists their sessions with device, signed in, last seen and a "Sign out" button
             And the session "jane" is using says "This device" and has no "Sign out" button
+
+    Feature: Energy access
+        As the household admin
+        I want to let chosen people see the Energy tab
+        So that everyone in the house can watch what we use without being able to change how it is measured
+
+        Admins always have energy access. A member has it only once an admin gives it, and starts without. Energy access
+        is read only: the dials, the history chart and the totals with their costs. Choosing meters, prices, the daily
+        target, areas and plugs stays admin only, and so do the room, area and "Everything else" energy pages. A member
+        with energy access sees every room's and area's use on the Energy tab, even rooms they cannot otherwise see.
+
+        Scenario: An admin gives a member energy access
+            Given member "sam" is signed in
+            When admin "jane" sends PUT /api/admin/users/{sam's id}/energy with energy true
+            Then GET /api/admin/users shows "sam" with energy true, kept after a restart, and every admin with energy true
+            And GET /api/auth/me for "sam" has energy true, and sending energy false takes it away again
+            And setting energy on an admin returns 409, because admins always have it, and a member sending it gets 403
+
+        Scenario: Energy access lets a member read the Energy tab and nothing more
+            Given member "sam" has energy access
+            Then "sam" gets 200 from GET /api/dashboard, GET /api/power and GET /api/energy/history, and can open /ws/power
+            And "sam" gets 403 from GET /api/meters, GET /api/settings/energy, PUT /api/settings/energy and GET /api/energy/areas
+            And a member without energy access gets 403 from all of them and /ws/power refuses them
+
+        Scenario: The Energy tab shows for people with energy access
+            Given member "sam" has energy access
+            When "sam" opens the web app or the Android app
+            Then there is an Energy tab with the dials, the history chart and the totals with their costs
+            And it has no "Manage" button, the room and area cards do not open their energy pages, and "Set a daily target" is not offered
+            And on People an admin turns "Energy" on or off for each member
+
+    Feature: Energy dials
+        As someone with energy access
+        I want the Energy tab to read like a car's dashboard
+        So that I can see at a glance what the house is using, what is using most, how the day is going and its peak
+
+        Four gauges in a row: today's peak on the far left, the whole house, the busiest room or area, and the daily
+        target as a fuel gauge on the far right. On a phone the two dials are side by side with the peak and fuel gauges
+        below them. They replace the single live dial and its sparkline. The room, area and "Everything else" cards stay
+        below the history chart.
+
+        Scenario: The house dial shows the whole house now
+            Given the house meter reports 2400 W
+            When someone with energy access opens the Energy tab
+            Then the house dial reads "2.40 kW" and is labelled "Whole house"
+            And it keeps the live dial's scale, colours and smooth sweep
+
+        Scenario: The second dial follows the busiest room or area
+            Given "Kitchen" uses 900 W, "Utility" 300 W and energy area "Lights" 150 W
+            When someone with energy access opens the Energy tab
+            Then the second dial reads "900 W" and is labelled "Kitchen"
+            And "Everything else" and devices in no room or area are never on it
+            And it uses the house dial's scale, so the two needles compare
+            And with no room or area reporting it reads "No rooms reporting"
+
+        Scenario: The second dial does not flicker between close rooms
+            Given the second dial shows "Kitchen" at 900 W
+            When "Utility" rises to 950 W
+            Then the dial stays on "Kitchen", because "Utility" is less than 10% ahead
+            And when "Utility" is at least 10% and 50 W ahead of "Kitchen" for 30 seconds the dial moves to "Utility"
+            And if "Kitchen" stops reporting the dial moves at once to whatever is busiest
+
+        Scenario: The fuel gauge drains towards the daily target
+            Given dailyKwhTarget is 12.0 and at 12:00 the house has used 5.0 kWh
+            When someone with energy access opens the Energy tab
+            Then the fuel gauge's needle is 7/12 of the way from E to F, with "7.0 kWh left" and "5.0 of 12.0 kWh" and today's cost
+            And a tick marks where the needle should be by now, 6/12 from E, so it reads "1.0 kWh under pace" in green
+            And above 80% of the target used its low fuel light is on, and past the target the needle rests on E with "1.0 kWh over"
+            And with no target it reads "No daily target", and an admin is offered "Set a daily target"
+
+        Scenario: Today's peak is the highest five-minute power since midnight
+            Given the house meter recorded five-minute samples today, the highest an average of 6200 W at 18:05
+            When someone with energy access sends GET /api/power
+            Then todayPeak has watts 6200 and at 18:05
+            And a sample at 00:00 counts in the day before, so just after midnight todayPeak is null
+            And the peak gauge reads "6.20 kW" with "at 18:05" on the house dial's scale
+
+        Scenario: Today's peak says what was using the power
+            Given at the peak "Kitchen" used 3500 W, area "Lights" 400 W and the house 6200 W
+            When someone with energy access sends GET /api/power
+            Then todayPeak.parts lists "Kitchen" 3500 W, "Lights" 400 W and "Everything else" 2300 W, largest first
+            And a room counts its plugs in it at the time, an area its clamp when recorded or else its plugs, and a plug behind a clamp only once
+            And on the web app hovering or tapping the peak gauge shows the parts with their watts and shares, and on Android tapping it does
+
+    Feature: Energy history chart
+        As someone with energy access
+        I want a chart of what the house used under the dials that I can drag back in time
+        So that I can compare today with any day, week, month or year before it
+
+        The chart is the house meter's use. Its points line up with the calendar in the household's timezone: five
+        minutes over a day, an hour over a week, a day over a month and a month over a year. Costs are at today's prices,
+        like the dashboard. While the chart shows the present it moves on with each five-minute sample.
+
+        Scenario: The house's use over a day, week, month or year
+            Given the house meter has recorded samples for the last two years
+            When someone with energy access sends GET /api/energy/history?range=month
+            Then it has currency, from, to, earliest and 30 points, one per day ending today, each with at, kwh, cost, watts and incomplete
+            And range day has a point per five minutes over 24 hours, week a point per hour over 7 days and year a point per month over 12 months
+            And a point for a whole day or month has targetKwh (the daily target times its days), null for five minutes or an hour or with no target
+            And to=<time> ends the range at that time instead of now, a time in the future means now, and any other range gets 400
+
+        Scenario: The chart can be dragged back in time
+            Given someone with energy access has the chart on Week
+            When they drag it to the right
+            Then it shows earlier hours, loading more as it needs them, and stops at the earliest sample
+            And it cannot be dragged past now, and "Now" brings it back to the present
+            And Day, Week, Month and Year change the range, keeping the time at its right edge
+
+        Scenario: The chart says what each point used and cost
+            When someone with energy access hovers over or taps a point on the chart
+            Then it shows its time, kWh, cost and, for a day or month, the target
+            And day and week are a line of power, month and year are bars of kWh with a target line, and incomplete points are marked
 
 # Deferred (not to be built yet)
 # - Mirror schedules to the valve weekly_schedule as a fallback when the service is down

@@ -3,7 +3,7 @@
   "info": {
     "title": "Home Heating API",
     "version": "1.0.0",
-    "description": "Contract between the heating service and the Android app. Both sides build against this document; change it only by agreement. All times are ISO-8601 with offset in the service's time zone. Temperatures are °C in 0.5 steps. Live updates: WebSocket /ws (bearer token) sends JSON messages of type LiveEvent; WebSocket /ws/power (admins only) sends LivePower. Room access: admins (and the service token) use every route. A member sees and controls only the rooms an admin gave them (User.rooms); any /api/rooms/{id} or /api/zones/{zoneId} route on another room answers 404. Members get 403 on /api/house, /api/groups, /api/dashboard, GET /api/status, /api/holiday, /api/valves, /api/sensors, /api/meters, /api/energy/areas, /api/settings/energy, /api/power, /ws/power, /api/admin, and on creating, renaming, deleting rooms or assigning valves and sensors."
+    "description": "Contract between the heating service and the Android app. Both sides build against this document; change it only by agreement. All times are ISO-8601 with offset in the service's time zone. Temperatures are °C in 0.5 steps. Live updates: WebSocket /ws (bearer token) sends JSON messages of type LiveEvent; WebSocket /ws/power (admins only) sends LivePower. Energy access: admins, and members an admin gave it (User.energy), may read /api/dashboard, /api/power, /api/energy/history and /ws/power; other members get 403. Room access: admins (and the service token) use every route. A member sees and controls only the rooms an admin gave them (User.rooms); any /api/rooms/{id} or /api/zones/{zoneId} route on another room answers 404. Members get 403 on /api/house, /api/groups, GET /api/status, /api/holiday, /api/valves, /api/sensors, /api/meters, /api/energy/areas, /api/settings/energy, /api/admin, and on creating, renaming, deleting rooms or assigning valves and sensors."
   },
   "components": {
     "securitySchemes": { "bearer": { "type": "http", "scheme": "bearer", "description": "A session token from /api/auth/login or /api/auth/setup, or the HEATING_API_TOKEN service token (admin)." } },
@@ -18,7 +18,8 @@
           "rooms": { "type": "array", "items": { "type": "string" }, "description": "Ids of every room this user can see now; every room for an admin" },
           "lastSeen": { "type": "string", "format": "date-time", "nullable": true, "description": "GET /api/admin/users only: last request with any of their sessions (written at most once a minute)" },
           "activeNow": { "type": "boolean", "nullable": true, "description": "GET /api/admin/users only: a request in the last 5 minutes" },
-          "sessions": { "type": "integer", "nullable": true, "description": "GET /api/admin/users only: sessions not signed out or expired" }
+          "sessions": { "type": "integer", "nullable": true, "description": "GET /api/admin/users only: sessions not signed out or expired" },
+          "energy": { "type": "boolean", "description": "May read the Energy tab (dials, history chart, totals): always true for an admin; members only once an admin gives it" }
         }
       },
       "UserSession": {
@@ -507,8 +508,31 @@
           "boiler": { "type": "array", "description": "Boiler states overlapping from..to, oldest first", "items": { "$ref": "#/components/schemas/BoilerPeriod" } }
         }
       },
+      "HouseHistoryPoint": {
+        "type": "object", "required": ["at", "kwh", "cost", "watts", "incomplete", "targetKwh"],
+        "properties": {
+          "at": { "type": "string", "format": "date-time", "description": "Start of the five minutes, hour, day or month" },
+          "kwh": { "type": "number", "nullable": true, "description": "Null when nothing was recorded" },
+          "cost": { "type": "number", "nullable": true, "description": "Minor units at today's electricity price" },
+          "watts": { "type": "number", "nullable": true, "description": "Average power" },
+          "incomplete": { "type": "boolean", "description": "Samples missing or without a reading: the figures are only what was recorded" },
+          "targetKwh": { "type": "number", "nullable": true, "description": "The daily target times the point's days, for range month (a day each) and year (a month each); otherwise null" }
+        }
+      },
+      "HouseHistory": {
+        "type": "object", "required": ["currency", "range", "from", "to", "points"],
+        "description": "The house meter's use for the history chart, its points lined up with the calendar in the household's timezone",
+        "properties": {
+          "currency": { "type": "string" },
+          "range": { "type": "string", "enum": ["day", "week", "month", "year"] },
+          "from": { "type": "string", "format": "date-time" },
+          "to": { "type": "string", "format": "date-time" },
+          "earliest": { "type": "string", "format": "date-time", "nullable": true, "description": "The first house sample: how far back the chart can go" },
+          "points": { "type": "array", "items": { "$ref": "#/components/schemas/HouseHistoryPoint" } }
+        }
+      },
       "PowerSummary": {
-        "description": "What the live power dial needs besides the live readings (GET /api/power).",
+        "description": "What the dials need besides the live readings (GET /api/power).",
         "type": "object", "required": ["recent"],
         "properties": {
           "bands": {
@@ -519,7 +543,21 @@
               "red": { "type": "number", "description": "W. Red from here: the 90th percentile of all house readings; amber between" }
             }
           },
-          "recent": { "type": "array", "description": "House readings of the last 30 minutes, oldest first", "items": { "type": "object", "required": ["at", "watts"], "properties": { "at": { "type": "string", "format": "date-time" }, "watts": { "type": "number", "nullable": true } } } }
+          "recent": { "type": "array", "description": "House readings of the last 30 minutes, oldest first", "items": { "type": "object", "required": ["at", "watts"], "properties": { "at": { "type": "string", "format": "date-time" }, "watts": { "type": "number", "nullable": true } } } },
+          "todayPeak": {
+            "type": "object", "nullable": true, "required": ["watts", "at", "parts"],
+            "description": "The highest five-minute average house power since midnight (a sample at 00:00 counts in the day before); null before today's first sample",
+            "properties": {
+              "watts": { "type": "number" },
+              "at": { "type": "string", "format": "date-time", "description": "The sample's time" },
+              "parts": { "type": "array", "description": "What was using it then, largest first: rooms (their plugs then), areas (clamp when recorded, else plugs), devices in neither, and else (the remainder, never below 0)", "items": { "type": "object", "required": ["kind", "name", "watts"], "properties": {
+                "kind": { "type": "string", "enum": ["room", "area", "device", "else"] },
+                "id": { "type": "string", "nullable": true, "description": "Room or area id, or the device's meter name; null for else" },
+                "name": { "type": "string" },
+                "watts": { "type": "number" }
+              } } }
+            }
+          }
         }
       },
       "LivePower": {
@@ -891,7 +929,7 @@
     },
     "/api/power": {
       "get": {
-        "summary": "Colour bands and the last 30 minutes of house readings for the live power dial (admin only). Live readings stream on the WebSocket /ws/power as LivePower messages",
+        "summary": "Colour bands, the last 30 minutes of house readings and today's peak for the dials (admins and energy access). Live readings stream on the WebSocket /ws/power as LivePower messages",
         "responses": {
           "200": { "description": "power summary", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PowerSummary" } } } }
         }
@@ -1003,6 +1041,24 @@
       "delete": {
         "summary": "Delete a user and end their sessions (admin only)",
         "responses": { "204": { "description": "deleted" }, "403": { "description": "not an admin" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "description": "cannot delete the last admin" } }
+      }
+    },
+    "/api/energy/history": {
+      "get": {
+        "summary": "The house's use for the history chart (admins and energy access; others get 403)",
+        "parameters": [
+          { "name": "range", "in": "query", "schema": { "type": "string", "enum": ["day", "week", "month", "year"], "default": "day" }, "description": "day: a point per 5 minutes (288); week: per hour (168); month: per day (30); year: per month (12)" },
+          { "name": "to", "in": "query", "schema": { "type": "string", "format": "date-time" }, "description": "End of the range; left out, or in the future, it is now" }
+        ],
+        "responses": { "200": { "description": "history", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HouseHistory" } } } }, "400": { "description": "unknown range or unreadable to" }, "403": { "description": "no energy access" } }
+      }
+    },
+    "/api/admin/users/{id}/energy": {
+      "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+      "put": {
+        "summary": "Give a member energy access (read the Energy tab), or take it away (admin only)",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["energy"], "properties": { "energy": { "type": "boolean" } } } } } },
+        "responses": { "200": { "description": "user", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/User" } } } }, "403": { "description": "not an admin" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "description": "the user is an admin and always has energy access" } }
       }
     },
     "/api/admin/users/{id}/rooms": {
