@@ -118,6 +118,23 @@ export interface User {
   createdAt?: string | null
   /** Ids of the rooms this person can see; an admin has every room */
   rooms?: string[]
+  /** Admin's list only: last request with any of their sessions */
+  lastSeen?: string | null
+  /** Admin's list only: a request in the last five minutes */
+  activeNow?: boolean | null
+  /** Admin's list only: sessions not signed out or expired */
+  sessions?: number | null
+}
+
+/** One sign-in on one device, for the admin. */
+export interface UserSession {
+  id: string
+  device: string
+  signedInAt: string
+  lastSeen: string
+  signedOutAt: string | null
+  /** The session this browser is using */
+  current: boolean
 }
 export interface Session { token: string; user: User }
 
@@ -285,6 +302,9 @@ export const api = {
     request<User>('POST', '/api/admin/users', { username, password, admin }),
   patchUser: (id: string, patch: { password?: string; admin?: boolean }) => request<User>('PATCH', `/api/admin/users/${enc(id)}`, patch),
   deleteUser: (id: string) => request<void>('DELETE', `/api/admin/users/${enc(id)}`),
+  userSessions: (id: string) => request<UserSession[]>('GET', `/api/admin/users/${enc(id)}/sessions`),
+  signOutSession: (id: string, session: string) => request<void>('DELETE', `/api/admin/users/${enc(id)}/sessions/${enc(session)}`),
+  signOutEverywhere: (id: string) => request<void>('DELETE', `/api/admin/users/${enc(id)}/sessions`),
   /** Replace the rooms a member can see (the full list). Admins see every room and answer 409. */
   setUserRooms: (id: string, rooms: string[]) => request<User>('PUT', `/api/admin/users/${enc(id)}/rooms`, { rooms }),
 

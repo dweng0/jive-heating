@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { Plug, Unplug } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { energyApi, formatPower, type EnergyArea, type Meter } from '@/lib/energy'
+import { energyApi, formatPower, type EnergyArea, type Meter, meterLabel
+} from '@/lib/energy'
 import { useHome } from '@/lib/home'
 
 /**
@@ -64,7 +65,7 @@ export function MonitoredDevicesCard() {
               <Plug />
             </div>
             <div className="min-w-40 flex-1">
-              <div className="font-medium">{m.name}</div>
+              <div className="font-medium">{meterLabel(m)}</div>
               <div className="text-sm text-muted-foreground">{m.stale || !m.online ? 'not reporting' : `${formatPower(m.power)} now`}</div>
             </div>
             <select

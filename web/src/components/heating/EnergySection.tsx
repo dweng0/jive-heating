@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Flame, PlugZap, Receipt, Sigma } from 'lucide-react'
+import { Flame, PlugZap, Receipt, Sigma, Target } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { NO_METER, energyApi, energyPlace, formatCost, formatKwh, plugNowWarning, type DeviceEnergy, type EnergyDashboard, type RoomEnergy, type EverythingElse, type EnergyDay, type EnergyPeriod } from '@/lib/energy'
+import { NO_METER, READINGS_MISSING, SET_TARGET, targetDelta, targetProgress, type EnergyTarget, energyApi, energyPlace, formatCost, formatKwh, plugNowWarning, type DeviceEnergy, type EnergyDashboard, type RoomEnergy, type EverythingElse, type EnergyDay, type EnergyPeriod } from '@/lib/energy'
 import { IncompleteWarning } from './IncompleteWarning'
 import { cn } from '@/lib/utils'
 
@@ -82,16 +83,58 @@ export function EnergySection() {
             <Figure testId="energy-total" icon={<Sigma />} label="Total" cost={formatCost(shown.totalCost, shown.currency)} detail={shown.incomplete ? 'Some time missing' : PERIODS.find((p) => p.value === period)!.label} />
           </div>
           {shown.electricityMeter == null && <p className="text-sm text-muted-foreground">{NO_METER}</p>}
+          {shown.target ? (
+            <TargetCard target={shown.target} today={period === 'today'} />
+          ) : (
+            shown.electricityMeter != null && (
+              <Link to="/energy/manage" className="text-sm font-medium text-primary underline-offset-4 hover:underline">
+                {SET_TARGET}
+              </Link>
+            )
+          )}
           {(shown.devices?.length > 0 || shown.rooms?.length > 0) && (
             <div className="grid gap-3 md:grid-cols-2">
               {shown.rooms?.length > 0 && <Rooms rooms={shown.rooms} devices={shown.devices} rest={shown.everythingElse ?? null} currency={shown.currency} />}
               {shown.devices?.length > 0 && <Devices devices={shown.devices} currency={shown.currency} />}
             </div>
           )}
-          {period !== 'today' && <DayBars days={shown.days} currency={shown.currency} />}
+          {period !== 'today' && <DayBars days={shown.days} currency={shown.currency} dailyTarget={shown.target ? shown.target.kwh / shown.days.length : null} price={shown.electricityKwh ? (shown.electricityCost ?? 0) / shown.electricityKwh : null} />}
         </>
       )}
     </section>
+  )
+}
+
+/**
+ * Use so far against the daily target: the delta in green under target, amber over, a bar of use so far with a mark where
+ * use should be by now, and where the day is heading. For a week or month the same over the whole period.
+ */
+function TargetCard({ target, today }: { target: EnergyTarget; today: boolean }) {
+  const under = target.deltaKwh <= 0
+  const scale = Math.max(target.kwh, target.usedKwh, target.projectedKwh ?? 0, 0.001)
+  return (
+    <Card data-testid="energy-target">
+      <CardContent className="flex flex-col gap-3 p-4">
+        <div className="flex items-center gap-3">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-secondary [&_svg]:size-4">
+            <Target />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div data-testid="target-delta" data-on-target={under} className={cn('text-lg font-bold tabular-nums', under ? 'text-green-600 dark:text-green-500' : 'text-amber-600 dark:text-amber-500')}>
+              {targetDelta(target.deltaKwh)}
+            </div>
+            <div data-testid="target-progress" className="text-sm text-muted-foreground">
+              {today ? targetProgress(target) : `${target.usedKwh.toFixed(1)} of ${target.kwh.toFixed(1)} kWh`}
+            </div>
+          </div>
+        </div>
+        <div className="relative h-3 w-full overflow-visible rounded-full bg-secondary" aria-hidden>
+          <div className={cn('h-full rounded-full', under ? 'bg-green-600/70' : 'bg-amber-500/80')} style={{ width: `${(target.usedKwh / scale) * 100}%` }} />
+          <div data-testid="target-expected" title="Where use should be by now" className="absolute -top-1 h-5 w-0.5 bg-foreground" style={{ left: `${(target.expectedKwh / scale) * 100}%` }} />
+        </div>
+        {target.incomplete && <div className="text-xs text-muted-foreground">{READINGS_MISSING}</div>}
+      </CardContent>
+    </Card>
   )
 }
 
@@ -183,8 +226,10 @@ function UseRow({ testId, name, detail, kwh, cost, currency, missingMinutes }: {
 }
 
 /** A bar per day: gas, electricity and standing charge stacked; incomplete days are hatched and labelled. */
-function DayBars({ days, currency }: { days: EnergyDay[]; currency: string }) {
-  const max = Math.max(1, ...days.map((d) => d.totalCost))
+function DayBars({ days, currency, dailyTarget, price }: { days: EnergyDay[]; currency: string; dailyTarget: number | null; price: number | null }) {
+  // The target line sits where the day's total would be with electricity at the target.
+  const targetTotal = (d: EnergyDay) => (dailyTarget != null && price != null ? d.standingCost + d.gasCost + dailyTarget * price : null)
+  const max = Math.max(1, ...days.map((d) => Math.max(d.totalCost, targetTotal(d) ?? 0)))
   const pct = (pence: number | null) => `${((pence ?? 0) / max) * 100}%`
   return (
     <Card>
@@ -195,9 +240,12 @@ function DayBars({ days, currency }: { days: EnergyDay[]; currency: string }) {
               key={d.date}
               data-testid="energy-day"
               data-incomplete={d.incomplete}
-              title={`${d.date}: ${formatCost(d.totalCost, currency)}${d.incomplete ? ` · Incomplete (${d.missingMinutes} min missing)` : ''}`}
-              className={cn('flex h-full flex-1 flex-col-reverse', d.incomplete && 'opacity-50')}
+              data-over-target={d.targetDeltaKwh != null && d.targetDeltaKwh > 0}
+              title={`${d.date}: ${formatCost(d.totalCost, currency)}${d.targetDeltaKwh != null ? ` · ${targetDelta(d.targetDeltaKwh)}` : ''}${d.incomplete ? ` · Incomplete (${d.missingMinutes} min missing)` : ''}`}
+              className={cn('relative flex h-full flex-1 flex-col-reverse', d.incomplete && 'opacity-50')}
             >
+              {targetTotal(d) != null && <div data-testid="day-target" className="absolute inset-x-0 h-0.5 bg-foreground/70" style={{ bottom: pct(targetTotal(d)) }} />}
+              {d.targetDeltaKwh != null && d.targetDeltaKwh > 0 && <div data-testid="day-over" className="absolute inset-x-0 -top-2 mx-auto size-1.5 rounded-full bg-amber-500" />}
               <div className="bg-muted-foreground/30" style={{ height: pct(d.standingCost) }} />
               <div className="bg-cool-foreground" style={{ height: pct(d.electricityCost) }} />
               <div className="rounded-t-sm bg-heat" style={{ height: pct(d.gasCost) }} />
@@ -208,6 +256,8 @@ function DayBars({ days, currency }: { days: EnergyDay[]; currency: string }) {
           <span className="flex items-center gap-1.5"><span className="size-3 rounded-sm bg-heat" /> Gas</span>
           <span className="flex items-center gap-1.5"><span className="size-3 rounded-sm bg-cool-foreground" /> Electricity</span>
           <span className="flex items-center gap-1.5"><span className="size-3 rounded-sm bg-muted-foreground/30" /> Standing charges</span>
+          {dailyTarget != null && <span className="flex items-center gap-1.5"><span className="h-0.5 w-3 bg-foreground/70" /> Daily target</span>}
+          {days.some((d) => (d.targetDeltaKwh ?? 0) > 0) && <span className="flex items-center gap-1.5"><span className="size-1.5 rounded-full bg-amber-500" /> Over target</span>}
           {days.some((d) => d.incomplete) && <span>Faded: Incomplete days (the service or meter was not recording)</span>}
         </div>
       </CardContent>

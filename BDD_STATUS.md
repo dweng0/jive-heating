@@ -1,6 +1,6 @@
 # BDD Status
 
-Checked 370 scenario(s) across 102 test file(s).
+Checked 396 scenario(s) across 107 test file(s).
 
 
 ## Feature: Service foundation
@@ -479,17 +479,51 @@ Checked 370 scenario(s) across 102 test file(s).
 - [x] An area with no clamp is the sum of its plugs
 - [x] An area's plugs are part of its clamp's figure
 - [x] Everything else counts an area once
-- [ ] UNCOVERED: The Energy tab shows areas below the rooms
-- [ ] UNCOVERED: An area card opens its energy dashboard
+- [x] The Energy tab shows areas below the rooms
+- [x] An area card opens its energy dashboard
 - [x] Lights are not split across rooms
 - [x] Two areas that share a circuit say so
 - [x] A clamp with no reading leaves the area incomplete
 - [x] A clamp that leaves Zigbee2MQTT leaves its area
 - [x] Deleting an area keeps what was recorded
 
----
-**368/370 scenarios covered.**
+## Feature: Two-clamp meters
 
-2 scenario(s) need tests:
-- The Energy tab shows areas below the rooms
-- An area card opens its energy dashboard
+- [x] A two-clamp meter is discovered as two meters
+- [x] Each clamp's readings come from the device's state
+- [x] A clamp fitted the wrong way round is still counted as use
+- [x] Each clamp does its own job
+- [x] Both clamps go offline or leave together
+
+## Feature: Energy management
+
+- [x] Admins have an energy management page
+- [x] An admin names a meter
+- [x] An admin changes or removes the main meter from the page
+- [x] An admin sets up areas from the page
+- [x] A meter is given a new job in one step
+- [x] A meter's new job does not rewrite what it recorded
+- [x] An admin stops monitoring a device
+
+## Feature: Daily energy target
+
+- [x] An admin sets a daily target
+- [x] Today's dashboard says whether we are on target
+- [x] No target or no house meter means no target figures
+- [x] Missing readings are said, not guessed
+- [x] Days in a week or month are compared with the target
+- [x] The Energy tab shows the delta for today
+
+## Feature: Who is signed in
+
+- [x] A sign-in starts a session the admin can see
+- [x] Each person shows whether they are active
+- [x] Last seen is kept without writing on every request
+- [x] Signing out ends only that session
+- [x] An admin signs a device out
+- [x] Ended sessions are listed until they are old
+- [x] Signing in and out is in the activity feed
+- [x] The People page shows who is signed in
+
+---
+**396/396 scenarios covered.**

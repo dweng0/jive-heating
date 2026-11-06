@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { KeyRound, MoreHorizontal, Shield, ShieldOff, Trash2, User as UserIcon, UserPlus } from 'lucide-react'
+import { KeyRound, MonitorSmartphone, MoreHorizontal, Shield, ShieldOff, Trash2, User as UserIcon, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   AlertDialog,
@@ -22,7 +22,7 @@ import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Hint, ShowPassword } from '@/components/heating/PasswordHelpers'
-import { api, type User } from '@/lib/api'
+import { api, type User, type UserSession } from '@/lib/api'
 import { roomsSummary, tickRoom } from '@/lib/format'
 import { MIN_PASSWORD } from '@/lib/format'
 import { useHome } from '@/lib/home'
@@ -35,6 +35,7 @@ export function PeoplePage() {
   const [resetting, setResetting] = useState<User | null>(null)
   const [removing, setRemoving] = useState<User | null>(null)
   const [opened, setOpened] = useState<string | null>(null)
+  const [devicesOf, setDevicesOf] = useState<User | null>(null)
 
   const load = useCallback(() => api.users().then(setUsers, (e: Error) => toast.error(e.message)), [])
   useEffect(() => {
@@ -88,6 +89,9 @@ export function PeoplePage() {
                         <span className="truncate font-semibold">{u.username}</span>
                         {isMe && <span className="text-sm text-muted-foreground">(you)</span>}
                       </div>
+                      <div data-testid="presence" className="text-xs">
+                        <Presence user={u} />
+                      </div>
                       <div className="text-xs text-muted-foreground">
                         {roomsSummary(u)}
                         {u.createdAt && ` · added ${new Date(u.createdAt).toLocaleDateString()}`}
@@ -110,6 +114,9 @@ export function PeoplePage() {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
+                      <DropdownMenuItem onSelect={() => setDevicesOf(u)}>
+                        <MonitorSmartphone /> Devices
+                      </DropdownMenuItem>
                       <DropdownMenuItem onSelect={() => setResetting(u)}>
                         <KeyRound /> Reset password
                       </DropdownMenuItem>
@@ -134,6 +141,8 @@ export function PeoplePage() {
               )
             })}
       </Card>
+
+      <SessionsDialog user={devicesOf} onClose={() => setDevicesOf(null)} onChanged={() => void load()} />
 
       <RoomsDialog
         user={users?.find((u) => u.id === opened) ?? null}
@@ -338,4 +347,99 @@ function usernameProblem(raw: string): string | null {
   const bad = [...new Set(name.replace(/[A-Za-z0-9 ._-]/g, ''))]
   if (bad.length) return `Can't use ${bad.map((c) => `"${c}"`).join(' ')} — letters, numbers, spaces, dots, dashes or underscores only`
   return null
+}
+
+/** "x minutes ago", "3 hours ago", "2 days ago". */
+function ago(iso: string): string {
+  const minutes = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60_000))
+  if (minutes < 1) return 'just now'
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`
+  const hours = Math.round(minutes / 60)
+  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`
+  const days = Math.round(hours / 24)
+  return `${days} day${days === 1 ? '' : 's'} ago`
+}
+
+/** "Active now", "Last seen 3 hours ago", or "Not signed in". */
+function Presence({ user }: { user: User }) {
+  if (user.activeNow) return <span className="font-medium text-green-600 dark:text-green-500">Active now</span>
+  if (user.sessions) return <span className="text-muted-foreground">{user.lastSeen ? `Last seen ${ago(user.lastSeen)}` : 'Signed in'}</span>
+  return <span className="text-muted-foreground">Not signed in{user.lastSeen ? ` · last seen ${ago(user.lastSeen)}` : ''}</span>
+}
+
+/** A person's sessions: each device, when it signed in and was last seen, and a "Sign out" button; this device has none. */
+function SessionsDialog({ user, onClose, onChanged }: { user: User | null; onClose: () => void; onChanged: () => void }) {
+  const { run } = useHome()
+  const [sessions, setSessions] = useState<UserSession[] | null>(null)
+  const load = useCallback(() => {
+    if (user?.id) api.userSessions(user.id).then(setSessions, (e: Error) => toast.error(e.message))
+  }, [user])
+  useEffect(() => {
+    setSessions(null)
+    load()
+  }, [load])
+
+  async function signOut(action: () => Promise<unknown>, done: string) {
+    const ok = await run(() => action().then(() => true), "Couldn't sign out")
+    if (ok) {
+      toast.success(done)
+      load()
+      onChanged()
+    }
+  }
+
+  const live = sessions?.filter((s) => !s.signedOutAt) ?? []
+  const ended = sessions?.filter((s) => s.signedOutAt) ?? []
+  return (
+    <Dialog open={user != null} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{user?.username}'s devices</DialogTitle>
+          <DialogDescription>Where they are signed in, and where they signed out in the last 30 days.</DialogDescription>
+        </DialogHeader>
+        {sessions == null ? (
+          <Skeleton className="h-16 w-full" />
+        ) : (
+          <div className="flex flex-col gap-3">
+            {live.length === 0 && <p className="text-sm text-muted-foreground">Not signed in anywhere.</p>}
+            {live.map((s) => (
+              <div key={s.id} data-testid={`session-${s.id}`} className="flex items-center gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium">
+                    {s.device}
+                    {s.current && <span className="ml-2 text-sm text-muted-foreground">This device</span>}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Signed in {new Date(s.signedInAt).toLocaleDateString()} · last seen {ago(s.lastSeen)}
+                  </div>
+                </div>
+                {!s.current && (
+                  <Button variant="outline" size="sm" onClick={() => user?.id && signOut(() => api.signOutSession(user.id!, s.id), `${s.device} signed out`)}>
+                    Sign out
+                  </Button>
+                )}
+              </div>
+            ))}
+            {ended.length > 0 && (
+              <div className="flex flex-col gap-1 border-t pt-3">
+                <div className="text-xs font-medium text-muted-foreground">Signed out</div>
+                {ended.map((s) => (
+                  <div key={s.id} className="text-xs text-muted-foreground">
+                    {s.device} · {ago(s.signedOutAt!)}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        <DialogFooter>
+          {live.some((s) => !s.current) && (
+            <Button variant="destructive" onClick={() => user?.id && signOut(() => api.signOutEverywhere(user.id!), `${user.username} signed out everywhere`)}>
+              Sign out everywhere
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
 }

@@ -1,4 +1,7 @@
 import { useEffect } from 'react'
+import { Link } from 'react-router-dom'
+import { Settings2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { EnergySection } from '@/components/heating/EnergySection'
 import { LivePowerSection } from '@/components/heating/LivePowerSection'
 import { energyPlace } from '@/lib/energy'
@@ -22,9 +25,17 @@ export function EnergyPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Energy</h1>
-        <p className="text-muted-foreground">What the house is using now, and what it has cost</p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Energy</h1>
+          <p className="text-muted-foreground">What the house is using now, and what it has cost</p>
+        </div>
+        <Button asChild variant="outline">
+          <Link to="/energy/manage">
+            <Settings2 />
+            Manage
+          </Link>
+        </Button>
       </div>
       <LivePowerSection />
       <EnergySection />

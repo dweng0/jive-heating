@@ -21,6 +21,7 @@ import {
   roomPickerTitle,
   type EnergyArea,
   type Meter,
+  meterLabel,
 } from '@/lib/energy'
 import { useHome } from '@/lib/home'
 
@@ -177,7 +178,7 @@ export function WaitingDevicesCard({ onMonitored }: { onMonitored?: () => void }
               <Gauge />
             </div>
             <div className="min-w-40 flex-1">
-              <div className="font-medium">{m.name}</div>
+              <div className="font-medium">{meterLabel(m)}</div>
               <div className="text-sm text-muted-foreground">
                 {meterKind(m)} · {m.stale || !m.online ? 'not reporting' : `${formatPower(m.power)} now`}
               </div>

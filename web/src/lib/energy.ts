@@ -15,9 +15,11 @@ export interface EnergySettings {
   /** ISO 4217 code every cost is in, e.g. "GBP" */
   currency: string
   notices: string[]
+  /** kWh a day the household aims to use on the house meter; null for none */
+  dailyKwhTarget?: number | null
 }
 
-export type EnergyPrices = Omit<EnergySettings, 'electricityMeter' | 'currency' | 'notices'>
+export type EnergyPrices = Omit<EnergySettings, 'electricityMeter' | 'currency' | 'notices' | 'dailyKwhTarget'>
 
 export interface Meter {
   name: string
@@ -40,6 +42,39 @@ export interface Meter {
   measures?: string | null
   /** False for a meter that reports power but no energy total: it can only measure an energy area */
   reportsEnergy?: boolean
+  /** The Zigbee2MQTT device it is on: its own name, or the two-clamp meter it is one clamp of */
+  device?: string
+  /** "A" or "B" for one clamp of a two-clamp meter */
+  clamp?: string | null
+  /** The clamp reads backwards; its use is still counted */
+  reversed?: boolean
+  /** The name an admin gave it, else its Zigbee2MQTT name */
+  label?: string
+}
+
+/** What a meter is shown as: its label, else its name. */
+export const meterLabel = (m: Pick<Meter, 'name' | 'label'>) => m.label || m.name
+
+export const REVERSED = 'This clamp reads backwards. Its use is still counted.'
+
+/** A meter's job, as PUT /api/meters/{meter}/job takes it. */
+export type MeterJob =
+  | { job: 'house' }
+  | { job: 'area'; area: string }
+  | { job: 'monitored'; room?: string; area?: string }
+  | { job: 'none' }
+
+/** The house's electricity against the daily target. */
+export interface EnergyTarget {
+  kwh: number
+  usedKwh: number
+  expectedKwh: number
+  /** usedKwh minus expectedKwh: below 0 is under target */
+  deltaKwh: number
+  deltaCost: number
+  onTarget: boolean
+  projectedKwh: number | null
+  incomplete: boolean
 }
 
 export type EnergyPeriod = 'today' | 'week' | 'month'
@@ -58,6 +93,8 @@ export interface EnergyDay {
   totalCost: number
   missingMinutes: number
   incomplete: boolean
+  /** electricityKwh minus the daily target (today: the share of it gone); null with no target */
+  targetDeltaKwh?: number | null
 }
 
 /** A monitored plug's use over the period: part of the house meter's electricity, "of which", never added. */
@@ -142,6 +179,8 @@ export interface EnergyDashboard {
   everythingElse: EverythingElse | null
   /** Energy areas, by name; "of which", never added */
   areas?: AreaEnergy[]
+  /** The house's electricity against the daily target; null with no target or house meter */
+  target?: EnergyTarget | null
 }
 
 /** A named thing with meters and no valves, such as "Lights". Not a room: it has no heating. */
@@ -179,6 +218,9 @@ export const energyApi = {
   putInArea: (id: string, meter: string) => request<unknown>('PUT', `/api/energy/areas/${enc(id)}/meters/${enc(meter)}`).then(() => true),
   takeOutOfArea: (id: string, meter: string) => request<void>('DELETE', `/api/energy/areas/${enc(id)}/meters/${enc(meter)}`).then(() => true),
   shareCircuit: (id: string, other: string) => request<unknown>('PUT', `/api/energy/areas/${enc(id)}/overlaps/${enc(other)}`).then(() => true),
+  label: (meter: string, label: string) => request<Meter>('PUT', `/api/meters/${enc(meter)}/label`, { label }),
+  setJob: (meter: string, job: MeterJob) => request<Meter>('PUT', `/api/meters/${enc(meter)}/job`, job),
+  setDailyTarget: (kwh: number | null) => request<EnergySettings>('PUT', '/api/settings/energy', { dailyKwhTarget: kwh }),
   stopSharingCircuit: (id: string, other: string) => request<unknown>('DELETE', `/api/energy/areas/${enc(id)}/overlaps/${enc(other)}`).then(() => true),
 }
 
@@ -286,3 +328,13 @@ export function formatPower(watts: number | null | undefined): string {
 }
 
 export const NO_METER = 'Choose an electricity meter to see electricity use'
+
+/** "1.0 kWh under target" or "1.0 kWh over target". */
+export const targetDelta = (deltaKwh: number) => `${Math.abs(deltaKwh).toFixed(1)} kWh ${deltaKwh <= 0 ? 'under' : 'over'} target`
+
+/** "5.0 of 12.0 kWh, on track for 10.0 kWh". */
+export const targetProgress = (t: Pick<EnergyTarget, 'usedKwh' | 'kwh' | 'projectedKwh'>) =>
+  `${t.usedKwh.toFixed(1)} of ${t.kwh.toFixed(1)} kWh${t.projectedKwh == null ? '' : `, on track for ${t.projectedKwh.toFixed(1)} kWh`}`
+
+export const SET_TARGET = 'Set a daily target'
+export const READINGS_MISSING = 'Some readings are missing'

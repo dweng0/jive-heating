@@ -24,6 +24,11 @@ export function activityLine(e: ActivityEvent): ActivityLine {
   const house = room === 'Whole house'
   const target = typeof e.value === 'number' ? degrees(e.value) : ''
   switch (e.kind) {
+    case 'session':
+      if (e.value === 'in') return { wide: `${who} signed in${e.reason ? ` on ${e.reason}` : ''}`, narrow: `${who} · signed in` }
+      return e.reason
+        ? { wide: `${e.reason} signed ${who} out`, narrow: `${e.reason} · signed ${who} out` }
+        : { wide: `${who} signed out`, narrow: `${who} · signed out` }
     case 'setpoint':
       return house
         ? { wide: `${who} set the whole house to ${target}`, narrow: `${who} · House ${target}` }
