@@ -151,7 +151,8 @@
           "reportsEnergy": { "type": "boolean", "description": "False for a meter reporting power but no energy total: it can only measure an energy area, and is never listed as waiting to be set up" },
           "device": { "type": "string", "description": "The Zigbee2MQTT device the meter is on: its own name, or the two-clamp meter it is one clamp of" },
           "clamp": { "type": "string", "nullable": true, "description": "A or B for one clamp of a two-clamp meter (named '<device> A'); null otherwise" },
-          "reversed": { "type": "boolean", "description": "The clamp reads backwards (fitted the wrong way round); its use is still counted" }
+          "reversed": { "type": "boolean", "description": "The clamp reads backwards (fitted the wrong way round); its use is still counted" },
+          "label": { "type": "string", "description": "The name an admin gave it, else its Zigbee2MQTT name" }
         }
       },
       "EnergyDay": {
@@ -856,6 +857,14 @@
       "parameters": [{ "name": "meter", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Meter friendly name, URL-encoded" }],
       "put": { "summary": "Monitor a device's use, such as a smart plug: it is part of the house meter's, never added to it, and it leaves the unassigned meter list (admin only); 409 for the house meter, 422 for a device with no energy counter", "responses": { "200": { "description": "meter", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Meter" } } } }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "$ref": "#/components/responses/Conflict" }, "422": { "description": "This device does not report energy", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } } } },
       "delete": { "summary": "Stop monitoring this device (admin only); 404 if it is not monitored", "responses": { "204": { "description": "no longer monitored" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/api/meters/{meter}/label": {
+      "parameters": [{ "name": "meter", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Meter friendly name, URL-encoded" }],
+      "put": { "summary": "Name a meter, such as 'Mains' (admin only). Blank goes back to its Zigbee2MQTT name; 400 over 40 characters", "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["label"], "properties": { "label": { "type": "string" } } } } } }, "responses": { "200": { "description": "meter", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Meter" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/api/meters/{meter}/job": {
+      "parameters": [{ "name": "meter", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Meter friendly name, URL-encoded" }],
+      "put": { "summary": "Give a meter a new job in one step, leaving its old one (admin only): house (the main meter), area (measures energy area 'area' as its whole-area meter), monitored (optionally in 'room' or 'area'), or none (waiting to be set up). What it recorded stays where it was recorded. 422 for a job it cannot do (no energy total), changing nothing", "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["job"], "properties": { "job": { "type": "string", "enum": ["house", "area", "monitored", "none"] }, "room": { "type": "string", "nullable": true }, "area": { "type": "string", "nullable": true } } } } } }, "responses": { "200": { "description": "meter", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Meter" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "404": { "$ref": "#/components/responses/NotFound" }, "422": { "description": "The meter cannot do this job", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } } } }
     },
     "/api/devices/ignored": {
       "get": { "summary": "Names of the devices an admin ignored, sorted (admin only)", "responses": { "200": { "description": "names", "content": { "application/json": { "schema": { "type": "array", "items": { "type": "string" } } } } } } }

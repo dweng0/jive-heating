@@ -172,6 +172,15 @@ class EnergyHistory(path: String) {
         }
     }
 
+    /** Every device with a sample with [from] <= at <= [to], monitored now or not: what was recorded stays counted. */
+    @Synchronized
+    fun deviceMeters(from: Instant, to: Instant): Set<String> =
+        connection.prepareStatement("SELECT DISTINCT meter FROM device_samples WHERE at >= ? AND at <= ?").use { s ->
+            s.setLong(1, from.toEpochMilli())
+            s.setLong(2, to.toEpochMilli())
+            s.executeQuery().use { rs -> buildSet { while (rs.next()) add(rs.getString(1)) } }
+        }
+
     /** Samples of the monitored device [meter] with [from] <= at <= [to], oldest first. */
     @Synchronized
     fun deviceSamples(meter: String, from: Instant, to: Instant): List<MeterSample> =

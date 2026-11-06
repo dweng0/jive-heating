@@ -252,7 +252,8 @@ class EnergyDashboards(
         val electricityStanding = prices.electricityMeter?.let { period.days * prices.electricityStandingPencePerDay }
         val standing = gasStanding + (electricityStanding ?: 0.0)
         val missing = days.sumOf { it.view.missingMinutes }
-        val devices = monitored.all().map { meter ->
+        // Devices monitored now, and any that were while recording in the period: their use stays where it was recorded.
+        val devices = (monitored.all() + energy.deviceMeters(from.toInstant(), now.toInstant())).distinct().sorted().map { meter ->
             // A sample covers the five minutes before it, so one at midnight is yesterday's.
             val samples = energy.deviceSamples(meter, from.toInstant(), now.toInstant()).filter { it.at > from.toInstant() }
             Device(meter, samples.sumOf { it.kwh ?: 0.0 }, samples.filter { it.kwh == null }.map { it.at }.toSet(), samples)
@@ -286,7 +287,8 @@ class EnergyDashboards(
             incomplete = days.any { it.view.incomplete },
             days = days.map { it.view },
             currency = prices.currency,
-            devices = devices.map { d ->
+            // Only devices monitored now are listed; those no longer monitored still count in rooms, areas and everything else.
+            devices = devices.filter { it.meter in monitored }.map { d ->
                 val missing = staleMinutes(d.staleAt)
                 val offlineSince = meters[d.meter]?.let(meters::offlineSince)
                 val totalStuckSince = meters[d.meter]?.let(meters::totalStuckSince)

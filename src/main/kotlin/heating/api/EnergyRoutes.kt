@@ -139,6 +139,8 @@ data class MeterView(
     val clamp: String? = null,
     /** The clamp reads backwards; its use is still counted. */
     val reversed: Boolean = false,
+    /** The name the admin gave it, or its Zigbee2MQTT name when it has none. */
+    val label: String = name,
 )
 
 fun HeatingApp.meterView(meter: Meter, house: String? = energySettings.get().electricityMeter) = MeterView(
@@ -157,6 +159,7 @@ fun HeatingApp.meterView(meter: Meter, house: String? = energySettings.get().ele
     device = meter.device,
     clamp = meter.clamp,
     reversed = meter.reversed,
+    label = meterLabels.of(meter.name),
 )
 
 /** [this] with the fields present in [body] replaced; fields left out are unchanged. */

@@ -99,6 +99,7 @@ class HeatingApp(
     val energySettings = heating.energy.EnergySettingsRepository(store)
     val monitoredMeters = heating.energy.MonitoredMeters(store)
     val energyAreas = heating.energy.EnergyAreas(store)
+    val meterLabels = heating.energy.MeterLabels(store)
     val meters = heating.energy.MeterRegistry(bus, topics, clock)
     val energyHistory = heating.energy.EnergyHistory(config.dbPath)
     val livePower = heating.energy.LivePower(
@@ -158,6 +159,7 @@ class HeatingApp(
             if (energySettings.get().electricityMeter == meter) actionLog.info("house meter {} removed from Zigbee2MQTT", meter)
             energySettings.meterRemoved(meter, notice)
             monitoredMeters.meterRemoved(meter)
+            meterLabels.meterRemoved(meter)
             energyAreas.meterRemoved(meter)?.let { area ->
                 actionLog.info("whole-area meter {} of {} removed from Zigbee2MQTT", meter, area.id)
                 energySettings.update { if (notice in it.notices) it else it.copy(notices = it.notices + notice) }
