@@ -187,4 +187,29 @@ class MeterRecordingTest {
         minutes(t, 5)
         assertEquals(0.3, washerKwh(t)!!, 1e-9)
     }
+
+    private fun dryerKwh(t: TestHeating): Double? =
+        t.app.energyHistory.deviceSamples("Tumble Dryer", Instant.EPOCH, t.clock.instant()).last().kwh
+
+    // BDD: A plug whose energy total jumps up is not taken as use
+    @Test
+    fun `a plug whose energy total jumps up is not taken as use`() {
+        val t = TestHeating()
+        t.discover(meters = listOf("Main Clamp", "Tumble Dryer"))
+        houseMeter(t, "Main Clamp")
+        t.api { client -> assertEquals(HttpStatusCode.OK, client.put("/api/meters/Tumble%20Dryer/monitored").status) }
+
+        t.meterState("Tumble Dryer", """{"energy":34.38,"power":1500}""")
+        minutes(t, 5)
+        t.meterState("Tumble Dryer", """{"energy":56.27,"power":1500}""")
+        minutes(t, 5)
+        assertEquals(0.0, dryerKwh(t)!!, 1e-9)
+        t.meterState("Tumble Dryer", """{"energy":56.40,"power":1500}""")
+        minutes(t, 5)
+        assertEquals(0.13, dryerKwh(t)!!, 1e-9)
+        // A real 2.5 kW load in five minutes still counts.
+        t.meterState("Tumble Dryer", """{"energy":56.61,"power":2500}""")
+        minutes(t, 5)
+        assertEquals(0.21, dryerKwh(t)!!, 1e-9)
+    }
 }

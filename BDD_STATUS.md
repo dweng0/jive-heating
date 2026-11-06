@@ -1,6 +1,6 @@
 # BDD Status
 
-Checked 411 scenario(s) across 118 test file(s).
+Checked 412 scenario(s) across 118 test file(s).
 
 
 ## Feature: Service foundation
@@ -391,6 +391,7 @@ Checked 411 scenario(s) across 118 test file(s).
 - [x] An admin monitors a plug
 - [x] Monitored devices are recorded every five minutes
 - [x] A plug whose energy total dips a little is not taken as reset
+- [x] A plug whose energy total jumps up is not taken as use
 - [x] The energy dashboard lists monitored devices without double counting
 - [x] The Energy tab shows each monitored device
 
@@ -550,4 +551,4 @@ Checked 411 scenario(s) across 118 test file(s).
 - [x] The chart says what each point used and cost
 
 ---
-**411/411 scenarios covered.**
+**412/412 scenarios covered.**

@@ -249,13 +249,13 @@ class MonitoredDevicesTest {
             t.app.tick()
         }
         reading(100.0)
-        reading(100.5)
+        reading(100.15)
 
         // The next day it is moved to the lounge.
         t.clock.advance(Duration.ofHours(24))
         assertEquals(HttpStatusCode.OK, call(t, HttpMethod.Put, "/api/rooms/$lounge/meters/Kettle Plug").status)
-        reading(100.5)
-        reading(100.7)
+        reading(100.15)
+        reading(100.3)
 
         fun rooms(period: String): Map<String, Double> {
             var result = emptyMap<String, Double>()
@@ -267,8 +267,8 @@ class MonitoredDevicesTest {
             }
             return result
         }
-        assertEquals(mapOf("Kitchen" to 0.5), rooms("yesterday"))
-        assertEquals(mapOf("Lounge" to 0.2), rooms("today"))
+        assertEquals(mapOf("Kitchen" to 0.15), rooms("yesterday"))
+        assertEquals(mapOf("Lounge" to 0.15), rooms("today"))
 
         val samples = t.app.energyHistory.deviceSamples("Kettle Plug", start, t.clock.instant())
         assertEquals(listOf(kitchen, kitchen, lounge, lounge), samples.map { it.room })

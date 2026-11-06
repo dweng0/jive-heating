@@ -93,6 +93,8 @@ class MeterRecorder(
             val use = when {
                 // Back after being offline with a lower total (it was reset): the use while offline is lost.
                 staleSince != null && previous != null && reading < previous -> 0.0
+                // More than a plug can pass in the time since the last sample: its total jumped, nothing was used.
+                staleSince == null && previous != null && hours > 0 && reading - previous > MAX_PLUG_KW * hours -> 0.0
                 else -> used(reading, previous)
             }
             history.addDevice(MeterSample(at, device, reading, use, monitored.roomOf(device), watts, monitored.areaOf(device)))
@@ -178,6 +180,8 @@ class MeterRecorder(
     }
 
     companion object {
+        /** The most a plug can pass: a 16 A socket at 240 V is 3.84 kW. */
+        private const val MAX_PLUG_KW = 4.0
         private val log = LoggerFactory.getLogger(MeterRecorder::class.java)
         val SAMPLE_INTERVAL: Duration = Duration.ofMinutes(5)
         private val CLEANUP_INTERVAL = Duration.ofDays(1)

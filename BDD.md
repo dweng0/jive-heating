@@ -1890,6 +1890,13 @@ Engineering rules (apply to every scenario):
             And its use counts on from 30.86, so reading 30.95 next records 0.09 kWh
             And a total that drops by more than 1 kWh, or to under half of what it was, is still a reset and counts on from the new total
 
+        Scenario: A plug whose energy total jumps up is not taken as use
+            Given "Tumble Dryer" is monitored and reads 34.38 kWh
+            When it reads 56.27 kWh five minutes later (more than a plug can pass: 4 kW for five minutes is 0.33 kWh)
+            Then 0 kWh is recorded for those five minutes
+            And its use counts on from 56.27, so reading 56.40 next records 0.13 kWh
+            And a plug coming back after being offline still catches up on its use however long it was away
+
         Scenario: The energy dashboard lists monitored devices without double counting
             Given "Fridge Plug" used 1.2 kWh today and the main meter recorded 8.0 kWh
             When an admin sends GET /api/dashboard?period=today
