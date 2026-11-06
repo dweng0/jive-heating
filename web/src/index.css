@@ -2,12 +2,14 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/plus-jakarta-sans";
+@import "@fontsource-variable/doto";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
     --font-heading: var(--font-sans);
     --font-sans: 'Plus Jakarta Sans Variable', ui-sans-serif, system-ui, sans-serif;
+    --font-dot: 'Doto Variable', ui-monospace, monospace;
     --color-heat: var(--heat);
     --color-heat-text: var(--heat-text);
     --color-heat-container: var(--heat-container);

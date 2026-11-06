@@ -180,9 +180,8 @@ test('the fuel gauge drains towards the daily target', async ({ page }) => {
   await expect(gauge).toHaveAttribute('data-left', (7 / 12).toFixed(3))
   await expect(gauge).toHaveAttribute('data-pace', (6 / 12).toFixed(3))
   await expect(gauge.getByTestId('fuel-left')).toHaveText('7.0 kWh left')
-  await expect(gauge.getByTestId('fuel-used')).toContainText('5.0 of 12.0 kWh')
-  await expect(gauge.getByTestId('fuel-used')).toContainText('£1.35')
-  await expect(gauge.getByTestId('fuel-pace-line')).toHaveText('1.0 kWh under pace')
+  await expect(gauge.getByTestId('fuel-used')).toHaveText('of 12.0 kWh · 1.0 under pace')
+  await expect(gauge.getByTestId('fuel-pace-line')).toHaveText('1.0 under pace')
   await expect(gauge.getByTestId('fuel-low')).toHaveAttribute('data-on', 'false')
   // The arc is the fuel left, from E to the needle.
   await expect(gauge.getByTestId('fuel-level')).toHaveCount(1)
@@ -194,6 +193,7 @@ test('the fuel gauge warns when low and rests on E past the target', async ({ pa
   const gauge = page.getByTestId('fuel-gauge')
   await expect(gauge).toHaveAttribute('data-left', '0.000')
   await expect(gauge.getByTestId('fuel-left')).toHaveText('1.0 kWh over')
+  await expect(gauge.getByTestId('fuel-used')).toHaveText('of 12.0 kWh')
   await expect(gauge.getByTestId('fuel-low')).toHaveAttribute('data-on', 'true')
 })
 
@@ -335,20 +335,32 @@ test("the trip counter ticks up with the house's use", async ({ page }) => {
   const { push } = await serve(page, { first: steady(1200), totals: () => ({ ...TOTALS, today: { kwh: recorded, cost: recorded * 27 } }) })
   await page.goto('/energy')
   const trip = page.getByTestId('trip-kwh')
-  await expect(trip).toHaveAttribute('data-value', '8.20')
+  const counter = page.getByTestId('usage-today')
+  await expect(counter).toContainText('Usage today')
+  await expect(trip).toHaveAttribute('data-value', '8.200')
   await expect(page.getByTestId('trip-cost')).toHaveText('£2.21')
   // A minute at 1200 W is 0.02 kWh.
   for (let i = 0; i < 6; i++) {
     await page.clock.fastForward(10_000)
     push(steady(1200))
   }
-  await expect(trip).toHaveAttribute('data-value', '8.22')
+  await expect.poll(async () => Number(await trip.getAttribute('data-value'))).toBeCloseTo(8.22, 2)
   // The recorded figure arriving lower does not roll it back; higher is taken.
   await page.clock.fastForward(5 * 60_000)
   await expect.poll(async () => Number(await trip.getAttribute('data-value'))).toBeGreaterThanOrEqual(8.22)
   recorded = 9.5
   await page.clock.fastForward(5 * 60_000)
   await expect.poll(async () => Number(await trip.getAttribute('data-value'))).toBeGreaterThanOrEqual(9.5)
+  // Tapped, it shows the cost in pounds to five decimals, and tapped again the usage; remembered.
+  await counter.click()
+  await expect(counter).toContainText('Cost today')
+  const pounds = page.getByTestId('trip-pounds')
+  await expect(pounds).toHaveAttribute('data-value', /^2\.\d{5}$/)
+  await expect(pounds).toHaveAttribute('aria-label', /^£2\.\d{5}$/)
+  await page.reload()
+  await expect(page.getByTestId('usage-today')).toContainText('Cost today')
+  await page.getByTestId('usage-today').click()
+  await expect(page.getByTestId('usage-today')).toContainText('Usage today')
 })
 
 // BDD: The odometer totals the day, week, month or year

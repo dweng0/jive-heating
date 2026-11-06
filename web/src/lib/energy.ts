@@ -295,7 +295,7 @@ export function formatPrice(value: number, field: { per: string | null }, curren
 }
 
 /** "£", "€", or the code itself when the browser does not know it. */
-function symbol(currency: string): string {
+export function symbol(currency: string): string {
   try {
     return new Intl.NumberFormat('en-GB', { style: 'currency', currency }).formatToParts(0).find((p) => p.type === 'currency')?.value ?? currency
   } catch {

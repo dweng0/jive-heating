@@ -82,8 +82,9 @@ export function EnergyDials({
 
   return (
     <Card data-testid="energy-dials">
-      <CardContent className="grid grid-cols-2 items-end gap-x-4 gap-y-6 p-4 sm:p-6 lg:grid-cols-[1fr_1.5fr_1.5fr_1fr] lg:gap-x-8">
-        <div className="order-3 lg:order-1">
+      <CardContent className="grid grid-cols-1 items-end gap-x-4 gap-y-6 p-4 sm:grid-cols-2 sm:p-6 lg:grid-cols-[1fr_1.5fr_1.5fr_1fr] lg:gap-x-8">
+        {/* On a phone only the whole-house dial: four gauges bunch up on a small screen. */}
+        <div className="order-3 hidden sm:block lg:order-1">
           <PeakGauge peak={peak} max={max} />
         </div>
         <div className="order-1 lg:order-2">
@@ -97,7 +98,7 @@ export function EnergyDials({
             empty={connected ? 'No reading' : 'Connecting…'}
           />
         </div>
-        <div className="order-2 lg:order-3">
+        <div className="order-2 hidden sm:block lg:order-3">
           <SpeedDial
             testId="busiest-dial"
             nowTestId="busiest-now"
@@ -109,10 +110,10 @@ export function EnergyDials({
             empty={connected ? NO_PLACES : 'Connecting…'}
           />
         </div>
-        <div className="order-4">
+        <div className="order-4 hidden sm:block">
           <FuelGauge today={today} admin={admin} />
         </div>
-        {counters && <div className="order-5 col-span-2 lg:col-span-4">{counters}</div>}
+        {counters && <div className="order-5 sm:col-span-2 lg:col-span-4">{counters}</div>}
       </CardContent>
     </Card>
   )
@@ -284,24 +285,27 @@ function FuelGauge({ today, admin }: { today: EnergyDashboard | null; admin: boo
         <line x1="100" y1="96" x2={tip.x} y2={tip.y} stroke="var(--foreground)" strokeWidth="2.5" strokeLinecap="round" opacity={f ? 1 : 0.3} />
         <circle cx="100" cy="96" r="4" fill="var(--card)" stroke="var(--foreground)" strokeWidth="2.5" />
       </svg>
-      <div className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
-        <FuelIcon data-testid="fuel-low" data-on={f?.low ? 'true' : 'false'} className={cn('size-4 transition-colors', f?.low ? 'text-[var(--power-mid)]' : 'text-muted-foreground/40')} />
-        Daily target
-      </div>
       {target && f ? (
         <div className="flex flex-col items-center text-center text-xs tabular-nums">
-          <span data-testid="fuel-left" className="text-sm font-semibold">
-            {f.overKwh > 0 ? `${f.overKwh.toFixed(1)} kWh over` : `${f.leftKwh.toFixed(1)} kWh left`}
+          <span className="flex items-center gap-1.5 text-sm font-semibold">
+            <FuelIcon data-testid="fuel-low" data-on={f.low ? 'true' : 'false'} className={cn('size-4 transition-colors', f.low ? 'text-[var(--power-mid)]' : 'text-muted-foreground/40')} />
+            <span data-testid="fuel-left">{f.overKwh > 0 ? `${f.overKwh.toFixed(1)} kWh over` : `${f.leftKwh.toFixed(1)} kWh left`}</span>
           </span>
           <span data-testid="fuel-used" className="text-muted-foreground">
-            {target.usedKwh.toFixed(1)} of {formatKwh(target.kwh)} · <span className="font-semibold text-foreground">{formatCost(today?.electricityCost, currency)}</span>
-          </span>
-          <span data-testid="fuel-pace-line" className={f.paceKwh <= 0 ? 'text-[var(--power-low)]' : 'text-[var(--power-mid)]'}>
-            {paceLine(f.paceKwh)}
+            of {formatKwh(target.kwh)}
+            {f.overKwh <= 0 && (
+              <>
+                {' · '}
+                <span data-testid="fuel-pace-line" className={f.paceKwh <= 0 ? 'text-[var(--power-low)]' : 'text-[var(--power-mid)]'}>
+                  {paceLine(f.paceKwh)}
+                </span>
+              </>
+            )}
           </span>
         </div>
       ) : (
         <div className="flex flex-col items-center text-center text-xs">
+          <FuelIcon data-testid="fuel-low" data-on="false" className="size-4 text-muted-foreground/40" />
           <span data-testid="fuel-left" className="text-muted-foreground">{NO_TARGET}</span>
           {today && (
             <span data-testid="fuel-used" className="text-muted-foreground tabular-nums">

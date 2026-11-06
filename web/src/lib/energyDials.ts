@@ -84,8 +84,8 @@ export function fuel(target: Pick<EnergyTarget, 'kwh' | 'usedKwh' | 'expectedKwh
   }
 }
 
-/** "1.0 kWh under pace" / "0.4 kWh over pace". */
-export const paceLine = (paceKwh: number) => `${Math.abs(paceKwh).toFixed(1)} kWh ${paceKwh <= 0 ? 'under' : 'over'} pace`
+/** "1.0 under pace" / "0.4 over pace": in kWh, said by the target beside it. */
+export const paceLine = (paceKwh: number) => `${Math.abs(paceKwh).toFixed(1)} ${paceKwh <= 0 ? 'under' : 'over'} pace`
 
 export const NO_TARGET = 'No daily target'
 export const NO_PLACES = 'No rooms reporting'

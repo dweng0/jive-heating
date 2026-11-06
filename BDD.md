@@ -2731,8 +2731,8 @@ Engineering rules (apply to every scenario):
         So that I can see at a glance what the house is using, what is using most, how the day is going and its peak
 
         Four gauges in a row: today's peak on the far left, the whole house, the busiest room or area, and the daily
-        target as a fuel gauge on the far right. On a phone the two dials are side by side with the peak and fuel gauges
-        below them. They replace the single live dial and its sparkline. The room, area and "Everything else" cards stay
+        target as a fuel gauge on the far right. On a phone, web or Android, only the whole-house dial shows, full width,
+        with the counters under it: four gauges bunch up on a small screen. They replace the single live dial and its sparkline. The room, area and "Everything else" cards stay
         below the history chart.
 
         Scenario: The house dial shows the whole house now
@@ -2759,9 +2759,10 @@ Engineering rules (apply to every scenario):
         Scenario: The fuel gauge drains towards the daily target
             Given dailyKwhTarget is 12.0 and at 12:00 the house has used 5.0 kWh
             When someone with energy access opens the Energy tab
-            Then the fuel gauge's needle is 7/12 of the way from E to F, with "7.0 kWh left" and "5.0 of 12.0 kWh" and today's cost
-            And a tick marks where the needle should be by now, 6/12 from E, so it reads "1.0 kWh under pace" in green
-            And above 80% of the target used its low fuel light is on, and past the target the needle rests on E with "1.0 kWh over"
+            Then the fuel gauge's needle is 7/12 of the way from E to F, with "7.0 kWh left" and under it "of 12.0 kWh · 1.0 under pace", the pace in green
+            And a tick marks where the needle should be by now, 6/12 from E
+            And above 80% of the target used its low fuel light is on, and past the target the needle rests on E with "1.0 kWh over" and "of 12.0 kWh"
+            And today's cost is not repeated there: the usage counter shows it
             And with no target it reads "No daily target", and an admin is offered "Set a daily target"
 
         Scenario: Today's peak is the highest five-minute power since midnight
@@ -2781,7 +2782,11 @@ Engineering rules (apply to every scenario):
         Scenario: The trip counter ticks up with the house's use
             Given the house has used 8.20 kWh today and its average power over the last 5 minutes is 1200 W
             When someone with energy access watches the dashboard for a minute
-            Then the trip counter, like a car's trip meter, rolls up from "8.20" by about 0.02 kWh, with today's cost under it
+            Then the counter labelled "Usage today", like a car's trip meter, rolls up from "8.200" kWh by about 0.020 kWh,
+                three decimals so it is seen to move, with today's cost under it
+            And tapping it swaps it to "Cost today" in pounds to five decimals, such as "£2.21400", rolling up at the price
+                per kWh, and tapping again swaps back; the choice is remembered
+            And its digits are in a dot-matrix face, like an arrivals board
             And it never rolls back: when today's recorded figure arrives it carries on from whichever is higher
             And it starts again from 0 at midnight
 
