@@ -14,4 +14,10 @@ class BottomTabsTest {
         // The bar shows on each tab's own screen.
         assertEquals(setOf("rooms", "dashboard", "energy"), TAB_SCREENS)
     }
+
+    // BDD: The Energy tab shows for people with energy access
+    @Test
+    fun aMemberWithEnergyAccessHasTheEnergyTabOnly() {
+        assertEquals(listOf("Rooms", "Energy", "Account"), bottomTabs(admin = false, energy = true).map { it.label })
+    }
 }

@@ -20,7 +20,7 @@ import androidx.compose.ui.unit.dp
 import heating.app.data.EnergyState
 import heating.app.data.HeatingApi
 
-/** What the house uses: electricity now first, then use and cost for today, the week or the month. Admin only. */
+/** What the house uses: the dials and history first, then use and cost for today, the week or the month. Admins and energy access. */
 @Composable
 fun EnergyScreen(
     api: HeatingApi,
@@ -31,6 +31,7 @@ fun EnergyScreen(
     contentPadding: PaddingValues,
     onOpenArea: (String) -> Unit = {},
     onManage: () -> Unit = {},
+    admin: Boolean = true,
 ) {
     Column(
         Modifier.fillMaxSize().padding(contentPadding).verticalScroll(rememberScrollState()).padding(16.dp),
@@ -38,9 +39,9 @@ fun EnergyScreen(
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Energy", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            OutlinedButton(onClick = onManage) { Text("Manage") }
+            if (admin) OutlinedButton(onClick = onManage) { Text("Manage") }
         }
-        LivePowerSection(api, onOpenRoom, onOpenEverythingElse, onOpenArea = onOpenArea, onAddArea = onManage)
-        EnergySection(state, onPeriod, onSetTarget = onManage)
+        LivePowerSection(api, onOpenRoom, onOpenEverythingElse, onOpenArea = onOpenArea, onAddArea = onManage, admin = admin)
+        EnergySection(state, onPeriod, onSetTarget = if (admin) onManage else null)
     }
 }

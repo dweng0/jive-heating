@@ -27,8 +27,8 @@ class DailyTargetTest {
     @Test
     fun `today says how far under target, where it is heading, and where use should be by now`() {
         compose.setContent { MaterialTheme { TargetCard(noon, today = true) } }
-        compose.onNodeWithText("1.0 kWh under target").assertIsDisplayed()
-        compose.onNodeWithText("5.0 of 12.0 kWh, on track for 10.0 kWh").assertIsDisplayed()
+        compose.onNodeWithText("1.0 kWh under pace").assertIsDisplayed()
+        compose.onNodeWithText("5.0 of 12.0 kWh, 7.0 kWh left today, on track for 10.0 kWh").assertIsDisplayed()
         compose.onNodeWithContentDescription("Where use should be by now").assertIsDisplayed()
     }
 
@@ -36,7 +36,7 @@ class DailyTargetTest {
     @Test
     fun `over target says so, and missing readings are said`() {
         compose.setContent { MaterialTheme { TargetCard(noon.copy(usedKwh = 7.0, deltaKwh = 1.0, onTarget = false, incomplete = true), today = true) } }
-        compose.onNodeWithText("1.0 kWh over target").assertIsDisplayed()
+        compose.onNodeWithText("1.0 kWh over pace").assertIsDisplayed()
         compose.onNodeWithText("Some readings are missing").assertIsDisplayed()
     }
 

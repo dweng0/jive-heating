@@ -6,13 +6,11 @@ data class BottomTab(val label: String, val route: String?)
 /** Screens that show the bottom bar: the tabs' own, not the screens opened from them. */
 val TAB_SCREENS = setOf("rooms", "dashboard", "energy")
 
-/** The bottom bar. The charts, energy and holiday are the whole house's: admins only. */
-fun bottomTabs(admin: Boolean): List<BottomTab> = buildList {
+/** The bottom bar. The charts and holiday are the whole house's: admins only. Energy: admins and members with energy access. */
+fun bottomTabs(admin: Boolean, energy: Boolean = admin): List<BottomTab> = buildList {
     add(BottomTab("Rooms", "rooms"))
-    if (admin) {
-        add(BottomTab("Charts", "dashboard"))
-        add(BottomTab("Energy", "energy"))
-        add(BottomTab("Holiday", null))
-    }
+    if (admin) add(BottomTab("Charts", "dashboard"))
+    if (admin || energy) add(BottomTab("Energy", "energy"))
+    if (admin) add(BottomTab("Holiday", null))
     add(BottomTab("Account", "account"))
 }

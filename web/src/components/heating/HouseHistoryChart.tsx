@@ -108,6 +108,7 @@ export function HouseHistoryChart() {
     const key = `${r}:${to ?? 'now'}`
     if (asking.current.has(key)) return
     asking.current.add(key)
+    const asked = to ?? Date.now()
     historyApi.get(r, to).then(
       (h) => {
         asking.current.delete(key)
@@ -119,7 +120,8 @@ export function HouseHistoryChart() {
           const points = new Map(was.points)
           h.points.forEach((p) => points.set(Date.parse(p.at), p))
           // An empty stretch before the first sample still counts as asked for.
-          const covered: [number, number][] = [...was.covered, [Date.parse(h.from), Date.parse(h.to)]]
+          // Up to what was asked for, even if the service's clock is behind this one's: else it would be asked again and again.
+          const covered: [number, number][] = [...was.covered, [Date.parse(h.from), Math.max(Date.parse(h.to), asked)]]
           return { ...all, [r]: { points, covered } }
         })
       },

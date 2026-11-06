@@ -187,7 +187,7 @@ private fun Connected(connection: Connection, onSignOut: () -> Unit, onPasswordC
             if (route == null || route in TAB_SCREENS) {
                 val current = route ?: "rooms"
                 NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
-                    bottomTabs(state.admin).forEach { tab ->
+                    bottomTabs(state.admin, state.energy).forEach { tab ->
                         val icon = when (tab.route) {
                             "rooms" -> Icons.Rounded.Home
                             "dashboard" -> Icons.Rounded.ShowChart
@@ -247,7 +247,7 @@ private fun Connected(connection: Connection, onSignOut: () -> Unit, onPasswordC
                 }
             }
             composable("energy") {
-                if (state.admin) {
+                if (state.admin || state.energy) {
                     EnergyScreen(
                         connection.api, energyState, energy::loadDashboard,
                         onOpenRoom = { nav.navigate("energy/room/${android.net.Uri.encode(it)}") },
@@ -255,6 +255,7 @@ private fun Connected(connection: Connection, onSignOut: () -> Unit, onPasswordC
                         contentPadding = padding,
                         onOpenArea = { nav.navigate("energy/area/${android.net.Uri.encode(it)}") },
                         onManage = { nav.navigate("energy/manage") },
+                        admin = state.admin,
                     )
                 }
             }

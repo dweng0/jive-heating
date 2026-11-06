@@ -36,6 +36,8 @@ data class AccountUser(
     val activeNow: Boolean? = null,
     /** Admin's list only: sessions not signed out or expired. */
     val sessions: Int? = null,
+    /** May see the Energy tab: always for an admin (older services leave it out). */
+    val energy: Boolean = admin,
 )
 
 /** openapi: UserSession. One sign-in on one device; [current] is the one this phone is using. */
@@ -73,6 +75,9 @@ private data class CreateUserRequest(val username: String, val password: String,
 
 @Serializable
 private data class UserRoomsRequest(val rooms: List<String>)
+
+@Serializable
+private data class UserEnergyRequest(val energy: Boolean)
 
 @Serializable
 private data class PatchUserRequest(val password: String? = null, val admin: Boolean? = null)
@@ -170,6 +175,13 @@ class AccountApi(
         client.patch("api/admin/users/${id.encodeURLPathPart()}") {
             contentType(ContentType.Application.Json)
             setBody(PatchUserRequest(password, admin))
+        }.body()
+
+    /** Give member [id] energy access (see the Energy tab), or take it away. Admins always have it. */
+    suspend fun setUserEnergy(id: String, energy: Boolean): AccountUser =
+        client.put("api/admin/users/${id.encodeURLPathPart()}/energy") {
+            contentType(ContentType.Application.Json)
+            setBody(UserEnergyRequest(energy))
         }.body()
 
     /** Replace the rooms member [id] can see with [rooms] (the full list). Admins see every room. */

@@ -57,7 +57,6 @@ class LivePowerFormatTest {
         assertEquals(PowerZone.NEUTRAL, powerZone(4500.0, null))
     }
 
-    // BDD: The dial shows today's use
     @Test
     fun underTheDialAreTodaysUseAndTheLast30Minutes() {
         assertEquals("Today 8.0 kWh · £2.16", todayLine(today))

@@ -135,6 +135,9 @@ interface HeatingApi {
 
     suspend fun powerSummary(): PowerSummary
 
+    /** The house's use for the history chart: [range] is day, week, month or year; [to] (ISO time) ends it, null for now. */
+    suspend fun houseHistory(range: String, to: String? = null): HouseHistory
+
     /** Live events from /ws until the connection drops. */
     fun liveEvents(): Flow<LiveEvent>
 
@@ -416,6 +419,12 @@ class KtorHeatingApi(
         client.get("api/energy/areas/${area.encodeURLPathPart()}/usage") { parameter("window", window); to?.let { parameter("to", it) } }.body()
 
     override suspend fun powerSummary(): PowerSummary = client.get("api/power").body()
+
+    override suspend fun houseHistory(range: String, to: String?): HouseHistory =
+        client.get("api/energy/history") {
+            parameter("range", range)
+            to?.let { parameter("to", it) }
+        }.body()
 
     override fun livePower(): Flow<LivePower> = flow {
         val wsUrl = config.baseUrl.trimEnd('/').replaceFirst("http", "ws") + "/ws/power"

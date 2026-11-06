@@ -56,7 +56,7 @@ private val PERIODS = listOf("today" to "Today", "week" to "Week", "month" to "M
 /** Under the temperature chart: gas, electricity, standing charges and total, with a bar per day for week and month. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EnergySection(state: EnergyState, onPeriod: (String) -> Unit, onSetTarget: () -> Unit = {}) {
+fun EnergySection(state: EnergyState, onPeriod: (String) -> Unit, onSetTarget: (() -> Unit)? = {}) {
     LaunchedEffect(Unit) { onPeriod(state.period) }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Use and cost", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
@@ -97,7 +97,7 @@ fun EnergySection(state: EnergyState, onPeriod: (String) -> Unit, onSetTarget: (
         }
         val target = d.target
         if (target != null) TargetCard(target, today = d.period == "today")
-        else if (d.electricityMeter != null) TextButton(onClick = onSetTarget) { Text(SET_TARGET) }
+        else if (d.electricityMeter != null && onSetTarget != null) TextButton(onClick = onSetTarget) { Text(SET_TARGET) }
         val rooms = roomLines(d)
         if (rooms.isNotEmpty()) Devices("Electricity by room, of which", rooms)
         val devices = deviceLines(d)
@@ -168,7 +168,7 @@ fun TargetCard(target: EnergyTarget, today: Boolean) {
     val scale = maxOf(target.kwh, target.usedKwh, target.projectedKwh ?: 0.0, 0.001)
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), modifier = Modifier.fillMaxWidth().testTag("energy-target")) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(targetDelta(target.deltaKwh), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = if (under) green else amber)
+            Text(targetDelta(target.deltaKwh, today), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = if (under) green else amber)
             Text(targetProgress(target, today), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Box(Modifier.fillMaxWidth().height(14.dp)) {
                 Box(Modifier.fillMaxWidth().height(8.dp).align(Alignment.CenterStart).background(MaterialTheme.colorScheme.surfaceVariant))

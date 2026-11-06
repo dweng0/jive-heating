@@ -12,6 +12,8 @@ import kotlinx.coroutines.launch
 data class HomeState(
     /** Admins see the whole house; a member sees only the rooms an admin gave them. */
     val admin: Boolean = false,
+    /** May see the Energy tab: every admin, and members an admin gave energy access. */
+    val energy: Boolean = false,
     val rooms: List<Room> = emptyList(),
     val groups: List<Group> = emptyList(),
     val status: Status? = null,
@@ -55,7 +57,9 @@ class HeatingStore(private val api: HeatingApi, private val scope: CoroutineScop
 
     suspend fun refresh() {
         runCatching {
-            val admin = api.me().admin
+            val me = api.me()
+            val admin = me.admin
+            val energy = me.admin || me.energy
             val rooms = api.rooms()
             // An older service has no boost settings; boosts then start at the old default.
             runCatching { api.boostSettings() }.onSuccess { boost -> _state.update { it.copy(boostTarget = boost.defaultTarget) } }
@@ -63,13 +67,13 @@ class HeatingStore(private val api: HeatingApi, private val scope: CoroutineScop
             runCatching { api.boiler() }.onSuccess { b -> _state.update { it.copy(boilerOverride = b.override) } }
             if (!admin) {
                 // The house status and groups are admin only: a member never asks for them.
-                _state.update { it.copy(admin = false, rooms = rooms, groups = emptyList(), status = null, loading = false) }
+                _state.update { it.copy(admin = false, energy = energy, rooms = rooms, groups = emptyList(), status = null, loading = false) }
                 return@runCatching
             }
             val status = api.status()
             // An older service has no groups; treat that as none.
             val groups = runCatching { api.groups() }.getOrElse { emptyList() }
-            _state.update { it.copy(admin = true, rooms = rooms, groups = groups, status = status, loading = false) }
+            _state.update { it.copy(admin = true, energy = true, rooms = rooms, groups = groups, status = status, loading = false) }
         }.onFailure { e ->
             // Not reaching the service is shown in the status chip, not as a pop-up.
             if (e is HeatingApiException) _state.update { it.copy(loading = false, message = friendlyError(e)) }

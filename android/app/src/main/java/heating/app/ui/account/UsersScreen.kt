@@ -144,6 +144,15 @@ fun UsersScreen(account: AccountApi, rooms: List<Room>, onError: (String) -> Uni
                 }
             },
             onDismiss = { opened = null },
+            onEnergy = { energy ->
+                saving = true
+                scope.launch {
+                    runCatching { account.setUserEnergy(user.id!!, energy) }
+                        .onSuccess { saved -> users = users.map { if (it.id == saved.id) saved else it } }
+                        .onFailure { e -> onError(heating.app.data.friendlyError(e)) }
+                    saving = false
+                }
+            },
         )
     }
 
@@ -207,9 +216,11 @@ private fun UserCard(user: AccountUser, isMe: Boolean, onOpen: () -> Unit, onRes
     }
 }
 
+const val ENERGY_ACCESS_HINT = "See the Energy tab: use, cost and the dials. They can't change meters or prices."
+
 /** A member's rooms: a tick box per room, saved on every change. Admins see every room and get no tick boxes. */
 @Composable
-private fun RoomsDialog(user: AccountUser, rooms: List<Room>, saving: Boolean, onTick: (String, Boolean) -> Unit, onDismiss: () -> Unit) {
+private fun RoomsDialog(user: AccountUser, rooms: List<Room>, saving: Boolean, onTick: (String, Boolean) -> Unit, onDismiss: () -> Unit, onEnergy: (Boolean) -> Unit = {}) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("${user.username}'s rooms") },
@@ -218,6 +229,16 @@ private fun RoomsDialog(user: AccountUser, rooms: List<Room>, saving: Boolean, o
                 if (user.admin) {
                     Text("Sees every room. Admins see and control the whole house.")
                 } else {
+                    Row(
+                        Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(enabled = !saving) { onEnergy(!user.energy) }.padding(bottom = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Energy", style = MaterialTheme.typography.titleSmall)
+                            Text(ENERGY_ACCESS_HINT, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(checked = user.energy, onCheckedChange = onEnergy, enabled = !saving)
+                    }
                     Text(
                         "They see and control only the ticked rooms. Changes save straight away.",
                         style = MaterialTheme.typography.bodySmall,
