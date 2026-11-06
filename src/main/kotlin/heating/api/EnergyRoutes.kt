@@ -133,6 +133,12 @@ data class MeterView(
     val measures: String? = null,
     /** False for a meter that reports power but no energy total: it can only measure an energy area. */
     val reportsEnergy: Boolean = true,
+    /** The Zigbee2MQTT device the meter is on: its own name, or the two-clamp meter it is one clamp of. */
+    val device: String = name,
+    /** "A" or "B" for one clamp of a two-clamp meter; null otherwise. */
+    val clamp: String? = null,
+    /** The clamp reads backwards; its use is still counted. */
+    val reversed: Boolean = false,
 )
 
 fun HeatingApp.meterView(meter: Meter, house: String? = energySettings.get().electricityMeter) = MeterView(
@@ -148,6 +154,9 @@ fun HeatingApp.meterView(meter: Meter, house: String? = energySettings.get().ele
     area = monitoredMeters.areaOf(meter.name),
     measures = energyAreas.measuredBy(meter.name),
     reportsEnergy = meter.reportsEnergy,
+    device = meter.device,
+    clamp = meter.clamp,
+    reversed = meter.reversed,
 )
 
 /** [this] with the fields present in [body] replaced; fields left out are unchanged. */

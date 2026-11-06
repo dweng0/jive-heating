@@ -147,7 +147,10 @@
           "room": { "type": "string", "nullable": true, "description": "Id of the room this monitored device is in; null when in no room" },
           "area": { "type": "string", "nullable": true, "description": "Id of the energy area this monitored plug is in; null when in none. A plug is in one room or one area at most" },
           "measures": { "type": "string", "nullable": true, "description": "Id of the energy area this meter measures as its whole-area meter; null when none" },
-          "reportsEnergy": { "type": "boolean", "description": "False for a meter reporting power but no energy total: it can only measure an energy area, and is never listed as waiting to be set up" }
+          "reportsEnergy": { "type": "boolean", "description": "False for a meter reporting power but no energy total: it can only measure an energy area, and is never listed as waiting to be set up" },
+          "device": { "type": "string", "description": "The Zigbee2MQTT device the meter is on: its own name, or the two-clamp meter it is one clamp of" },
+          "clamp": { "type": "string", "nullable": true, "description": "A or B for one clamp of a two-clamp meter (named '<device> A'); null otherwise" },
+          "reversed": { "type": "boolean", "description": "The clamp reads backwards (fitted the wrong way round); its use is still counted" }
         }
       },
       "EnergyDay": {

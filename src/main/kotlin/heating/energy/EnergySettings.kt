@@ -56,9 +56,9 @@ class EnergySettingsRepository(private val store: Store) {
     fun chooseMeter(meter: String) = update { it.copy(electricityMeter = meter, notices = emptyList()) }
 
     /** [meter] left Zigbee2MQTT: if it was the house meter, stop using it and say why. */
-    fun meterRemoved(meter: String) = update {
+    fun meterRemoved(meter: String, notice: String = "$meter was removed from Zigbee2MQTT") = update {
         if (it.electricityMeter != meter) it
-        else it.copy(electricityMeter = null, notices = it.notices + "$meter was removed from Zigbee2MQTT")
+        else it.copy(electricityMeter = null, notices = if (notice in it.notices) it.notices else it.notices + notice)
     }
 
     @Synchronized

@@ -151,13 +151,16 @@ class HeatingApp(
         roomSensors.start()
         sensors.start()
         offlineActivity.start()
-        meters.onRemoved { meter ->
+        meters.onRemoved { removed ->
+            val meter = removed.name
+            // The notice names the Zigbee2MQTT device, once, even when both of its clamps had a job.
+            val notice = "${removed.device} was removed from Zigbee2MQTT"
             if (energySettings.get().electricityMeter == meter) actionLog.info("house meter {} removed from Zigbee2MQTT", meter)
-            energySettings.meterRemoved(meter)
+            energySettings.meterRemoved(meter, notice)
             monitoredMeters.meterRemoved(meter)
             energyAreas.meterRemoved(meter)?.let { area ->
                 actionLog.info("whole-area meter {} of {} removed from Zigbee2MQTT", meter, area.id)
-                energySettings.update { it.copy(notices = it.notices + "$meter was removed from Zigbee2MQTT") }
+                energySettings.update { if (notice in it.notices) it else it.copy(notices = it.notices + notice) }
             }
         }
         livePower.start()

@@ -44,6 +44,12 @@ data class Meter(
      * counted from power); it cannot be the house meter or be monitored.
      */
     val reportsEnergy: Boolean = true,
+    /** The Zigbee2MQTT device this meter is on: its own name, or for one clamp of a two-clamp meter, that meter's. */
+    val device: String = name,
+    /** "A" or "B" for one clamp of a two-clamp meter (such as a Tuya PJ-1203A); null for a one-clamp meter or a plug. */
+    val clamp: String? = null,
+    /** The clamp says the current flows the other way (it is fitted backwards); its power is still counted as use. */
+    val reversed: Boolean = false,
 )
 
 /**
@@ -58,7 +64,7 @@ class MeterRegistry(
     private val meters = linkedMapOf<String, Meter>()
     /** Every device in the bridge device list, meters or not. */
     private var devices = emptySet<String>()
-    private val removedListeners = CopyOnWriteArrayList<(String) -> Unit>()
+    private val removedListeners = CopyOnWriteArrayList<(Meter) -> Unit>()
     private val onlineListeners = CopyOnWriteArrayList<(Meter) -> Unit>()
     private val readingListeners = CopyOnWriteArrayList<(Meter) -> Unit>()
 
@@ -114,8 +120,8 @@ class MeterRegistry(
         return meter.powerKwh + used(meter.power, read, clock.instant())
     }
 
-    /** Called with the name of a meter that disappeared from Zigbee2MQTT. */
-    fun onRemoved(listener: (String) -> Unit) {
+    /** Called with a meter that disappeared from Zigbee2MQTT (each clamp of a two-clamp meter in turn). */
+    fun onRemoved(listener: (Meter) -> Unit) {
         removedListeners += listener
     }
 
@@ -132,30 +138,36 @@ class MeterRegistry(
     private fun onDevices(payload: String) {
         val devices = parse(payload) as? JsonArray ?: return
         val all = devices.mapNotNull { ((it as? JsonObject)?.get("friendly_name") as? JsonPrimitive)?.content }.toSet()
-        // Every device reporting power, and whether it reports an energy total too.
-        val found = devices.mapNotNull { element ->
-            val device = element as? JsonObject ?: return@mapNotNull null
-            val definition = device["definition"] as? JsonObject ?: return@mapNotNull null
+        // Every meter: each device reporting power, or each clamp of a device reporting power_a, power_b...
+        val found = devices.flatMap { element ->
+            val device = element as? JsonObject ?: return@flatMap emptyList()
+            val definition = device["definition"] as? JsonObject ?: return@flatMap emptyList()
             val model = (definition["model"] as? JsonPrimitive)?.content
+            val name = (device["friendly_name"] as? JsonPrimitive)?.content ?: return@flatMap emptyList()
             val exposed = properties(definition["exposes"])
-            if (model != "TRVZB" && "power" in exposed) {
-                (device["friendly_name"] as? JsonPrimitive)?.content?.let { it to ("energy" in exposed) }
-            } else null
-        }.toMap()
+            when {
+                model == "TRVZB" -> emptyList()
+                "power" in exposed -> listOf(Found(name, name, null, "energy" in exposed))
+                else -> CLAMPS.filter { "power_$it" in exposed }
+                    .map { Found("$name ${it.uppercase()}", name, it.uppercase(), "energy_$it" in exposed) }
+            }
+        }.associateBy { it.name }
         val names = found.keys
 
         val removed = synchronized(this) {
             this.devices = all
-            found.forEach { (name, energy) ->
-                val current = meters[name]
-                if (current == null) meters[name] = Meter(name, discovered = clock.instant(), reportsEnergy = energy)
-                else if (current.reportsEnergy != energy) meters[name] = current.copy(reportsEnergy = energy)
+            found.values.forEach { f ->
+                val current = meters[f.name]
+                if (current == null) {
+                    meters[f.name] = Meter(f.name, discovered = clock.instant(), reportsEnergy = f.energy, device = f.device, clamp = f.clamp)
+                } else if (current.reportsEnergy != f.energy || current.device != f.device || current.clamp != f.clamp) {
+                    meters[f.name] = current.copy(reportsEnergy = f.energy, device = f.device, clamp = f.clamp)
+                }
             }
-            val gone = meters.keys - names
-            gone.forEach { meters.remove(it) }
+            val gone = (meters.keys - names).map { meters.remove(it)!! }
             gone
         }
-        removed.forEach { name -> removedListeners.forEach { it(name) } }
+        removed.forEach { meter -> removedListeners.forEach { it(meter) } }
     }
 
     /** Every `property` in an exposes list, including those nested under `features`. */
@@ -165,13 +177,45 @@ class MeterRegistry(
         else -> emptySet()
     }
 
-    private fun onState(name: String, payload: String) {
-        val meter = update(name) { current -> withReading(current, payload) } ?: return
-        readingListeners.forEach { runCatching { it(meter) } }
+    private fun onState(device: String, payload: String) {
+        val state = parse(payload) as? JsonObject ?: return
+        for (name in metersOn(device)) {
+            val meter = update(name) { current -> withReading(current, clampState(current, state) ?: return@update null) } ?: continue
+            readingListeners.forEach { runCatching { it(meter) } }
+        }
     }
 
-    private fun withReading(current: Meter, payload: String): Meter? {
-        val state = parse(payload) as? JsonObject ?: return null
+    /** Names of the meters on [device]: the device itself, or each of its clamps. */
+    private fun metersOn(device: String): List<String> = synchronized(this) {
+        meters.values.filter { it.device == device }.map { it.name }
+    }
+
+    /**
+     * [state] as [meter] reads it. A clamp of a two-clamp meter takes its own power_x and energy_x, as power and energy, and
+     * is left alone (null) by a message without them. A clamp fitted backwards reports "producing" or a negative power: it is
+     * still use.
+     */
+    private fun clampState(meter: Meter, state: JsonObject): Pair<JsonObject, Boolean>? {
+        val clamp = meter.clamp?.lowercase() ?: return state to meter.reversed
+        val power = (state["power_$clamp"] as? JsonPrimitive)?.doubleOrNull
+        val energy = state["energy_$clamp"] as? JsonPrimitive
+        if (power == null && energy == null) return null
+        val flow = (state["energy_flow_$clamp"] as? JsonPrimitive)?.content
+        val reversed = when {
+            power != null && power < 0 -> true
+            flow != null -> flow == "producing"
+            power != null && power > 0 -> false
+            else -> meter.reversed
+        }
+        val own = buildMap {
+            power?.let { put("power", JsonPrimitive(kotlin.math.abs(it))) }
+            energy?.let { put("energy", it) }
+        }
+        return JsonObject(own) to reversed
+    }
+
+    private fun withReading(current: Meter, reading: Pair<JsonObject, Boolean>): Meter {
+        val (state, reversed) = reading
         val now = clock.instant()
         val energy = (state["energy"] as? JsonPrimitive)?.doubleOrNull ?: current.energy
         // The power last reported is taken to hold until this message.
@@ -190,10 +234,13 @@ class MeterRegistry(
             lastReading = now,
             energyChanged = if (changed) now else current.energyChanged,
             usedSinceEnergyChanged = if (changed) 0.0 else current.usedSinceEnergyChanged + used,
+            reversed = reversed,
         )
     }
 
-    private fun onAvailability(name: String, payload: String) = update(name) { current ->
+    private fun onAvailability(device: String, payload: String) = metersOn(device).forEach { availability(it, payload) }
+
+    private fun availability(name: String, payload: String) = update(name) { current ->
         // Zigbee2MQTT sends {"state":"online"} or, in legacy mode, the bare string.
         val state = ((parse(payload) as? JsonObject)?.get("state") as? JsonPrimitive)?.content ?: payload.trim()
         val online = state == "online"
@@ -223,7 +270,12 @@ class MeterRegistry(
 
     private fun parse(payload: String) = runCatching { Json.parseToJsonElement(payload) }.getOrNull()
 
+    private data class Found(val name: String, val device: String, val clamp: String?, val energy: Boolean)
+
     companion object {
+        /** The clamps a multi-clamp meter may report, as the suffix of power_a, energy_a and so on. */
+        private val CLAMPS = listOf("a", "b", "c")
+
         /** A meter that has sent nothing for this long is stale: its use is unknown, not zero. */
         val STALE_AFTER: Duration = Duration.ofMinutes(30)
 
