@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Fuel as FuelIcon } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
@@ -63,6 +63,7 @@ export function EnergyDials({
   peak,
   today,
   admin,
+  counters,
 }: {
   watts: number | null
   connected: boolean
@@ -72,6 +73,8 @@ export function EnergyDials({
   peak: TodayPeak | null
   today: EnergyDashboard | null
   admin: boolean
+  /** The trip meter, odometer and yesterday's comparison, under the gauges */
+  counters?: ReactNode
 }) {
   const wanted = dialMax(Math.max(watts ?? 0, busiest?.watts ?? 0, peak?.watts ?? 0))
   const [max, setMax] = useState(wanted)
@@ -109,6 +112,7 @@ export function EnergyDials({
         <div className="order-4">
           <FuelGauge today={today} admin={admin} />
         </div>
+        {counters && <div className="order-5 col-span-2 lg:col-span-4">{counters}</div>}
       </CardContent>
     </Card>
   )

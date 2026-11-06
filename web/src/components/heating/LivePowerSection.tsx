@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { energyApi, type EnergyDashboard } from '@/lib/energy'
-import { followBusiest, NO_BUSIEST, places, type Busiest, type TodayPeak } from '@/lib/energyDials'
+import { followBusiest, NO_BUSIEST, places, totalsApi, type Busiest, type EnergyTotals, type TodayPeak } from '@/lib/energyDials'
 import { followPower, powerApi, type LivePower, type PowerBands } from '@/lib/livePower'
 import { useHome } from '@/lib/home'
 import { EnergyDials } from './EnergyDials'
 import { HouseHistoryChart } from './HouseHistoryChart'
 import { OtherAreas } from './OtherAreas'
+import { TripMeters } from './TripMeters'
 import { UseCard } from './UseCard'
 
 /** Today's kWh, cost and peak are recorded every five minutes; there is no point asking more often. */
@@ -25,6 +26,9 @@ export function LivePowerSection() {
   const [today, setToday] = useState<EnergyDashboard | null>(null)
   const [busiest, setBusiest] = useState<Busiest>(NO_BUSIEST)
   const busiestRef = useRef(busiest)
+  const [totals, setTotals] = useState<EnergyTotals | null>(null)
+  /** The house's readings of the last half hour, for the trip meter's 5-minute average. */
+  const [readings, setReadings] = useState<{ at: number; watts: number | null }[]>([])
 
   useEffect(() => {
     let cancelled = false
@@ -34,9 +38,11 @@ export function LivePowerSection() {
           if (cancelled) return
           setBands(s.bands)
           setPeak(s.todayPeak ?? null)
+          setReadings((r) => (r.length > 0 ? r : s.recent.map((p) => ({ at: Date.parse(p.at), watts: p.watts }))))
         },
         () => {},
       )
+      totalsApi.get().then((t) => !cancelled && setTotals(t), () => {})
       energyApi.dashboard('today').then((d) => !cancelled && setToday(d), () => {})
     }
     loadEvery5()
@@ -44,6 +50,10 @@ export function LivePowerSection() {
     const stop = followPower(
       (p) => {
         setLive(p)
+        if (p.at != null) {
+          const at = Date.parse(p.at)
+          setReadings((r) => [...r.filter((q) => q.at > at - 30 * 60_000 && q.at !== at), { at, watts: p.watts }])
+        }
         const next = followBusiest(busiestRef.current, places(p), Date.now())
         busiestRef.current = next
         setBusiest(next)
@@ -71,7 +81,16 @@ export function LivePowerSection() {
 
   return (
     <section data-testid="live-power" className="flex flex-col gap-4">
-      <EnergyDials watts={watts} connected={live != null} bands={bands} busiest={onDial} peak={peak} today={today} admin={admin} />
+      <EnergyDials
+        watts={watts}
+        connected={live != null}
+        bands={bands}
+        busiest={onDial}
+        peak={peak}
+        today={today}
+        admin={admin}
+        counters={<TripMeters totals={totals} readings={readings} />}
+      />
 
       <HouseHistoryChart />
 

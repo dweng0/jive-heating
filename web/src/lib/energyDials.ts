@@ -159,3 +159,69 @@ export const historyApi = {
   get: (range: HistoryRange, to?: number) =>
     request<HouseHistory>('GET', `/api/energy/history?range=${range}${to == null ? '' : `&to=${encodeURIComponent(new Date(to).toISOString())}`}`),
 }
+
+/** Use and cost over a stretch of time. */
+export interface EnergyTotal {
+  kwh: number
+  cost: number
+}
+
+/** GET /api/energy/totals: the odometer's periods and yesterday by this time. */
+export interface EnergyTotals {
+  currency: string
+  pencePerKwh: number
+  today: EnergyTotal
+  week: EnergyTotal
+  month: EnergyTotal
+  year: EnergyTotal
+  yesterdaySoFar: EnergyTotal | null
+}
+
+export const totalsApi = {
+  get: () => request<EnergyTotals>('GET', '/api/energy/totals'),
+}
+
+export type OdometerPeriod = 'today' | 'week' | 'month' | 'year'
+
+export const ODOMETER_PERIODS: { value: OdometerPeriod; label: string }[] = [
+  { value: 'today', label: 'Day' },
+  { value: 'week', label: 'Week' },
+  { value: 'month', label: 'Month' },
+  { value: 'year', label: 'Year' },
+]
+
+/** The house's average power over the 5 minutes up to [now] from its live readings; null with none. */
+export function fiveMinuteAverage(readings: { at: number; watts: number | null }[], now: number): number | null {
+  const recent = readings.filter((r) => r.watts != null && r.at > now - 5 * 60_000 && r.at <= now)
+  if (recent.length === 0) return null
+  return recent.reduce((sum, r) => sum + r.watts!, 0) / recent.length
+}
+
+/** The trip counter: today's kWh, rolling on at the last 5 minutes' average power between the recorded figures. */
+export interface Trip {
+  /** The day it counts, so it starts again from 0 at midnight */
+  day: string
+  kwh: number
+  /** When [kwh] was last moved on */
+  at: number
+}
+
+/**
+ * The trip counter at [now]: on from [trip] at [watts], and never back, except that a new day starts from today's
+ * recorded figure. A newer recorded figure that is higher is taken as it is.
+ */
+export function tripAt(trip: Trip | null, recorded: { day: string; kwh: number }, watts: number | null, now: number): Trip {
+  if (trip == null || trip.day !== recorded.day) return { day: recorded.day, kwh: recorded.kwh, at: now }
+  const rolled = trip.kwh + ((watts ?? 0) * Math.max(0, now - trip.at)) / 3_600_000_000
+  return { day: trip.day, kwh: Math.max(rolled, recorded.kwh), at: now }
+}
+
+/** "▲ 1.2 kWh vs yesterday" (more than yesterday by now) or "▼ 0.5 kWh vs yesterday"; null with nothing yesterday. */
+export function versusYesterday(todayKwh: number, yesterday: EnergyTotal | null): { text: string; more: boolean } | null {
+  if (yesterday == null) return null
+  const delta = todayKwh - yesterday.kwh
+  return { text: `${delta > 0 ? '▲' : '▼'} ${Math.abs(delta).toFixed(1)} kWh vs yesterday`, more: delta > 0 }
+}
+
+/** The household's date of [now], as "2026-11-05", in the browser's timezone. */
+export const dayOf = (now: number) => new Date(now).toLocaleDateString('en-CA')

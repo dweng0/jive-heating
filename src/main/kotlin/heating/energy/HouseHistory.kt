@@ -140,3 +140,63 @@ class HouseHistoryReport(
         val FORMAT: DateTimeFormatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME
     }
 }
+
+/** Use and cost (minor units at today's price) over a stretch of time. */
+@Serializable
+data class EnergyTotal(val kwh: Double, val cost: Double)
+
+/**
+ * The dashboard's odometer and trip counter: the house's use today, since Monday, since the 1st and since 1 January, and
+ * by this time yesterday (null with no samples yesterday). A sample covers the five minutes before it, so one at
+ * midnight counts in the day before.
+ *
+ * openapi: EnergyTotals
+ */
+@Serializable
+data class EnergyTotals(
+    val currency: String,
+    val pencePerKwh: Double,
+    val today: EnergyTotal,
+    val week: EnergyTotal,
+    val month: EnergyTotal,
+    val year: EnergyTotal,
+    val yesterdaySoFar: EnergyTotal?,
+)
+
+/** Works out [EnergyTotals] from the house meter's five-minute samples. */
+class EnergyTotalsReport(
+    private val energy: EnergyHistory,
+    private val settings: EnergySettingsRepository,
+    private val zone: ZoneId,
+    private val clock: Clock,
+) {
+    fun now(): EnergyTotals {
+        val now = clock.instant()
+        val today = now.atZone(zone).toLocalDate()
+        val midnight = today.atStartOfDay(zone).toInstant()
+        val yearStart = today.withDayOfYear(1).atStartOfDay(zone).toInstant()
+        val yesterday = today.minusDays(1).atStartOfDay(zone).toInstant()
+        val from = minOf(yearStart, yesterday)
+        val samples = energy.samples(from, now).filter { it.at > from }
+        val prices = settings.get()
+        fun total(after: Instant, until: Instant = now): EnergyTotal {
+            val kwh = samples.filter { it.at > after && it.at <= until }.sumOf { it.kwh ?: 0.0 }
+            return EnergyTotal(round(kwh, 4), round(kwh * prices.electricityPencePerKwh, 2))
+        }
+        val weekStart = today.with(java.time.DayOfWeek.MONDAY).atStartOfDay(zone).toInstant()
+        val monthStart = today.withDayOfMonth(1).atStartOfDay(zone).toInstant()
+        val sameTimeYesterday = now.atZone(zone).minusDays(1).toInstant()
+        val hadYesterday = samples.any { it.at > yesterday && it.at <= midnight }
+        return EnergyTotals(
+            currency = prices.currency,
+            pencePerKwh = prices.electricityPencePerKwh,
+            today = total(midnight),
+            week = total(weekStart),
+            month = total(monthStart),
+            year = total(yearStart),
+            yesterdaySoFar = if (hadYesterday) total(yesterday, sameTimeYesterday) else null,
+        )
+    }
+
+    private fun round(v: Double, places: Int) = BigDecimal.valueOf(v).setScale(places, RoundingMode.HALF_UP).toDouble()
+}

@@ -1,6 +1,6 @@
 # BDD Status
 
-Checked 407 scenario(s) across 116 test file(s).
+Checked 410 scenario(s) across 117 test file(s).
 
 
 ## Feature: Service foundation
@@ -538,6 +538,9 @@ Checked 407 scenario(s) across 116 test file(s).
 - [x] The fuel gauge drains towards the daily target
 - [x] Today's peak is the highest five-minute power since midnight
 - [x] Today's peak says what was using the power
+- [x] The trip counter ticks up with the house's use
+- [x] The odometer totals the day, week, month or year
+- [x] Today is compared with yesterday at the same time
 
 ## Feature: Energy history chart
 
@@ -546,4 +549,4 @@ Checked 407 scenario(s) across 116 test file(s).
 - [x] The chart says what each point used and cost
 
 ---
-**407/407 scenarios covered.**
+**410/410 scenarios covered.**

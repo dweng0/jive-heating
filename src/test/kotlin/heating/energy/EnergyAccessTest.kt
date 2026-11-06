@@ -92,7 +92,7 @@ class EnergyAccessTest {
         t.discover(meters = listOf("Main Clamp"))
         t.api { client -> assertEquals(HttpStatusCode.OK, client.put("/api/meters/Main%20Clamp/house").status) }
         val (token, id) = sam(t)
-        val reads = listOf("/api/dashboard", "/api/power", "/api/energy/history")
+        val reads = listOf("/api/dashboard", "/api/power", "/api/energy/history", "/api/energy/totals")
         val adminOnly = listOf(
             HttpMethod.Get to "/api/meters",
             HttpMethod.Get to "/api/settings/energy",

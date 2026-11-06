@@ -65,6 +65,16 @@ const PEAK = {
 
 const HOUR = 3_600_000
 
+const TOTALS = {
+  currency: 'GBP',
+  pencePerKwh: 27,
+  today: { kwh: 8.2, cost: 221.4 },
+  week: { kwh: 51, cost: 1377 },
+  month: { kwh: 190, cost: 5130 },
+  year: { kwh: 2100, cost: 56700 },
+  yesterdaySoFar: { kwh: 7, cost: 189 },
+}
+
 /** A week of hourly points ending at [to]; the history the chart is given. */
 function history(range: string, to: number | null) {
   const end = to ?? Date.now()
@@ -78,7 +88,7 @@ function history(range: string, to: number | null) {
   return { currency: 'GBP', range, from: points[0].at, to: new Date(end).toISOString(), earliest: new Date(Date.now() - 400 * 24 * HOUR).toISOString(), points }
 }
 
-async function serve(page: Page, opts: { me?: typeof jane; first?: object; target?: Target; peak?: object | null } = {}) {
+async function serve(page: Page, opts: { me?: typeof jane; first?: object; target?: Target; peak?: object | null; totals?: () => object; recent?: object[] } = {}) {
   const sockets: WebSocketRoute[] = []
   const asked: { range: string; to: string | null }[] = []
   await page.routeWebSocket('**/ws', () => {})
@@ -99,7 +109,8 @@ async function serve(page: Page, opts: { me?: typeof jane; first?: object; targe
       return route.fulfill({ json: [{ id: 'lights', name: 'Lights', wholeMeter: null, overlaps: [] }] })
     }
     if (pathname === '/api/dashboard') return route.fulfill({ json: today(opts.target === undefined ? { kwh: 12, usedKwh: 5, expectedKwh: 6 } : opts.target) })
-    if (pathname === '/api/power') return route.fulfill({ json: { bands: { green: 350, red: 4000 }, recent: [], todayPeak: opts.peak === undefined ? PEAK : opts.peak } })
+    if (pathname === '/api/power') return route.fulfill({ json: { bands: { green: 350, red: 4000 }, recent: opts.recent ?? [], todayPeak: opts.peak === undefined ? PEAK : opts.peak } })
+    if (pathname === '/api/energy/totals') return route.fulfill({ json: (opts.totals ?? (() => TOTALS))() })
     if (pathname === '/api/energy/history') {
       const range = url.searchParams.get('range') ?? 'day'
       const to = url.searchParams.get('to')
@@ -314,4 +325,63 @@ test('a member without energy access has no energy tab', async ({ page }) => {
   await page.goto('/energy')
   await expect(page).toHaveURL(/\/$/)
   await expect(page.getByRole('link', { name: 'Energy' })).toHaveCount(0)
+})
+
+// BDD: The trip counter ticks up with the house's use
+test("the trip counter ticks up with the house's use", async ({ page }) => {
+  await page.clock.install()
+  let recorded = 8.2
+  const steady = (w: number) => ({ ...live(1200, { Kitchen: 900, Utility: 300 }), watts: w })
+  const { push } = await serve(page, { first: steady(1200), totals: () => ({ ...TOTALS, today: { kwh: recorded, cost: recorded * 27 } }) })
+  await page.goto('/energy')
+  const trip = page.getByTestId('trip-kwh')
+  await expect(trip).toHaveAttribute('data-value', '8.20')
+  await expect(page.getByTestId('trip-cost')).toHaveText('£2.21')
+  // A minute at 1200 W is 0.02 kWh.
+  for (let i = 0; i < 6; i++) {
+    await page.clock.fastForward(10_000)
+    push(steady(1200))
+  }
+  await expect(trip).toHaveAttribute('data-value', '8.22')
+  // The recorded figure arriving lower does not roll it back; higher is taken.
+  await page.clock.fastForward(5 * 60_000)
+  await expect.poll(async () => Number(await trip.getAttribute('data-value'))).toBeGreaterThanOrEqual(8.22)
+  recorded = 9.5
+  await page.clock.fastForward(5 * 60_000)
+  await expect.poll(async () => Number(await trip.getAttribute('data-value'))).toBeGreaterThanOrEqual(9.5)
+})
+
+// BDD: The odometer totals the day, week, month or year
+test('the odometer totals the day, week, month or year', async ({ page }) => {
+  await serve(page, { first: { ...live(0, { Kitchen: 0, Utility: 0 }), watts: 0 } })
+  await page.goto('/energy')
+  const odometer = page.getByTestId('odometer-kwh')
+  const periods = page.getByRole('group', { name: 'Odometer period' })
+  await periods.getByRole('button', { name: 'Year' }).click()
+  await expect(odometer).toHaveAttribute('data-value', '2100.0')
+  await expect(page.getByTestId('odometer-cost')).toHaveText('£567.00')
+  await periods.getByRole('button', { name: 'Month' }).click()
+  await expect(odometer).toHaveAttribute('data-value', '190.0')
+  await periods.getByRole('button', { name: 'Day' }).click()
+  await expect(odometer).toHaveAttribute('data-value', '8.2')
+  // Remembered.
+  await periods.getByRole('button', { name: 'Week' }).click()
+  await page.reload()
+  await expect(page.getByRole('group', { name: 'Odometer period' }).getByRole('button', { name: 'Week' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByTestId('odometer-kwh')).toHaveAttribute('data-value', '51.0')
+})
+
+// BDD: Today is compared with yesterday at the same time
+test('today is compared with yesterday at the same time', async ({ page }) => {
+  await serve(page, { first: { ...live(0, { Kitchen: 0, Utility: 0 }), watts: 0 } })
+  await page.goto('/energy')
+  await expect(page.getByTestId('vs-yesterday')).toHaveText('▲ 1.2 kWh vs yesterday')
+  await expect(page.getByTestId('vs-yesterday')).toHaveAttribute('data-more', 'true')
+})
+
+test('less than yesterday is green, and nothing yesterday says nothing', async ({ page }) => {
+  await serve(page, { first: { ...live(0, { Kitchen: 0, Utility: 0 }), watts: 0 }, totals: () => ({ ...TOTALS, yesterdaySoFar: { kwh: 8.7, cost: 235 } }) })
+  await page.goto('/energy')
+  await expect(page.getByTestId('vs-yesterday')).toHaveText('▼ 0.5 kWh vs yesterday')
+  await expect(page.getByTestId('vs-yesterday')).toHaveAttribute('data-more', 'false')
 })

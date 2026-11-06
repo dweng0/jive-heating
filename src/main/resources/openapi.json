@@ -531,6 +531,23 @@
           "points": { "type": "array", "items": { "$ref": "#/components/schemas/HouseHistoryPoint" } }
         }
       },
+      "EnergyTotal": {
+        "type": "object", "required": ["kwh", "cost"],
+        "properties": { "kwh": { "type": "number" }, "cost": { "type": "number", "description": "Minor units at today's electricity price" } }
+      },
+      "EnergyTotals": {
+        "type": "object", "required": ["currency", "pencePerKwh", "today", "week", "month", "year", "yesterdaySoFar"],
+        "description": "The house's use for the dashboard's odometer and trip counter. Calendar periods in the household's timezone; a sample at 00:00 counts in the day before",
+        "properties": {
+          "currency": { "type": "string" },
+          "pencePerKwh": { "type": "number", "description": "Today's electricity price in minor units" },
+          "today": { "$ref": "#/components/schemas/EnergyTotal" },
+          "week": { "$ref": "#/components/schemas/EnergyTotal", "description": "Since Monday 00:00" },
+          "month": { "$ref": "#/components/schemas/EnergyTotal", "description": "Since the 1st" },
+          "year": { "$ref": "#/components/schemas/EnergyTotal", "description": "Since 1 January" },
+          "yesterdaySoFar": { "allOf": [{ "$ref": "#/components/schemas/EnergyTotal" }], "nullable": true, "description": "Yesterday from 00:00 to this time; null with no samples yesterday" }
+        }
+      },
       "PowerSummary": {
         "description": "What the dials need besides the live readings (GET /api/power).",
         "type": "object", "required": ["recent"],
@@ -1051,6 +1068,12 @@
           { "name": "to", "in": "query", "schema": { "type": "string", "format": "date-time" }, "description": "End of the range; left out, or in the future, it is now" }
         ],
         "responses": { "200": { "description": "history", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HouseHistory" } } } }, "400": { "description": "unknown range or unreadable to" }, "403": { "description": "no energy access" } }
+      }
+    },
+    "/api/energy/totals": {
+      "get": {
+        "summary": "The house's use today, this week, month and year, and by this time yesterday (admins and energy access; others get 403)",
+        "responses": { "200": { "description": "totals", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EnergyTotals" } } } }, "403": { "description": "no energy access" } }
       }
     },
     "/api/admin/users/{id}/energy": {

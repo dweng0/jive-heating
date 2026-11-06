@@ -2700,7 +2700,7 @@ Engineering rules (apply to every scenario):
 
         Scenario: Energy access lets a member read the Energy tab and nothing more
             Given member "sam" has energy access
-            Then "sam" gets 200 from GET /api/dashboard, GET /api/power and GET /api/energy/history, and can open /ws/power
+            Then "sam" gets 200 from GET /api/dashboard, GET /api/power, GET /api/energy/history and GET /api/energy/totals, and can open /ws/power
             And "sam" gets 403 from GET /api/meters, GET /api/settings/energy, PUT /api/settings/energy and GET /api/energy/areas
             And a member without energy access gets 403 from all of them and /ws/power refuses them
 
@@ -2763,6 +2763,25 @@ Engineering rules (apply to every scenario):
             Then todayPeak.parts lists "Kitchen" 3500 W, "Lights" 400 W and "Everything else" 2300 W, largest first
             And a room counts its plugs in it at the time, an area its clamp when recorded or else its plugs, and a plug behind a clamp only once
             And on the web app hovering or tapping the peak gauge shows the parts with their watts and shares, and on Android tapping it does
+
+        Scenario: The trip counter ticks up with the house's use
+            Given the house has used 8.20 kWh today and its average power over the last 5 minutes is 1200 W
+            When someone with energy access watches the dashboard for a minute
+            Then the trip counter, like a car's trip meter, rolls up from "8.20" by about 0.02 kWh, with today's cost under it
+            And it never rolls back: when today's recorded figure arrives it carries on from whichever is higher
+            And it starts again from 0 at midnight
+
+        Scenario: The odometer totals the day, week, month or year
+            Given the house has used 8.2 kWh today, 51.0 kWh since Monday, 190.0 kWh since the 1st and 2100.0 kWh since 1 January
+            When someone with energy access sends GET /api/energy/totals
+            Then it has today, week, month and year, each with kwh and cost at today's price, and the electricity price per kWh
+            And the dashboard's odometer shows one of them with its cost, chosen with Day, Week, Month and Year, and remembers the choice
+
+        Scenario: Today is compared with yesterday at the same time
+            Given at 18:00 the house has used 8.2 kWh today and had used 7.0 kWh by 18:00 yesterday
+            When someone with energy access sends GET /api/energy/totals
+            Then yesterdaySoFar has kwh 7.0, and the dashboard says "▲ 1.2 kWh vs yesterday" in amber
+            And less than yesterday says "▼ 0.5 kWh vs yesterday" in green, and with no samples yesterday nothing is said
 
     Feature: Energy history chart
         As someone with energy access
