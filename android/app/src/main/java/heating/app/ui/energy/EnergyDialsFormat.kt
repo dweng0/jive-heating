@@ -142,3 +142,31 @@ fun pointReadout(p: HouseHistoryPoint, range: HistoryRange, currency: String, zo
     p.targetKwh?.let { add("Target ${formatKwh(it)}") }
     if (p.incomplete) add(READINGS_MISSING)
 }
+
+/** The trip counter: today's kWh rolling on at the last 5 minutes' average power between recorded figures. */
+data class Trip(val day: String, val kwh: Double, val at: Long)
+
+/**
+ * The trip counter at [now] ms: on from [trip] at [watts], and never back, except that a new [day] starts from today's
+ * [recorded] figure. A newer recorded figure that is higher is taken as it is.
+ */
+fun tripAt(trip: Trip?, day: String, recorded: Double, watts: Double?, now: Long): Trip {
+    if (trip == null || trip.day != day) return Trip(day, recorded, now)
+    val rolled = trip.kwh + (watts ?: 0.0) * maxOf(0L, now - trip.at) / 3_600_000_000.0
+    return Trip(day, maxOf(rolled, recorded), now)
+}
+
+/** The house's average power over the 5 minutes up to [now] from its readings (ms, W); null with none. */
+fun fiveMinuteAverage(readings: List<Pair<Long, Double?>>, now: Long): Double? =
+    readings.filter { (at, w) -> w != null && at > now - 300_000 && at <= now }.map { it.second!! }.takeIf { it.isNotEmpty() }?.average()
+
+/** "▲ 1.2 kWh vs yesterday" (and true: more than yesterday by now) or "▼ 0.5 kWh vs yesterday"; null with nothing yesterday. */
+fun versusYesterday(todayKwh: Double, yesterday: heating.app.data.EnergyTotal?): Pair<String, Boolean>? {
+    if (yesterday == null) return null
+    val delta = todayKwh - yesterday.kwh
+    return "${if (delta > 0) "▲" else "▼"} ${one(kotlin.math.abs(delta))} kWh vs yesterday" to (delta > 0)
+}
+
+enum class OdometerPeriod(val label: String) { TODAY("Day"), WEEK("Week"), MONTH("Month"), YEAR("Year") }
+
+fun odometerText(kwh: Double): String = one(kwh)

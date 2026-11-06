@@ -78,6 +78,9 @@ class LivePowerMemory : ViewModel() {
     var peak by mutableStateOf<TodayPeak?>(null)
     var today by mutableStateOf<EnergyDashboard?>(null)
     var busiest by mutableStateOf(Busiest())
+    var totals by mutableStateOf<heating.app.data.EnergyTotals?>(null)
+    /** The house's readings of the last half hour (ms, W), for the trip meter's 5-minute average. */
+    var readings by mutableStateOf<List<Pair<Long, Double?>>>(emptyList())
 }
 
 /**
@@ -100,6 +103,8 @@ fun LivePowerSection(
     var peak by memory::peak
     var today by memory::today
     var busiest by memory::busiest
+    var totals by memory::totals
+    var readings by memory::readings
 
     LaunchedEffect(Unit) {
         launch {
@@ -107,7 +112,9 @@ fun LivePowerSection(
                 runCatching { api.powerSummary() }.onSuccess { s ->
                     bands = s.bands
                     peak = s.todayPeak
+                    if (readings.isEmpty()) readings = s.recent.map { java.time.OffsetDateTime.parse(it.at).toInstant().toEpochMilli() to it.watts }
                 }
+                runCatching { api.energyTotals() }.onSuccess { totals = it }
                 runCatching { api.energyDashboard("today") }.onSuccess { today = it }
                 delay(TODAY_EVERY_MS)
             }
@@ -119,6 +126,10 @@ fun LivePowerSection(
                 api.livePower().collect { p ->
                     backoff = 1_000L
                     live = p
+                    p.at?.let { at ->
+                        val ms = java.time.OffsetDateTime.parse(at).toInstant().toEpochMilli()
+                        readings = readings.filter { it.first > ms - 30 * 60_000 && it.first != ms } + (ms to p.watts)
+                    }
                     busiest = followBusiest(busiest, places(p), System.currentTimeMillis())
                 }
             }
@@ -133,7 +144,9 @@ fun LivePowerSection(
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val onDial = places(live).firstOrNull { it.id == busiest.current }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        EnergyDials(live?.watts, connected = live != null, bands = bands, busiest = onDial, peak = peak, today = today, dark = dark, onSetTarget = if (admin) onAddArea else null)
+        EnergyDials(live?.watts, connected = live != null, bands = bands, busiest = onDial, peak = peak, today = today, dark = dark, onSetTarget = if (admin) onAddArea else null) {
+            TripMeters(totals, readings, dark)
+        }
         HouseHistoryChart(api, dark)
         live?.let { p ->
             val cards = liveCards(p, today)

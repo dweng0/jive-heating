@@ -77,6 +77,7 @@ fun EnergyDials(
     today: EnergyDashboard?,
     dark: Boolean,
     onSetTarget: (() -> Unit)?,
+    counters: (@Composable () -> Unit)? = null,
 ) {
     var max by remember { mutableStateOf(dialMax(maxOf(watts ?: 0.0, busiest?.watts ?: 0.0, peak?.watts ?: 0.0))) }
     val wanted = dialMax(maxOf(watts ?: 0.0, busiest?.watts ?: 0.0, peak?.watts ?: 0.0))
@@ -96,6 +97,7 @@ fun EnergyDials(
                 Box(Modifier.weight(1f)) { PeakGauge(peak, max, dark) }
                 Box(Modifier.weight(1f)) { FuelGauge(today, dark, onSetTarget) }
             }
+            counters?.invoke()
         }
     }
 }

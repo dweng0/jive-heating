@@ -73,3 +73,19 @@ data class HouseHistory(
     val earliest: String? = null,
     val points: List<HouseHistoryPoint> = emptyList(),
 )
+
+/** Use and cost (minor units at today's price) over a stretch of time. */
+@Serializable
+data class EnergyTotal(val kwh: Double, val cost: Double)
+
+/** openapi: EnergyTotals. The odometer's periods, and yesterday by this time (null with nothing recorded yesterday). */
+@Serializable
+data class EnergyTotals(
+    val currency: String = "GBP",
+    val pencePerKwh: Double = 0.0,
+    val today: EnergyTotal,
+    val week: EnergyTotal,
+    val month: EnergyTotal,
+    val year: EnergyTotal,
+    val yesterdaySoFar: EnergyTotal? = null,
+)

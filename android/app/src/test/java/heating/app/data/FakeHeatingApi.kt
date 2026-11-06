@@ -192,6 +192,8 @@ class FakeHeatingApi : HeatingApi {
     var summary = PowerSummary()
     override suspend fun powerSummary(): PowerSummary { call("powerSummary"); return summary }
     var histories: (String, String?) -> HouseHistory = { range, _ -> HouseHistory(range = range, from = "2026-11-05T00:00:00Z", to = "2026-11-06T00:00:00Z") }
+    var totals = EnergyTotals(today = EnergyTotal(0.0, 0.0), week = EnergyTotal(0.0, 0.0), month = EnergyTotal(0.0, 0.0), year = EnergyTotal(0.0, 0.0))
+    override suspend fun energyTotals(): EnergyTotals { call("energyTotals"); return totals }
     override suspend fun houseHistory(range: String, to: String?): HouseHistory { call("houseHistory $range ${to ?: "now"}"); return histories(range, to) }
     override fun livePower(): Flow<LivePower> = power.receiveAsFlow()
 
