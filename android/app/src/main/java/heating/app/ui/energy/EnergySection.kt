@@ -1,5 +1,11 @@
 package heating.app.ui.energy
 
+import heating.app.data.EnergyTarget
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.platform.testTag
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.TextButton
 import androidx.compose.foundation.background
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.role
@@ -50,7 +56,7 @@ private val PERIODS = listOf("today" to "Today", "week" to "Week", "month" to "M
 /** Under the temperature chart: gas, electricity, standing charges and total, with a bar per day for week and month. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EnergySection(state: EnergyState, onPeriod: (String) -> Unit) {
+fun EnergySection(state: EnergyState, onPeriod: (String) -> Unit, onSetTarget: () -> Unit = {}) {
     LaunchedEffect(Unit) { onPeriod(state.period) }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Use and cost", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
@@ -89,6 +95,9 @@ fun EnergySection(state: EnergyState, onPeriod: (String) -> Unit) {
                 noMeterNote(d)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
         }
+        val target = d.target
+        if (target != null) TargetCard(target, today = d.period == "today")
+        else if (d.electricityMeter != null) TextButton(onClick = onSetTarget) { Text(SET_TARGET) }
         val rooms = roomLines(d)
         if (rooms.isNotEmpty()) Devices("Electricity by room, of which", rooms)
         val devices = deviceLines(d)
@@ -150,6 +159,34 @@ fun CostWarning(message: String) {
     }
 }
 
+/** Use so far against the daily target: green under, amber over, a bar with a mark where use should be by now. */
+@Composable
+fun TargetCard(target: EnergyTarget, today: Boolean) {
+    val under = target.deltaKwh <= 0
+    val green = Color(0xFF2E7D32)
+    val amber = Color(0xFFB26A00)
+    val scale = maxOf(target.kwh, target.usedKwh, target.projectedKwh ?: 0.0, 0.001)
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), modifier = Modifier.fillMaxWidth().testTag("energy-target")) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(targetDelta(target.deltaKwh), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = if (under) green else amber)
+            Text(targetProgress(target, today), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Box(Modifier.fillMaxWidth().height(14.dp)) {
+                Box(Modifier.fillMaxWidth().height(8.dp).align(Alignment.CenterStart).background(MaterialTheme.colorScheme.surfaceVariant))
+                Box(Modifier.fillMaxWidth((target.usedKwh / scale).toFloat().coerceIn(0f, 1f)).height(8.dp).align(Alignment.CenterStart).background(if (under) green else amber))
+                Row(Modifier.fillMaxWidth()) {
+                    val at = (target.expectedKwh / scale).toFloat().coerceIn(0.001f, 0.999f)
+                    Spacer(Modifier.weight(at))
+                    Box(Modifier.width(2.dp).fillMaxHeight().background(MaterialTheme.colorScheme.onSurface).semantics { contentDescription = "Where use should be by now" })
+                    Spacer(Modifier.weight(1f - at))
+                }
+            }
+            if (target.incomplete) Text(READINGS_MISSING, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+private val amberDot = Color(0xFFE09000)
+
 @Composable
 private fun DayBars(bars: List<DayBar>) {
     val gas = HeatingTheme.colors.heat
@@ -159,9 +196,10 @@ private fun DayBars(bars: List<DayBar>) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth().height(140.dp), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.Bottom) {
                 bars.forEach { bar ->
+                    Box(Modifier.weight(1f).fillMaxHeight()) {
                     Column(
-                        Modifier.weight(1f).fillMaxHeight().semantics {
-                            contentDescription = bar.date + if (bar.incomplete) ", incomplete" else ""
+                        Modifier.fillMaxSize().semantics {
+                            contentDescription = bar.date + (if (bar.incomplete) ", incomplete" else "") + (if (bar.overTarget) ", over target" else "")
                         },
                     ) {
                         // Weights stack the parts from the bottom, each as a share of the tallest day.
@@ -172,6 +210,17 @@ private fun DayBars(bars: List<DayBar>) {
                         Part(bar.electricity, electricity.copy(alpha = alpha))
                         Part(bar.standing, standing)
                     }
+                    // The daily target as a line across the bar, and a dot on a day over it.
+                    bar.target?.let { t ->
+                        Column(Modifier.fillMaxSize()) {
+                            val above = 1f - t.coerceIn(0f, 1f)
+                            if (above > 0f) Spacer(Modifier.weight(above))
+                            Box(Modifier.fillMaxWidth().height(2.dp).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)))
+                            if (t > 0f) Spacer(Modifier.weight(t.coerceIn(0.0001f, 1f)))
+                        }
+                    }
+                    if (bar.overTarget) Box(Modifier.align(Alignment.TopCenter).size(5.dp).background(amberDot, CircleShape))
+                    }
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -179,6 +228,7 @@ private fun DayBars(bars: List<DayBar>) {
                 Key(electricity, "Electricity")
                 Key(standing, "Standing")
             }
+            if (bars.any { it.target != null }) Text("Line: the daily target. Dot: over target.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (bars.any { it.incomplete }) {
                 Text(
                     "Faded days are incomplete: the service or the meter was not recording.",

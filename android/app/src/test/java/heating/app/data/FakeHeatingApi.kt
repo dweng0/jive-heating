@@ -69,6 +69,15 @@ class FakeHeatingApi : HeatingApi {
     override suspend fun addEnergyArea(name: String) = EnergyArea(name.lowercase(), name)
     override suspend fun renameEnergyArea(id: String, name: String) = EnergyArea(id, name)
     override suspend fun deleteEnergyArea(id: String) {}
+    override suspend fun stopUsingMeterForHouse(meter: String): EnergySettings { call("stopUsingMeterForHouse $meter"); return EnergySettings() }
+    override suspend fun labelMeter(meter: String, label: String): Meter { call("labelMeter $meter $label"); return Meter(meter, label = label) }
+    override suspend fun setMeterJob(meter: String, job: MeterJob): Meter { call("setMeterJob $meter $job"); return Meter(meter) }
+    override suspend fun setDailyTarget(kwh: Double?): EnergySettings { call("setDailyTarget $kwh"); return EnergySettings(dailyKwhTarget = kwh) }
+    override suspend fun putMeterInArea(area: String, meter: String) { call("putMeterInArea $area $meter") }
+    override suspend fun takeMeterOutOfArea(area: String, meter: String) { call("takeMeterOutOfArea $area $meter") }
+    override suspend fun shareCircuit(area: String, other: String) { call("shareCircuit $area $other") }
+    override suspend fun stopSharingCircuit(area: String, other: String) { call("stopSharingCircuit $area $other") }
+    override suspend fun areaUsage(area: String, window: String, to: String?): EnergyUsage = EnergyUsage(from = "", to = "")
     override suspend fun assignValve(roomId: String, valve: String): Room { call("assignValve $roomId $valve"); return rooms.getValue(roomId) }
     override suspend fun removeValve(roomId: String, valve: String): Room { call("removeValve $roomId $valve"); return rooms.getValue(roomId) }
 

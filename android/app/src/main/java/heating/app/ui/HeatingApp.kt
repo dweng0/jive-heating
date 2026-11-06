@@ -72,6 +72,8 @@ import heating.app.data.EnergyStore
 import heating.app.ui.energy.EnergyPricesCard
 import heating.app.ui.account.BoostSettingsCard
 import heating.app.ui.energy.EnergyScreen
+import heating.app.ui.energy.EnergyManageScreen
+import heating.app.ui.energy.AreaEnergyScreen
 import heating.app.ui.energy.EverythingElseEnergyScreen
 import heating.app.ui.energy.RoomEnergyScreen
 import heating.app.ui.energy.IgnoredDevicesCard
@@ -152,6 +154,8 @@ private fun Connected(connection: Connection, onSignOut: () -> Unit, onPasswordC
         "room/{id}" -> room?.name ?: ""
         "energy/room/{id}" -> room?.name ?: "Energy"
         "energy/else" -> "Everything else"
+        "energy/manage" -> "Manage energy"
+        "energy/area/{id}" -> energyState.dashboard?.areas?.firstOrNull { it.area == roomId }?.name ?: "Energy"
         "group/{id}" -> roomId?.let { state.group(it) }?.name ?: ""
         "schedule/{zoneId}" -> "${scheduleRoom?.name ?: ""} schedule"
         "settings/{id}" -> "${room?.name ?: ""} settings"
@@ -249,11 +253,19 @@ private fun Connected(connection: Connection, onSignOut: () -> Unit, onPasswordC
                         onOpenRoom = { nav.navigate("energy/room/${android.net.Uri.encode(it)}") },
                         onOpenEverythingElse = { nav.navigate("energy/else") },
                         contentPadding = padding,
+                        onOpenArea = { nav.navigate("energy/area/${android.net.Uri.encode(it)}") },
+                        onManage = { nav.navigate("energy/manage") },
                     )
                 }
             }
             composable("energy/room/{id}") { e ->
                 if (state.admin) RoomEnergyScreen(connection.api, e.arguments?.getString("id")!!, room?.name, contentPadding = padding)
+            }
+            composable("energy/manage") {
+                if (state.admin) EnergyManageScreen(connection.api, state.rooms, contentPadding = padding, onMessage = { scope.launch { snackbar.showSnackbar(it) } })
+            }
+            composable("energy/area/{id}") { e ->
+                if (state.admin) AreaEnergyScreen(connection.api, e.arguments?.getString("id")!!, contentPadding = padding)
             }
             composable("energy/else") {
                 if (state.admin) EverythingElseEnergyScreen(connection.api, contentPadding = padding)

@@ -17,7 +17,14 @@ data class UsagePoint(
 
 /** openapi: EnergyArea. A named thing with meters and no valves, such as "Lights". [id] stays the same through a rename. */
 @Serializable
-data class EnergyArea(val id: String, val name: String)
+data class EnergyArea(
+    val id: String,
+    val name: String,
+    /** The clamp that measures all of it. */
+    val wholeMeter: String? = null,
+    /** Ids of the areas it shares a circuit with. */
+    val overlaps: List<String> = emptyList(),
+)
 
 /** The name an energy area is created with or renamed to. */
 @Serializable

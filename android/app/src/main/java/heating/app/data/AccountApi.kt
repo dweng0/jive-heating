@@ -30,6 +30,23 @@ data class AccountUser(
     val createdAt: String? = null,
     /** Ids of the rooms this person can see; an admin has every room. */
     val rooms: List<String> = emptyList(),
+    /** Admin's list only: last request with any of their sessions. */
+    val lastSeen: String? = null,
+    /** Admin's list only: a request in the last five minutes. */
+    val activeNow: Boolean? = null,
+    /** Admin's list only: sessions not signed out or expired. */
+    val sessions: Int? = null,
+)
+
+/** openapi: UserSession. One sign-in on one device; [current] is the one this phone is using. */
+@Serializable
+data class UserSession(
+    val id: String,
+    val device: String,
+    val signedInAt: String,
+    val lastSeen: String,
+    val signedOutAt: String? = null,
+    val current: Boolean = false,
 )
 
 @Serializable
@@ -164,6 +181,21 @@ class AccountApi(
 
     suspend fun deleteUser(id: String) {
         client.delete("api/admin/users/${id.encodeURLPathPart()}")
+    }
+
+    suspend fun userSessions(id: String): List<UserSession> = client.get("api/admin/users/${id.encodeURLPathPart()}/sessions").body()
+
+    suspend fun signOutSession(id: String, session: String) {
+        client.delete("api/admin/users/${id.encodeURLPathPart()}/sessions/${session.encodeURLPathPart()}")
+    }
+
+    suspend fun signOutEverywhere(id: String) {
+        client.delete("api/admin/users/${id.encodeURLPathPart()}/sessions")
+    }
+
+    /** Ends this phone's session on the service. */
+    suspend fun logout() {
+        client.post("api/auth/logout")
     }
 
     companion object {

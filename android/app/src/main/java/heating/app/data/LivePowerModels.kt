@@ -21,7 +21,13 @@ data class LivePower(
     val rooms: List<RoomPower> = emptyList(),
     val devices: List<DevicePower> = emptyList(),
     val elseWatts: Double? = null,
+    /** Energy areas' power now: the whole-area meter's, else the sum of its plugs reporting. */
+    val areas: List<AreaPower> = emptyList(),
 )
+
+/** An energy area's live power; null while its clamp has no live reading. */
+@Serializable
+data class AreaPower(val area: String, val name: String, val watts: Double? = null)
 
 /** Green up to [green] W (the typical overnight load), red from [red] W (the household's top tenth). */
 @Serializable

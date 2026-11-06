@@ -1,5 +1,7 @@
 package heating.app.ui.account
 
+import androidx.compose.ui.platform.testTag
+import heating.app.data.UserSession
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -66,6 +68,7 @@ fun UsersScreen(account: AccountApi, rooms: List<Room>, onError: (String) -> Uni
     var resetting by remember { mutableStateOf<AccountUser?>(null) }
     var deleting by remember { mutableStateOf<AccountUser?>(null) }
     var opened by rememberSaveable { mutableStateOf<String?>(null) }
+    var devicesOf by remember { mutableStateOf<AccountUser?>(null) }
     var saving by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
@@ -90,6 +93,7 @@ fun UsersScreen(account: AccountApi, rooms: List<Room>, onError: (String) -> Uni
                     onResetPassword = { resetting = user },
                     onToggleAdmin = { act("Couldn't change admin") { account.patchUser(user.id!!, admin = !user.admin) } },
                     onDelete = { deleting = user },
+                    onDevices = { devicesOf = user },
                 )
             }
         }
@@ -143,6 +147,10 @@ fun UsersScreen(account: AccountApi, rooms: List<Room>, onError: (String) -> Uni
         )
     }
 
+    devicesOf?.let { user ->
+        SessionsDialog(account, user, onError, onDismiss = { devicesOf = null }, onChanged = { act("Couldn't load people") {} })
+    }
+
     deleting?.let { user ->
         AlertDialog(
             onDismissRequest = { deleting = null },
@@ -159,17 +167,27 @@ fun UsersScreen(account: AccountApi, rooms: List<Room>, onError: (String) -> Uni
 }
 
 @Composable
-private fun UserCard(user: AccountUser, isMe: Boolean, onOpen: () -> Unit, onResetPassword: () -> Unit, onToggleAdmin: () -> Unit, onDelete: () -> Unit) {
+private fun UserCard(user: AccountUser, isMe: Boolean, onOpen: () -> Unit, onResetPassword: () -> Unit, onToggleAdmin: () -> Unit, onDelete: () -> Unit, onDevices: () -> Unit = {}) {
     var menu by remember { mutableStateOf(false) }
     Card(onClick = onOpen, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         ListItem(
             headlineContent = { Text(if (isMe) "${user.username} (you)" else user.username) },
-            supportingContent = { Text((if (user.admin) "Admin" else "Member") + " · " + roomsSummary(user)) },
+            supportingContent = {
+                Column {
+                    Text(
+                        presence(user),
+                        color = if (user.activeNow == true) androidx.compose.ui.graphics.Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.testTag("presence-${user.username}"),
+                    )
+                    Text((if (user.admin) "Admin" else "Member") + " · " + roomsSummary(user))
+                }
+            },
             leadingContent = { Icon(if (user.admin) Icons.Rounded.Shield else Icons.Rounded.Person, null) },
             trailingContent = {
                 Box {
                     IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, "Options for ${user.username}") }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        DropdownMenuItem(text = { Text("Devices") }, onClick = { menu = false; onDevices() })
                         DropdownMenuItem(text = { Text("Reset password") }, onClick = { menu = false; onResetPassword() })
                         DropdownMenuItem(
                             text = { Text(if (user.admin) "Remove admin" else "Make admin") },
@@ -280,3 +298,48 @@ private fun ResetPasswordDialog(username: String, onDismiss: () -> Unit, onReset
 }
 
 internal fun Modifier.clickableRow(onClick: () -> Unit) = this.clickable(onClick = onClick)
+
+/** A person's sessions: each device, when it signed in and was last seen, and "Sign out"; this phone's has none. */
+@Composable
+fun SessionsDialog(account: AccountApi, user: AccountUser, onError: (String) -> Unit, onDismiss: () -> Unit, onChanged: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var sessions by remember { mutableStateOf<List<UserSession>?>(null) }
+    var version by remember { mutableStateOf(0) }
+    LaunchedEffect(user.id, version) {
+        runCatching { account.userSessions(user.id!!) }.onSuccess { sessions = it }.onFailure { onError(heating.app.data.friendlyError(it)) }
+    }
+    fun signOut(block: suspend () -> Unit) = scope.launch {
+        runCatching { block() }.onSuccess { version++; onChanged() }.onFailure { onError(heating.app.data.friendlyError(it)) }
+    }
+    val live = sessions.orEmpty().filter { it.signedOutAt == null }
+    val ended = sessions.orEmpty().filter { it.signedOutAt != null }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("${user.username}'s devices") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (sessions == null) Text("Loading…")
+                else if (live.isEmpty()) Text("Not signed in anywhere.")
+                live.forEach { s ->
+                    Row(Modifier.fillMaxWidth().testTag("session-${s.id}"), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(s.device + if (s.current) " · This device" else "", fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+                            Text("Last seen ${ago(s.lastSeen)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        if (!s.current) TextButton(onClick = { signOut { account.signOutSession(user.id!!, s.id) } }) { Text("Sign out") }
+                    }
+                }
+                if (ended.isNotEmpty()) {
+                    Text("Signed out", style = MaterialTheme.typography.labelMedium)
+                    ended.forEach { Text("${it.device} · ${ago(it.signedOutAt!!)}", style = MaterialTheme.typography.bodySmall) }
+                }
+            }
+        },
+        confirmButton = {
+            if (live.any { !it.current }) {
+                TextButton(onClick = { signOut { account.signOutEverywhere(user.id!!) } }) { Text("Sign out everywhere", color = MaterialTheme.colorScheme.error) }
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+    )
+}

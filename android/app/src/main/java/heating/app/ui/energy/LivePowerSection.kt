@@ -1,5 +1,6 @@
 package heating.app.ui.energy
 
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.animateFloatAsState
@@ -84,7 +85,13 @@ class LivePowerMemory : ViewModel() {
 
 /** The house's electricity now, on a dial coloured by the household's own use, with its rooms as cards. Admin only. */
 @Composable
-fun LivePowerSection(api: HeatingApi, onOpenRoom: (String) -> Unit, onOpenEverythingElse: () -> Unit) {
+fun LivePowerSection(
+    api: HeatingApi,
+    onOpenRoom: (String) -> Unit,
+    onOpenEverythingElse: () -> Unit,
+    onOpenArea: (String) -> Unit = {},
+    onAddArea: () -> Unit = {},
+) {
     val memory = viewModel<LivePowerMemory>()
     var live by memory::live
     var bands by memory::bands
@@ -141,14 +148,20 @@ fun LivePowerSection(api: HeatingApi, onOpenRoom: (String) -> Unit, onOpenEveryt
             }
         }
         live?.let { p ->
-            liveCards(p, today).forEach { card ->
-                val open: (() -> Unit)? = when {
-                    card.key == "rest" -> onOpenEverythingElse
-                    card.key.startsWith("room-") -> ({ onOpenRoom(card.key.removePrefix("room-")) })
-                    else -> null
-                }
+            val cards = liveCards(p, today)
+            val (areaCards, others) = cards.partition { it.key.startsWith("area-") }
+            others.filter { it.key != "rest" }.forEach { card ->
+                val open: (() -> Unit)? = if (card.key.startsWith("room-")) ({ onOpenRoom(card.key.removePrefix("room-")) }) else null
                 UseCard(card, zoneColor(PowerZone.NEUTRAL, dark), open)
             }
+            // "Other areas", below the rooms and above everything else; with none, only the action to add one.
+            if (areaCards.isEmpty()) {
+                OutlinedButton(onClick = onAddArea) { Text("Add area") }
+            } else {
+                Text("Other areas", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp))
+                areaCards.forEach { card -> UseCard(card, zoneColor(PowerZone.NEUTRAL, dark)) { onOpenArea(card.key.removePrefix("area-")) } }
+            }
+            others.filter { it.key == "rest" }.forEach { UseCard(it, zoneColor(PowerZone.NEUTRAL, dark), onOpenEverythingElse) }
         }
     }
 }

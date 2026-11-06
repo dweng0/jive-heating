@@ -27,6 +27,11 @@ fun activityText(e: ActivityEvent, brief: Boolean): String {
     val state = e.value?.takeIf { it.isString }?.content
     fun pick(wide: String, narrow: String) = if (brief) narrow else wide
     return when (e.kind) {
+        "session" -> when {
+            state == "in" -> pick("$who signed in${e.reason?.let { " on $it" }.orEmpty()}", "$who · signed in")
+            e.reason != null -> pick("${e.reason} signed $who out", "${e.reason} · signed $who out")
+            else -> pick("$who signed out", "$who · signed out")
+        }
         "setpoint" ->
             if (house) pick("$who set the whole house to $target", "$who · House $target")
             else pick("$who turned the $room thermostat to $target", "$who · $short $target")

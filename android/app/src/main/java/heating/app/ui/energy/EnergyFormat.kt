@@ -139,16 +139,31 @@ fun roomLines(d: EnergyDashboard): List<DeviceLine> {
 fun noMeterNote(d: EnergyDashboard): String? = if (d.electricityMeter == null) NO_METER else null
 
 /** One day's bar, each part as a fraction of the tallest day. */
-data class DayBar(val date: String, val gas: Float, val electricity: Float, val standing: Float, val incomplete: Boolean) {
+data class DayBar(
+    val date: String,
+    val gas: Float,
+    val electricity: Float,
+    val standing: Float,
+    val incomplete: Boolean,
+    /** Where the day's total would be with electricity at the daily target, as a share of the tallest; null with no target. */
+    val target: Float? = null,
+    val overTarget: Boolean = false,
+) {
     val total: Float get() = gas + electricity + standing
 }
 
 /** A bar per day for week and month; none for today. */
 fun dayBars(d: EnergyDashboard): List<DayBar> {
     if (d.period == "today") return emptyList()
-    val max = d.days.maxOfOrNull { it.totalCost }?.takeIf { it > 0 } ?: 1.0
+    val daily = d.target?.let { it.kwh / d.days.size.coerceAtLeast(1) }
+    val price = d.electricityKwh?.takeIf { it > 0 }?.let { (d.electricityCost ?: 0.0) / it }
+    fun atTarget(day: heating.app.data.EnergyDay) = if (daily != null && price != null) day.gasCost + day.standingCost + daily * price else null
+    val max = d.days.maxOfOrNull { maxOf(it.totalCost, atTarget(it) ?: 0.0) }?.takeIf { it > 0 } ?: 1.0
     return d.days.map {
-        DayBar(it.date, (it.gasCost / max).toFloat(), ((it.electricityCost ?: 0.0) / max).toFloat(), (it.standingCost / max).toFloat(), it.incomplete)
+        DayBar(
+            it.date, (it.gasCost / max).toFloat(), ((it.electricityCost ?: 0.0) / max).toFloat(), (it.standingCost / max).toFloat(), it.incomplete,
+            atTarget(it)?.let { t -> (t / max).toFloat() }, (it.targetDeltaKwh ?: 0.0) > 0,
+        )
     }
 }
 

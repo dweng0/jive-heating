@@ -71,7 +71,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // Stop this phone getting the person's notifications; outlives the cancelled view-model work.
         settings.load()?.let { config ->
             val app = getApplication<Application>()
-            CoroutineScope(Dispatchers.IO).launch { unregisterFromPush(app, AccountApi(config.baseUrl, config.token)) }
+            CoroutineScope(Dispatchers.IO).launch {
+                val account = AccountApi(config.baseUrl, config.token)
+                unregisterFromPush(app, account)
+                // Ends this phone's session on the service, so People no longer lists it as signed in.
+                runCatching { account.logout() }
+            }
         }
         viewModelScope.coroutineContext.cancelChildren()
         settings.signOut()

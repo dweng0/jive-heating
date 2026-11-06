@@ -103,5 +103,10 @@ fun liveCards(live: LivePower, today: EnergyDashboard?): List<LiveCard> {
         val d = today?.everythingElse
         LiveCard("rest", "Everything else", "What no plug accounts for", formatPower(w), share(w), day(d?.kwh, d?.cost))
     }
-    return rooms + devices + listOfNotNull(rest)
+    // Energy areas sit below the rooms and above everything else; their power is "No reading" while the clamp has none.
+    val areas = live.areas.sortedBy { it.name.lowercase() }.map { a ->
+        val d = today?.areas?.firstOrNull { it.area == a.area }
+        LiveCard("area-${a.area}", a.name, null, if (a.watts == null) "No reading" else formatPower(a.watts), share(a.watts), day(d?.kwh, d?.cost))
+    }
+    return rooms + devices + areas + listOfNotNull(rest)
 }

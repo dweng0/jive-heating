@@ -158,6 +158,70 @@ fun RoomEnergyScreen(api: HeatingApi, roomId: String, roomName: String?, content
     }
 }
 
+/**
+ * An energy area's electricity: the same dashboard as a room's. The carousel starts with the whole area, then each plug; the
+ * table has a "Rest of" row for what its clamp measures that no plug does. A clamp alone is one chart and no table. Admin only.
+ */
+@Composable
+fun AreaEnergyScreen(api: HeatingApi, areaId: String, contentPadding: PaddingValues) {
+    val live = rememberLivePower(api)
+    var today by remember { mutableStateOf<EnergyDashboard?>(null) }
+    var meters by remember { mutableStateOf<List<heating.app.data.Meter>>(emptyList()) }
+    LaunchedEffect(areaId) {
+        while (true) {
+            runCatching { api.energyDashboard("today") }.onSuccess { today = it }
+            runCatching { api.meters() }.onSuccess { meters = it }
+            delay(PLUGS_EVERY_MS)
+        }
+    }
+    val area = today?.areas?.firstOrNull { it.area == areaId }
+    Column(
+        Modifier.fillMaxSize().padding(contentPadding).verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        if (today != null && area == null) {
+            Text("Area not found", style = MaterialTheme.typography.titleMedium)
+            return@Column
+        }
+        if (area?.overlaps?.isNotEmpty() == true) {
+            Text("Some use is also counted in ${area.overlaps.joinToString(" and ")}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Figures(
+            now = nowText(live != null, live?.areas?.firstOrNull { it.area == areaId }?.watts),
+            kwh = area?.kwh,
+            cost = area?.cost,
+            currency = today?.currency ?: "GBP",
+            warning = if (area?.incomplete == true) "Some readings are missing, so this is so far." else null,
+        )
+        if (area != null) {
+            val name = area.name
+            val plugMeters = area.plugs.map { it.meter }
+            val slides = remember(plugMeters, name) { listOf(WHOLE to name) + plugMeters.map { it to it } }
+            val pager = rememberPagerState { slides.size }
+            val scope = rememberCoroutineScope()
+            UsageCarousel(slides, { scope.launch { pager.animateScrollToPage(it) } }, { window, to -> api.areaUsage(areaId, window, to) }) { chart ->
+                HorizontalPager(pager, Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) { page -> chart(slides[page]) }
+            }
+            if (plugMeters.isNotEmpty()) {
+                val table = RoomPlugs(
+                    room = areaId,
+                    currency = today?.currency ?: "GBP",
+                    kwh = area.kwh,
+                    cost = area.cost,
+                    plugs = area.plugs.map { p ->
+                        val m = meters.firstOrNull { it.name == p.meter }
+                        heating.app.data.RoomPlug(p.meter, power = m?.power, kwh = p.kwh, cost = p.cost, offlineSince = if (m != null && !m.online) m.lastReading else null)
+                    },
+                )
+                PlugTable(table, restLabel = "Rest of $name") { meter ->
+                    val page = slides.indexOfFirst { it.first == meter }
+                    if (page >= 0) scope.launch { pager.animateScrollToPage(page) }
+                }
+            }
+        }
+    }
+}
+
 /** What no plug accounts for: the same dashboard as a room's, with one chart and no plugs to compare. Admin only. */
 @Composable
 fun EverythingElseEnergyScreen(api: HeatingApi, contentPadding: PaddingValues) {
@@ -430,7 +494,7 @@ private fun UsageChart(view: UsageView, seriesKey: String, name: String, metric:
 
 /** Each plug in a room, sortable by any heading, scrolling sideways with its name kept in view. Picking a name shows its chart. */
 @Composable
-private fun PlugTable(plugs: RoomPlugs, onPick: (String) -> Unit) {
+private fun PlugTable(plugs: RoomPlugs, restLabel: String = "Moved out", onPick: (String) -> Unit) {
     var columnName by rememberSaveable { mutableStateOf(PlugSort().column.name) }
     var descending by rememberSaveable { mutableStateOf(PlugSort().descending) }
     val sort = PlugSort(PlugColumn.valueOf(columnName), descending)
@@ -491,7 +555,7 @@ private fun PlugTable(plugs: RoomPlugs, onPick: (String) -> Unit) {
             movedOut(plugs)?.let { left ->
                 HorizontalDivider()
                 Row(Modifier.height(48.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Moved out", Modifier.width(nameWidth).padding(horizontal = 6.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(restLabel, Modifier.width(nameWidth).padding(horizontal = 6.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Row(Modifier.horizontalScroll(scroll)) {
                         Cell(PlugColumn.STATE, "–")
                         Cell(PlugColumn.POWER, "–")

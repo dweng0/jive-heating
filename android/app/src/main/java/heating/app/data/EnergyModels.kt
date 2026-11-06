@@ -14,7 +14,13 @@ data class EnergySettings(
     /** ISO 4217 code every cost is in. */
     val currency: String = "GBP",
     val notices: List<String> = emptyList(),
+    /** kWh a day the household aims to use on the house meter; null for none. */
+    val dailyKwhTarget: Double? = null,
 )
+
+/** PUT /api/settings/energy with only the daily target; null clears it. */
+@Serializable
+data class DailyTargetRequest(val dailyKwhTarget: Double?)
 
 /** PUT /api/settings/energy: the prices, and [currency] only when it changes; the meter is chosen separately. */
 @Serializable
@@ -44,6 +50,64 @@ data class Meter(
     val monitored: Boolean = false,
     /** Id of the room this monitored device is in; null when in no room. */
     val room: String? = null,
+    /** Id of the energy area this monitored plug is in; a plug is in one room or one area at most. */
+    val area: String? = null,
+    /** Id of the energy area this meter measures as its whole-area meter. */
+    val measures: String? = null,
+    /** False for a meter reporting power but no energy total: it can only measure an energy area. */
+    val reportsEnergy: Boolean = true,
+    /** The Zigbee2MQTT device it is on: its own name, or the two-clamp meter it is one clamp of. */
+    val device: String? = null,
+    /** "A" or "B" for one clamp of a two-clamp meter. */
+    val clamp: String? = null,
+    /** The clamp reads backwards; its use is still counted. */
+    val reversed: Boolean = false,
+    /** The name an admin gave it, else its Zigbee2MQTT name. */
+    val label: String? = null,
+) {
+    /** What it is shown as: its label, else its name. */
+    val shownAs: String get() = label?.takeIf { it.isNotBlank() } ?: name
+}
+
+/** PUT /api/meters/{meter}/label. */
+@Serializable
+data class MeterLabelRequest(val label: String)
+
+/** PUT /api/meters/{meter}/job: "house", "area" (with [area]), "monitored" (with an optional [room] or [area]) or "none". */
+@Serializable
+data class MeterJob(val job: String, val room: String? = null, val area: String? = null)
+
+/** openapi: EnergyTarget. The house's electricity against the daily target; [deltaKwh] below 0 is under target. */
+@Serializable
+data class EnergyTarget(
+    val kwh: Double,
+    val usedKwh: Double,
+    val expectedKwh: Double,
+    val deltaKwh: Double,
+    val deltaCost: Double = 0.0,
+    val onTarget: Boolean,
+    val projectedKwh: Double? = null,
+    val incomplete: Boolean = false,
+)
+
+/** openapi: AreaPlugEnergy. */
+@Serializable
+data class AreaPlugEnergy(val meter: String, val kwh: Double = 0.0, val cost: Double = 0.0)
+
+/** openapi: AreaEnergy. An energy area's use: its clamp's if it has one, else its plugs'; [rest] what the clamp measured beyond them. */
+@Serializable
+data class AreaEnergy(
+    val area: String,
+    val name: String,
+    val kwh: Double = 0.0,
+    val cost: Double = 0.0,
+    val missingMinutes: Int = 0,
+    val incomplete: Boolean = false,
+    val wholeMeter: String? = null,
+    val plugs: List<AreaPlugEnergy> = emptyList(),
+    val rest: Double? = null,
+    val restCost: Double? = null,
+    val overlaps: List<String> = emptyList(),
 )
 
 /** openapi: EnergyDay. Costs in pence. */
@@ -59,6 +123,8 @@ data class EnergyDay(
     val totalCost: Double = 0.0,
     val missingMinutes: Int = 0,
     val incomplete: Boolean = false,
+    /** electricityKwh minus the daily target (today: the share of it gone); null with no target. */
+    val targetDeltaKwh: Double? = null,
 )
 
 /**
@@ -132,4 +198,8 @@ data class EnergyDashboard(
     val rooms: List<RoomEnergy> = emptyList(),
     /** House electricity minus all monitored plugs; null without a house meter. */
     val everythingElse: EverythingElse? = null,
+    /** Energy areas, by name; "of which", never added. */
+    val areas: List<AreaEnergy> = emptyList(),
+    /** The house's electricity against the daily target; null with no target or house meter. */
+    val target: EnergyTarget? = null,
 )

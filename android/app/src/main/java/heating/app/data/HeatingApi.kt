@@ -122,6 +122,17 @@ interface HeatingApi {
     suspend fun deleteEnergyArea(id: String)
 
     /** Colour bands and the last 30 minutes of house readings for the live power dial. */
+    suspend fun stopUsingMeterForHouse(meter: String): EnergySettings
+    suspend fun labelMeter(meter: String, label: String): Meter
+    /** Gives [meter] a new job in one step; what it recorded stays where it was recorded. */
+    suspend fun setMeterJob(meter: String, job: MeterJob): Meter
+    suspend fun setDailyTarget(kwh: Double?): EnergySettings
+    suspend fun putMeterInArea(area: String, meter: String)
+    suspend fun takeMeterOutOfArea(area: String, meter: String)
+    suspend fun shareCircuit(area: String, other: String)
+    suspend fun stopSharingCircuit(area: String, other: String)
+    suspend fun areaUsage(area: String, window: String, to: String? = null): EnergyUsage
+
     suspend fun powerSummary(): PowerSummary
 
     /** Live events from /ws until the connection drops. */
@@ -366,6 +377,43 @@ class KtorHeatingApi(
     override suspend fun deleteEnergyArea(id: String) {
         client.delete("api/energy/areas/${id.encodeURLPathPart()}")
     }
+
+    override suspend fun stopUsingMeterForHouse(meter: String): EnergySettings =
+        client.delete("api/meters/${meter.encodeURLPathPart()}/house").body()
+
+    override suspend fun labelMeter(meter: String, label: String): Meter = client.put("api/meters/${meter.encodeURLPathPart()}/label") {
+        contentType(ContentType.Application.Json)
+        setBody(MeterLabelRequest(label))
+    }.body()
+
+    override suspend fun setMeterJob(meter: String, job: MeterJob): Meter = client.put("api/meters/${meter.encodeURLPathPart()}/job") {
+        contentType(ContentType.Application.Json)
+        setBody(job)
+    }.body()
+
+    override suspend fun setDailyTarget(kwh: Double?): EnergySettings = client.put("api/settings/energy") {
+        contentType(ContentType.Application.Json)
+        setBody(DailyTargetRequest(kwh))
+    }.body()
+
+    override suspend fun putMeterInArea(area: String, meter: String) {
+        client.put("api/energy/areas/${area.encodeURLPathPart()}/meters/${meter.encodeURLPathPart()}")
+    }
+
+    override suspend fun takeMeterOutOfArea(area: String, meter: String) {
+        client.delete("api/energy/areas/${area.encodeURLPathPart()}/meters/${meter.encodeURLPathPart()}")
+    }
+
+    override suspend fun shareCircuit(area: String, other: String) {
+        client.put("api/energy/areas/${area.encodeURLPathPart()}/overlaps/${other.encodeURLPathPart()}")
+    }
+
+    override suspend fun stopSharingCircuit(area: String, other: String) {
+        client.delete("api/energy/areas/${area.encodeURLPathPart()}/overlaps/${other.encodeURLPathPart()}")
+    }
+
+    override suspend fun areaUsage(area: String, window: String, to: String?): EnergyUsage =
+        client.get("api/energy/areas/${area.encodeURLPathPart()}/usage") { parameter("window", window); to?.let { parameter("to", it) } }.body()
 
     override suspend fun powerSummary(): PowerSummary = client.get("api/power").body()
 
