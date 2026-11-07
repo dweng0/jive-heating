@@ -75,7 +75,9 @@ class HeatingApp(
     /** Where gas readings are fetched, off the tick's thread. */
     private val gasExecutor: Executor = Executors.newSingleThreadExecutor { Thread(it, "gas").apply { isDaemon = true } },
 ) {
-    val topics = Z2mTopics(config.z2mBaseTopic)
+    /** Connection settings from the database (seeded from the environment on a first start); only with a [heating.mqtt.ReconnectingMqttBus]. */
+    private val savedConnection = (bus as? heating.mqtt.ReconnectingMqttBus)?.let { heating.setup.ConnectionSettings(store, config) }
+    val topics = Z2mTopics(savedConnection?.baseTopic() ?: config.z2mBaseTopic)
     val changes = ChangeNotifier()
     val valves = ValveRegistry(bus, topics, changes, clock)
     val commander = ValveCommander(bus, topics, clock::instant)
@@ -139,6 +141,15 @@ class HeatingApp(
     )
     val eventLog = heating.events.EventLog(config.dbPath)
     val events = heating.events.EventRecorder(bus, eventLog, store, clock, config.eventFlushMillis, maxBytes = config.eventMaxBytes)
+    /** Connection setup (broker and Zigbee2MQTT); null when the bus is not swappable, as in most tests. */
+    val setup = (bus as? heating.mqtt.ReconnectingMqttBus)?.let { link ->
+        heating.setup.SetupService(
+            savedConnection!!, link, topics, config,
+            registered = { id -> notificationSettings.devicesOf(id).isNotEmpty() || webPush.subscriptionsFor(id).isNotEmpty() },
+            notify = { id, title, body -> alerts.toPeople(listOf(id), title, body) },
+            changed = { changes.emit(Change.StatusChanged) },
+        )
+    }
     val boiler = heating.boiler.BoilerControl(boilerOverride, rooms, zones, boosts, demand, changes, ::now, activity, alerts)
 
     private val offlineActivity = heating.activity.OfflineActivity(activity, rooms, valves, sensors, meters, monitoredMeters)
@@ -212,6 +223,8 @@ class HeatingApp(
         periodic += deliveries.tick
         historyRecorder.start()
         periodic += historyRecorder.tick
+        (bus as? heating.mqtt.ReconnectingMqttBus)?.let { link -> periodic += Periodic { link.tick() } }
+        setup?.connect()
         recover()
     }
 

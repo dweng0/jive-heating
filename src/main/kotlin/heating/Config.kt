@@ -7,7 +7,8 @@ import java.time.ZoneId
 /** Service configuration. Every value comes from the environment; nothing is hard-coded. */
 data class Config(
     val apiToken: String,
-    val mqttUrl: String = "tcp://localhost:1883",
+    /** Broker URL that fills in connection setup the first time the service starts with an empty database; none means ask in the app. */
+    val mqttUrl: String? = null,
     /** Broker login; none means the broker is reached anonymously. */
     val mqttUsername: String? = null,
     val mqttPassword: String? = null,
@@ -36,6 +37,11 @@ data class Config(
     val eventFlushMillis: Long = 500,
     /** The event log is trimmed to this many bytes, oldest first. */
     val eventMaxBytes: Long = heating.events.EventRecorder.MAX_BYTES,
+    /** Key that encrypts saved secrets (the broker password) in the database. */
+    val secretKey: String? = null,
+    /** How long Zigbee2MQTT discovery listens for bridges, and how long it keeps listening after the first one. */
+    val discoverWait: Duration = Duration.ofSeconds(5),
+    val discoverGrace: Duration = Duration.ofMillis(500),
 ) {
     companion object {
         fun fromEnv(env: Map<String, String> = System.getenv()): Config {
@@ -49,7 +55,8 @@ data class Config(
             check((brightUsername == null) == (brightPassword == null)) { "BRIGHT_USERNAME and BRIGHT_PASSWORD go together" }
             return Config(
                 apiToken = token,
-                mqttUrl = env["MQTT_URL"] ?: "tcp://localhost:1883",
+                mqttUrl = env["MQTT_URL"]?.takeIf { it.isNotBlank() },
+                secretKey = env["HEATING_SECRET_KEY"]?.takeIf { it.isNotBlank() },
                 mqttUsername = mqttUsername,
                 mqttPassword = mqttPassword,
                 z2mBaseTopic = env["Z2M_BASE_TOPIC"] ?: "zigbee2mqtt",

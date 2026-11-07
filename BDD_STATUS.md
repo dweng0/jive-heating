@@ -1,6 +1,6 @@
 # BDD Status
 
-Checked 421 scenario(s) across 124 test file(s).
+Checked 460 scenario(s) across 133 test file(s).
 
 
 ## Feature: Service foundation
@@ -565,5 +565,80 @@ Checked 421 scenario(s) across 124 test file(s).
 - [x] An area still using power after the hours notifies
 - [x] An admin sets up an area notification in the app
 
+## Feature: Connection setup
+
+- [x] A new install with no broker asks for connection setup
+- [x] An existing install is filled in from the environment
+- [x] An admin tests a broker before saving it
+- [x] A broker test explains why it failed
+- [x] Saving a broker reconnects without a restart
+- [x] Broker passwords are never sent back
+- [x] Zigbee2MQTT is found on the broker
+- [x] Zigbee2MQTT is not found on the broker
+- [x] Setup ends with a test notification
+- [x] The broker connection drops after setup
+
+## Feature: Event log
+
+- [x] Every message on the broker is logged
+- [x] Event logging keeps up with a busy broker
+- [x] Old events are cleared out
+- [x] Topics can be left out of the event log
+- [x] Events are searched through the API
+
+## Feature: Event explorer
+
+- [ ] UNCOVERED: An admin opens the event explorer
+- [ ] UNCOVERED: Events are filtered with chips
+- [x] Events are sorted and paged
+- [ ] UNCOVERED: An event's payload is shown in full
+- [ ] UNCOVERED: Topics are browsed as a tree
+
+## Feature: Notification rules
+
+- [x] An admin creates a rule
+- [ ] UNCOVERED: A rule fires when a message changes to match
+- [ ] UNCOVERED: An "is" rule fires on every matching message
+- [ ] UNCOVERED: A wildcard rule tracks each topic on its own
+- [ ] UNCOVERED: The message fills in from the event
+- [x] Quiet hours hold back a rule
+- [ ] UNCOVERED: A noisy rule is held back
+- [x] A payload that is not JSON can still match
+- [ ] UNCOVERED: An admin tests a rule against recent events
+- [ ] UNCOVERED: A rule's history shows what it did
+
+## Feature: Rule builder
+
+- [ ] UNCOVERED: A rule is built from an event
+- [ ] UNCOVERED: Conditions are mapped from the payload's fields
+- [ ] UNCOVERED: The topic is widened to similar devices
+- [ ] UNCOVERED: Rules are suggested for a Zigbee2MQTT device
+- [ ] UNCOVERED: Rules are managed in the app
+
+## Feature: Notification deliveries
+
+- [x] A notification is queued then delivered
+- [x] A failed delivery is retried with backoff
+- [x] A delivery that keeps failing goes to failed deliveries
+- [x] Deliveries are searched in the app
+
 ---
-**421/421 scenarios covered.**
+**444/460 scenarios covered.**
+
+16 scenario(s) need tests:
+- An admin opens the event explorer
+- Events are filtered with chips
+- An event's payload is shown in full
+- Topics are browsed as a tree
+- A rule fires when a message changes to match
+- An "is" rule fires on every matching message
+- A wildcard rule tracks each topic on its own
+- The message fills in from the event
+- A noisy rule is held back
+- An admin tests a rule against recent events
+- A rule's history shows what it did
+- A rule is built from an event
+- Conditions are mapped from the payload's fields
+- The topic is widened to similar devices
+- Rules are suggested for a Zigbee2MQTT device
+- Rules are managed in the app

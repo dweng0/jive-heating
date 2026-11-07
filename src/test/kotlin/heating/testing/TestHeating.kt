@@ -52,12 +52,15 @@ class TestHeating(
     kumaPushUrl: String? = null,
     /** The smart gas meter; none keeps gas an estimate. Fetching is synchronous in tests. */
     private val gasMeter: heating.gas.GasMeter? = null,
+    /** Pretend brokers; when given the service connects through a swappable connection (connection setup) instead of [bus]. */
+    val brokers: FakeBrokers? = null,
     configure: (Config) -> Config = { it },
 ) {
     val bus = InMemoryMqttBus()
     val dbPath: String = Files.createTempFile("heating-test", ".db").toString()
     // Few hash iterations: tests sign in a lot, and the cost is not what they check.
-    val config = configure(Config(apiToken = TEST_TOKEN, timezone = timezone, dbPath = dbPath, passwordIterations = 1_000, webDir = webDir, androidApk = androidApk, kumaPushUrl = kumaPushUrl))
+    var config = configure(Config(apiToken = TEST_TOKEN, timezone = timezone, dbPath = dbPath, passwordIterations = 1_000, webDir = webDir, androidApk = androidApk, kumaPushUrl = kumaPushUrl))
+        private set
 
     /** Notifications sent to phones, in order. Sending is synchronous in tests. */
     val pushed = mutableListOf<Pushed>()
@@ -85,7 +88,9 @@ class TestHeating(
         app.start()
     }
 
-    fun restart(): HeatingApp {
+    /** Restart on the same database, optionally with different environment settings. */
+    fun restart(changeConfig: (Config) -> Config = { it }): HeatingApp {
+        config = changeConfig(config)
         app = build()
         app.start()
         return app
@@ -109,8 +114,12 @@ class TestHeating(
         return webPushStatus[url] ?: 201
     }
 
+    /** The service's swappable broker connection when [brokers] is given. */
+    var link: heating.mqtt.ReconnectingMqttBus? = null
+        private set
+
     private fun build() = HeatingApp(
-        config, bus, SqliteStore(dbPath), clock, httpGet = { httpSent += it }, push = push, pushExecutor = { it.run() },
+        config, brokers?.let { heating.mqtt.ReconnectingMqttBus(it, clock::instant).also { l -> link = l } } ?: bus, SqliteStore(dbPath), clock, httpGet = { httpSent += it }, push = push, pushExecutor = { it.run() },
         webPushHttp = WebPushHttp(::webPushPost), gasMeter = gasMeter, gasExecutor = { it.run() },
     )
 

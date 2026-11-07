@@ -83,6 +83,7 @@ fun Application.heatingModule(heating: HeatingApp) {
                 boilerAdminRoutes(heating)
                 eventRoutes(heating)
                 deliveryRoutes(heating)
+                setupRoutes(heating)
             }
             energyReaders {
                 dashboardRoutes(heating)

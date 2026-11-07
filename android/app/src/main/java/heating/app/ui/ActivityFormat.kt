@@ -32,6 +32,9 @@ fun activityText(e: ActivityEvent, brief: Boolean): String {
             e.reason != null -> pick("${e.reason} signed $who out", "${e.reason} · signed $who out")
             else -> pick("$who signed out", "$who · signed out")
         }
+        "setup" ->
+            if (state == "zigbee2mqtt") pick("$who changed the Zigbee2MQTT base topic", "$who · Zigbee2MQTT changed")
+            else pick("$who changed the broker", "$who · broker changed")
         "setpoint" ->
             if (house) pick("$who set the whole house to $target", "$who · House $target")
             else pick("$who turned the $room thermostat to $target", "$who · $short $target")

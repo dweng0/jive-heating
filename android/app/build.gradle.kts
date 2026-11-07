@@ -25,8 +25,8 @@ android {
         applicationId = "heating.app"
         minSdk = 30 // Android 11 and newer (LineageOS 18.1 on the Echo Show 8)
         targetSdk = 35
-        versionCode = 39
-        versionName = "0.24.0"
+        versionCode = 40
+        versionName = "0.25.0"
     }
 
     buildTypes {

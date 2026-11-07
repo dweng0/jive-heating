@@ -1,10 +1,13 @@
 package heating.mqtt
 
-/** Zigbee2MQTT topic names. Valve friendly names must not contain '/'. */
-class Z2mTopics(private val base: String) {
-    val bridgeDevices = "$base/bridge/devices"
-    val allStates = "$base/+"
-    val allAvailability = "$base/+/availability"
+/** Zigbee2MQTT topic names. Valve friendly names must not contain '/'. The base topic can change at runtime (connection setup). */
+class Z2mTopics(base: String) {
+    @Volatile
+    var base: String = base
+
+    val bridgeDevices get() = "$base/bridge/devices"
+    val allStates get() = "$base/+"
+    val allAvailability get() = "$base/+/availability"
 
     fun state(valve: String) = "$base/$valve"
     fun set(valve: String) = "$base/$valve/set"
