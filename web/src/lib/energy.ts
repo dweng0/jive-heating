@@ -95,6 +95,8 @@ export interface EnergyDay {
   incomplete: boolean
   /** electricityKwh minus the daily target (today: the share of it gone); null with no target */
   targetDeltaKwh?: number | null
+  /** The part of gasKwh estimated from boiler hours; all of it where the gas meter has not reported */
+  gasEstimatedKwh?: number
 }
 
 /** A monitored plug's use over the period: part of the house meter's electricity, "of which", never added. */
@@ -181,6 +183,26 @@ export interface EnergyDashboard {
   areas?: AreaEnergy[]
   /** The house's electricity against the daily target; null with no target or house meter */
   target?: EnergyTarget | null
+  /** The part of gasKwh estimated from boiler hours */
+  gasEstimatedKwh?: number
+  /** The end of the last half-hour the smart gas meter has reported; null with no readings */
+  gasMeteredTo?: string | null
+}
+
+/** Where the dashboard's gas comes from: the smart meter up to when it has reported, else boiler hours. */
+export function gasSource(meteredTo: string | null | undefined): string {
+  if (!meteredTo) return "Gas is estimated from the boiler's hours."
+  const at = new Date(meteredTo)
+  const date = at.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+  const time = at.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+  return `Gas is from the smart meter up to ${date} ${time}, estimated from the boiler's hours after.`
+}
+
+/** "estimated" when all of the gas is, "part estimated" when some is, null when none is. */
+export function gasEstimate(kwh: number, estimatedKwh: number | undefined): string | null {
+  const estimated = estimatedKwh ?? kwh
+  if (estimated < 0.05) return null
+  return estimated >= kwh - 0.05 ? 'estimated' : 'part estimated'
 }
 
 /** A named thing with meters and no valves, such as "Lights". Not a room: it has no heating. */

@@ -175,6 +175,34 @@ export interface EnergyTotals {
   month: EnergyTotal
   year: EnergyTotal
   yesterdaySoFar: EnergyTotal | null
+  /** The smart gas meter's latest whole day; null until it has reported one */
+  gas?: GasDayTotal | null
+}
+
+/** A whole day of the smart gas meter, its cost at the gas price, and the day before's kWh (null with none). */
+export interface GasDayTotal {
+  date: string
+  kwh: number
+  cost: number
+  previousKwh: number | null
+}
+
+const weekday = (date: string, offset = 0) => {
+  const d = new Date(`${date}T12:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + offset)
+  return d
+}
+
+/** "GAS · THU 5 NOV" for the gas counter's day. */
+export const gasDayLabel = (date: string) =>
+  `Gas · ${weekday(date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).replace(',', '')}`.toUpperCase()
+
+/** "▲ 4.2 kWh vs Wed": the gas day against the day before; null with no day before. */
+export function gasDelta(gas: GasDayTotal): { text: string; more: boolean } | null {
+  if (gas.previousKwh == null) return null
+  const delta = gas.kwh - gas.previousKwh
+  const before = weekday(gas.date, -1).toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' })
+  return { text: `${delta > 0 ? '▲' : '▼'} ${Math.abs(delta).toFixed(1)} kWh vs ${before}`, more: delta > 0 }
 }
 
 export const totalsApi = {

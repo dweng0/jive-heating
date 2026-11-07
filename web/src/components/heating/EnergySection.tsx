@@ -3,7 +3,7 @@ import { Flame, PlugZap, Receipt, Sigma, Target } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { NO_METER, READINGS_MISSING, SET_TARGET, targetDelta, targetProgress, type EnergyTarget, energyApi, energyPlace, formatCost, formatKwh, plugNowWarning, type DeviceEnergy, type EnergyDashboard, type RoomEnergy, type EverythingElse, type EnergyDay, type EnergyPeriod } from '@/lib/energy'
+import { NO_METER, READINGS_MISSING, SET_TARGET, gasEstimate, gasSource, targetDelta, targetProgress, type EnergyTarget, energyApi, energyPlace, formatCost, formatKwh, plugNowWarning, type DeviceEnergy, type EnergyDashboard, type RoomEnergy, type EverythingElse, type EnergyDay, type EnergyPeriod } from '@/lib/energy'
 import { IncompleteWarning } from './IncompleteWarning'
 import { cn } from '@/lib/utils'
 import { useHome } from '@/lib/home'
@@ -47,7 +47,7 @@ export function EnergySection() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Use and cost</h2>
-          <p className="text-sm text-muted-foreground">Gas is estimated from the boiler's hours. Costs use today's prices.</p>
+          <p data-testid="gas-source" className="text-sm text-muted-foreground">{gasSource(shown?.gasMeteredTo)} Costs use today's prices.</p>
         </div>
         <div role="group" aria-label="Energy period" className="flex rounded-xl bg-secondary p-1">
           {PERIODS.map((p) => (
@@ -73,7 +73,7 @@ export function EnergySection() {
       {shown && (
         <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <Figure testId="energy-gas" icon={<Flame />} label="Gas" cost={formatCost(shown.gasCost, shown.currency)} detail={`${formatKwh(shown.gasKwh)} · ${shown.boilerHours.toFixed(1)} h boiler`} />
+            <Figure testId="energy-gas" icon={<Flame />} label="Gas" cost={formatCost(shown.gasCost, shown.currency)} detail={[formatKwh(shown.gasKwh), `${shown.boilerHours.toFixed(1)} h boiler`, gasEstimate(shown.gasKwh, shown.gasEstimatedKwh)].filter(Boolean).join(' · ')} />
             <Figure
               testId="energy-electricity"
               icon={<PlugZap />}
@@ -227,7 +227,13 @@ function UseRow({ testId, name, detail, kwh, cost, currency, missingMinutes }: {
   )
 }
 
-/** A bar per day: gas, electricity and standing charge stacked; incomplete days are hatched and labelled. */
+/** Gas estimated from boiler hours, hatched in the heat colour. */
+const HATCH = 'repeating-linear-gradient(135deg, var(--heat) 0 3px, color-mix(in srgb, var(--heat) 35%, transparent) 3px 6px)'
+
+/** The cost of the part of a day's gas estimated from boiler hours. */
+const estimatedGas = (d: EnergyDay) => (d.gasKwh > 0 ? d.gasCost * Math.min(1, (d.gasEstimatedKwh ?? d.gasKwh) / d.gasKwh) : 0)
+
+/** A bar per day: gas (its estimated part hatched), electricity and standing charge stacked; incomplete days are faded and labelled. */
 function DayBars({ days, currency, dailyTarget, price }: { days: EnergyDay[]; currency: string; dailyTarget: number | null; price: number | null }) {
   // The target line sits where the day's total would be with electricity at the target.
   const targetTotal = (d: EnergyDay) => (dailyTarget != null && price != null ? d.standingCost + d.gasCost + dailyTarget * price : null)
@@ -250,12 +256,14 @@ function DayBars({ days, currency, dailyTarget, price }: { days: EnergyDay[]; cu
               {d.targetDeltaKwh != null && d.targetDeltaKwh > 0 && <div data-testid="day-over" className="absolute inset-x-0 -top-2 mx-auto size-1.5 rounded-full bg-amber-500" />}
               <div className="bg-muted-foreground/30" style={{ height: pct(d.standingCost) }} />
               <div className="bg-cool-foreground" style={{ height: pct(d.electricityCost) }} />
-              <div className="rounded-t-sm bg-heat" style={{ height: pct(d.gasCost) }} />
+              <div className={cn('bg-heat', !estimatedGas(d) && 'rounded-t-sm')} style={{ height: pct(d.gasCost - estimatedGas(d)) }} />
+              {estimatedGas(d) > 0 && <div data-testid="gas-estimated" className="rounded-t-sm" style={{ height: pct(estimatedGas(d)), background: HATCH }} />}
             </div>
           ))}
         </div>
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1.5"><span className="size-3 rounded-sm bg-heat" /> Gas</span>
+          <span className="flex items-center gap-1.5"><span className="size-3 rounded-sm bg-heat" /> {days.some((d) => estimatedGas(d) > 0) ? 'Gas, from the meter' : 'Gas'}</span>
+          {days.some((d) => estimatedGas(d) > 0) && <span className="flex items-center gap-1.5"><span className="size-3 rounded-sm" style={{ background: HATCH }} /> Gas, estimated from boiler hours</span>}
           <span className="flex items-center gap-1.5"><span className="size-3 rounded-sm bg-cool-foreground" /> Electricity</span>
           <span className="flex items-center gap-1.5"><span className="size-3 rounded-sm bg-muted-foreground/30" /> Standing charges</span>
           {dailyTarget != null && <span className="flex items-center gap-1.5"><span className="h-0.5 w-3 bg-foreground/70" /> Daily target</span>}

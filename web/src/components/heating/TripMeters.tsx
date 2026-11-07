@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { formatCost, symbol } from '@/lib/energy'
-import { dayOf, fiveMinuteAverage, ODOMETER_PERIODS, tripAt, versusYesterday, type EnergyTotals, type OdometerPeriod, type Trip } from '@/lib/energyDials'
+import { dayOf, fiveMinuteAverage, gasDayLabel, gasDelta, ODOMETER_PERIODS, tripAt, versusYesterday, type EnergyTotals, type OdometerPeriod, type Trip } from '@/lib/energyDials'
 import { cn } from '@/lib/utils'
 
 const PERIOD_KEY = 'energy.odometer'
@@ -12,7 +12,7 @@ const TICK_MS = 250
  * A car's mechanical counter, square-cornered: each digit a wheel that rolls to its place. The last [decimals] wheels
  * are the fractions; [prefix], such as "£", stands before them.
  */
-function Rolling({ value, digits, decimals, testId, prefix, roll = 700 }: { value: number; digits: number; decimals: number; testId: string; prefix?: string; roll?: number }) {
+function Rolling({ value, digits, decimals, testId, prefix, roll = 700, fraction = 'bg-[var(--power-high)]/80' }: { value: number; digits: number; decimals: number; testId: string; prefix?: string; roll?: number; fraction?: string }) {
   const text = value.toFixed(decimals).padStart(digits + (decimals > 0 ? 1 : 0), '0')
   return (
     <div data-testid={testId} data-value={value.toFixed(decimals)} aria-label={`${prefix ?? ''}${value.toFixed(decimals)}`} className="inline-flex items-stretch overflow-hidden rounded-[3px] bg-foreground font-mono text-2xl leading-none font-bold text-background tabular-nums shadow-inner sm:text-[1.75rem]">
@@ -23,7 +23,7 @@ function Rolling({ value, digits, decimals, testId, prefix, roll = 700 }: { valu
         ) : (
           <span
             key={i}
-            className={cn('relative h-[1.4em] w-[0.85em] overflow-hidden border-r border-background/15 last:border-r-0', i >= text.length - decimals && 'bg-[var(--power-high)]/80')}
+            className={cn('relative h-[1.4em] w-[0.85em] overflow-hidden border-r border-background/15 last:border-r-0', i >= text.length - decimals && fraction)}
           >
             <span className="absolute inset-x-0 top-0 flex flex-col items-center transition-transform ease-out" style={{ transform: `translateY(-${Number(ch) * 1.4}em)`, transitionDuration: `${roll}ms` }}>
               {Array.from({ length: 10 }, (_, d) => (
@@ -39,7 +39,8 @@ function Rolling({ value, digits, decimals, testId, prefix, roll = 700 }: { valu
 
 /**
  * The dashboard's counters, like a car's: today's usage (or, tapped, its cost) rolling on at the last 5 minutes' average power, an
- * odometer for the day, week, month or year, and today against yesterday at the same time.
+ * odometer for the day, week, month or year, the gas meter's latest whole day against the day before, and today against
+ * yesterday at the same time.
  */
 export function TripMeters({ totals, readings }: { totals: EnergyTotals | null; readings: { at: number; watts: number | null }[] }) {
   const [period, setPeriod] = useState<OdometerPeriod>(() => (localStorage.getItem(PERIOD_KEY) as OdometerPeriod | null) ?? 'week')
@@ -70,6 +71,8 @@ export function TripMeters({ totals, readings }: { totals: EnergyTotals | null; 
   const price = totals?.pencePerKwh ?? 0
   const currency = totals?.currency ?? 'GBP'
   const vs = totals ? versusYesterday(todayKwh, totals.yesterdaySoFar) : null
+  const gas = totals?.gas ?? null
+  const gasVs = gas ? gasDelta(gas) : null
 
   function swap() {
     const next = shows === 'kwh' ? 'cost' : 'kwh'
@@ -83,7 +86,7 @@ export function TripMeters({ totals, readings }: { totals: EnergyTotals | null; 
   }
 
   return (
-    <div data-testid="trip-meters" className="grid grid-cols-1 gap-4 border-t pt-4 sm:grid-cols-3 sm:items-end">
+    <div data-testid="trip-meters" className={cn('grid grid-cols-1 gap-4 border-t pt-4 sm:items-end', gas ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-3')}>
       <button
         type="button"
         data-testid="usage-today"
@@ -129,6 +132,23 @@ export function TripMeters({ totals, readings }: { totals: EnergyTotals | null; 
           <span data-testid="odometer-cost" className="font-semibold">{formatCost(odometer * price, currency)}</span>
         </div>
       </div>
+      {gas && (
+        <div data-testid="gas-day" className="flex flex-col items-center gap-1.5">
+          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{gasDayLabel(gas.date)}</div>
+          <Rolling testId="gas-kwh" value={gas.kwh} digits={3} decimals={1} fraction="bg-heat/90" />
+          <div className="flex flex-wrap justify-center gap-x-2 text-sm tabular-nums">
+            <span>
+              <span className="text-muted-foreground">kWh · </span>
+              <span className="font-semibold">{formatCost(gas.cost, currency)}</span>
+            </span>
+            {gasVs && (
+              <span data-testid="gas-delta" data-more={gasVs.more} className={cn('font-semibold', gasVs.more ? 'text-[var(--power-mid)]' : 'text-[var(--power-low)]')}>
+                {gasVs.text}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
       <div className="flex flex-col items-center gap-1.5 text-center">
         <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Today vs yesterday</div>
         {vs ? (
