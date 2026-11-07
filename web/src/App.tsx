@@ -7,6 +7,7 @@ import { api, setSessionEndedHandler, type User } from '@/lib/api'
 import { HomeProvider } from '@/lib/home'
 import { AccountPage } from '@/pages/Account'
 import { DashboardPage } from '@/pages/Dashboard'
+import { DeliveriesPage } from '@/pages/Deliveries'
 import { EnergyManagePage } from '@/pages/EnergyManage'
 import { EnergyPage } from '@/pages/Energy'
 import { EverythingElseEnergyPage, RoomEnergyPage } from '@/pages/RoomEnergy'
@@ -57,6 +58,7 @@ export default function App() {
               <Route path="/rooms/:id" element={<RoomPage />} />
               <Route path="/groups/:id" element={auth.me.admin ? <GroupPage /> : <Navigate to="/" replace />} />
               <Route path="/account" element={<AccountPage onSignOut={signOut} onSignedOutEverywhere={() => setAuth({ state: 'signedOut' })} />} />
+              <Route path="/account/deliveries" element={auth.me.admin ? <DeliveriesPage /> : <Navigate to="/" replace />} />
               <Route path="/people" element={auth.me.admin ? <PeoplePage /> : <Navigate to="/" replace />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

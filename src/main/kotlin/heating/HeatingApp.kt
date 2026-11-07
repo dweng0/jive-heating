@@ -125,12 +125,12 @@ class HeatingApp(
     val houseHistory = heating.energy.HouseHistoryReport(energyHistory, energySettings, config.timezone, clock)
     val energyTotals = heating.energy.EnergyTotalsReport(energyHistory, energySettings, config.timezone, clock, gasReadings)
     val energyUsage = heating.energy.EnergyUsageReport(energyHistory, energySettings, monitoredMeters, config.timezone, clock, energyAreas::list)
+    val deliveries = heating.notify.Deliveries(config.dbPath, heating.notify.PushTransport(notificationSettings, push, webPush), pushExecutor, clock::instant)
     val alerts = HeatingAlerts(
-        users, notificationSettings, push, actions, pushExecutor, clock::instant,
+        users, notificationSettings, deliveries, actions, clock::instant,
         zoneName = { zone -> rooms.list().firstOrNull { it.id == zone.roomId }?.zoneName(zone.id) ?: zone.id },
         target = { zone -> zones.effectiveTarget(zone.settings) },
         temperature = demand::zoneTemperature,
-        webPush = webPush,
     )
 
     val areaAlerts = heating.energy.AreaAlerts(
@@ -209,6 +209,7 @@ class HeatingApp(
         demand.start()
         periodic += demand.tick
         periodic += alerts.tick
+        periodic += deliveries.tick
         historyRecorder.start()
         periodic += historyRecorder.tick
         recover()

@@ -314,6 +314,7 @@ private fun Connected(connection: Connection, onSignOut: () -> Unit, onPasswordC
                         BoostSettingsCard(state.boostTarget, store::saveBoostTarget)
                         EnergyPricesCard(energyState.settings, energy::savePrices)
                         IgnoredDevicesCard(energyState.ignored, energy::showAgain)
+                        heating.app.ui.account.FailedDeliveries(connection.api, onError = showError)
                     }) else null,
                 )
             }

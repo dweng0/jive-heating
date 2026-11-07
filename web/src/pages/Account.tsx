@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { AndroidAppCard } from '@/components/heating/AndroidAppCard'
 import { NotificationsCard } from '@/components/heating/NotificationsCard'
+import { DeliveriesCard } from '@/components/heating/DeliveriesCard'
 import { BoostSettingsCard } from '@/components/heating/BoostSettingsCard'
 import { EnergyPricesCard } from '@/components/heating/EnergyPricesCard'
 import { IgnoredDevicesCard } from '@/components/heating/IgnoredDevicesCard'
@@ -96,6 +97,7 @@ export function AccountPage({ onSignOut, onSignedOutEverywhere }: { onSignOut: (
       )}
 
       {!isService && <NotificationsCard />}
+      {me.admin && <DeliveriesCard />}
 
       <AndroidAppCard />
 
