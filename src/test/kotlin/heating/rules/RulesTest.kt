@@ -24,6 +24,7 @@ import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -171,6 +172,54 @@ class RulesTest {
             assertEquals(HttpStatusCode.Forbidden, send("PUT", "/api/rules/$id", sam, rule()).status)
             assertEquals(HttpStatusCode.Forbidden, send("DELETE", "/api/rules/$id", sam).status)
             assertEquals(HttpStatusCode.Unauthorized, anonymous.get("/api/rules").status)
+        }
+    }
+
+    private val frontDoor = "z2m/front_door"
+
+    // BDD: A rule fires when a message changes to match
+    @Test
+    fun `a rule fires when a message changes to match`() {
+        val t = TestHeating()
+        t.api {
+            val jane = household().getValue("jane")
+            createRule(jane, rule())
+            t.bus.receive(frontDoor, """{"contact":true,"battery":92}""")
+            assertEquals(0, t.pushed.size)
+            t.bus.receive(frontDoor, """{"contact":false,"battery":92}""")
+            // everyone: jane, john and sam each get it on their phone
+            assertEquals(3, t.pushed.size)
+            assertEquals(setOf("Front door"), t.pushed.map { it.title }.toSet())
+            assertEquals(setOf("Front door opened"), t.pushed.map { it.body }.toSet())
+            t.bus.receive(frontDoor, """{"contact":false,"battery":91}""")
+            assertEquals(3, t.pushed.size)
+
+            // true then false again inside the cooldown is held back; after it, it sends
+            t.bus.receive(frontDoor, """{"contact":true,"battery":91}""")
+            t.bus.receive(frontDoor, """{"contact":false,"battery":91}""")
+            assertEquals(3, t.pushed.size)
+            t.clock.advance(Duration.ofSeconds(61))
+            t.bus.receive(frontDoor, """{"contact":true,"battery":91}""")
+            t.bus.receive(frontDoor, """{"contact":false,"battery":91}""")
+            assertEquals(6, t.pushed.size)
+        }
+    }
+
+    // BDD: A rule fires when a message changes to match
+    @Test
+    fun `a disabled rule and other topics send nothing and a retained message does not fire`() {
+        val t = TestHeating()
+        t.api {
+            val jane = household().getValue("jane")
+            val id = createRule(jane, rule(extra = ""","enabled":false"""))["id"]!!.jsonPrimitive.content
+            t.bus.receive(frontDoor, """{"contact":false}""")
+            assertEquals(0, t.pushed.size)
+            send("PUT", "/api/rules/$id", jane, rule())
+            t.bus.receive("z2m/back_door", """{"contact":false}""")
+            t.bus.receive(frontDoor, """{"contact":false}""", retained = true)
+            assertEquals(0, t.pushed.size)
+            t.bus.receive(frontDoor, """{"contact":false}""")
+            assertEquals(3, t.pushed.size)
         }
     }
 }
