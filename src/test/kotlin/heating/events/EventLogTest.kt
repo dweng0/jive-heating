@@ -158,4 +158,76 @@ class EventLogTest {
             assertEquals(false, events.getValue("small/text")["truncated"]!!.jsonPrimitive.boolean)
         }
     }
+
+    private fun TestHeating.addEvent(ageDays: Long, topic: String, payload: String = "x") =
+        app.eventLog.addAll(listOf(Event(0, clock.instant().minus(Duration.ofDays(ageDays)), topic, payload, false, false, false)))
+
+    private fun TestHeating.topicsLogged() = app.eventLog.search(EventQuery(sortBy = "at", descending = false)).events.map { it.topic }.filter { it.startsWith("age/") }
+
+    // BDD: Old events are cleared out
+    @Test
+    fun `events older than the kept days are deleted once an hour`() {
+        val t = service()
+        t.app.tick() // the first clean-up
+        t.addEvent(8, "age/8d")
+        t.addEvent(6, "age/6d")
+        t.clock.advance(Duration.ofMinutes(30))
+        t.app.tick()
+        assertEquals(listOf("age/8d", "age/6d"), t.topicsLogged(), "not yet an hour since the last clean-up")
+        t.clock.advance(Duration.ofMinutes(31))
+        t.app.tick()
+        assertEquals(listOf("age/6d"), t.topicsLogged())
+        // After a day the 6-day-old event is 7 days and an hour old: gone too.
+        t.clock.advance(Duration.ofDays(1))
+        t.app.tick()
+        assertEquals(emptyList(), t.topicsLogged())
+    }
+
+    // BDD: Old events are cleared out
+    @Test
+    fun `the oldest events go when the log is over its size limit`() {
+        val t = service(maxBytes = 4_000)
+        t.app.tick()
+        repeat(10) { t.addEvent(0, "age/$it", "p".repeat(1_000)) }
+        t.clock.advance(Duration.ofHours(1))
+        t.app.tick()
+        val left = t.topicsLogged()
+        assertTrue(left.isNotEmpty() && left.size < 10, left.toString())
+        assertEquals("age/9", left.last())
+        assertTrue(t.app.eventLog.bytes() <= 4_000)
+        assertEquals((10 - left.size until 10).map { "age/$it" }, left)
+    }
+
+    // BDD: Old events are cleared out
+    @Test
+    fun `an admin sets the days from 1 to 90 and members get 403`() {
+        val t = service()
+        t.api {
+            assertEquals(7, getJson("/api/events/settings")["days"]!!.jsonPrimitive.int)
+            assertEquals(HttpStatusCode.OK, putSettings("""{"days":30}""").status)
+            assertEquals(30, getJson("/api/events/settings")["days"]!!.jsonPrimitive.int)
+            assertEquals(HttpStatusCode.OK, putSettings("""{"days":1}""").status)
+            assertEquals(HttpStatusCode.OK, putSettings("""{"days":90}""").status)
+            listOf("0", "91", "-3", "7.5", "\"week\"").forEach {
+                assertEquals(HttpStatusCode.BadRequest, putSettings("""{"days":$it}""").status, it)
+            }
+            assertEquals(90, getJson("/api/events/settings")["days"]!!.jsonPrimitive.int)
+            val member = memberToken()
+            assertEquals(HttpStatusCode.Forbidden, putSettings("""{"days":5}""", member).status)
+            assertEquals(HttpStatusCode.Forbidden, get("/api/events/settings", member).status)
+            assertEquals(90, getJson("/api/events/settings")["days"]!!.jsonPrimitive.int)
+        }
+        // The setting is kept across a restart and decides what is cleared.
+        t.restart()
+        t.addEvent(40, "age/40d")
+        t.clock.advance(Duration.ofHours(2))
+        t.app.tick()
+        assertEquals(listOf("age/40d"), t.topicsLogged())
+        t.api {
+            putSettings("""{"days":30}""")
+            t.clock.advance(Duration.ofHours(2))
+            t.app.tick()
+            assertEquals(emptyList(), t.topicsLogged())
+        }
+    }
 }
