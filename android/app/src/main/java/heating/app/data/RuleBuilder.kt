@@ -6,7 +6,7 @@ import kotlinx.serialization.json.JsonPrimitive
 /** The last part of a topic, which for a device is its name: "front_door" from "z2m/front_door". */
 fun topicDevice(topic: String): String = topic.trimEnd('/').substringAfterLast('/')
 
-private fun readable(device: String): String = device.replace('_', ' ').trim().replaceFirstChar { it.uppercase() }
+internal fun readable(device: String): String = device.replace('_', ' ').trim().replaceFirstChar { it.uppercase() }
 
 /** [text] as the JSON value a condition on [field] compares with: as typed in the [seen] payload, else by how it reads. */
 fun typedValue(text: String, seen: JsonElement?): JsonPrimitive {

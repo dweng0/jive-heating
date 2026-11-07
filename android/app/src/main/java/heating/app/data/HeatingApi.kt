@@ -146,6 +146,8 @@ interface HeatingApi {
     suspend fun testRule(request: RuleRequest): RuleTestResult
     /** Sends [request]'s notification, filled from the topic's latest event, to the signed-in admin only. */
     suspend fun sendTestRule(request: RuleRequest): RuleTestSent
+    /** Rules worth having for Zigbee2MQTT devices, only [device]'s when given; each says whether a rule already does it. */
+    suspend fun suggestedRules(device: String? = null): List<RuleSuggestion>
 
     /** Connection setup (admins): broker and Zigbee2MQTT. */
     suspend fun setupStatus(): SetupStatus
@@ -484,6 +486,9 @@ class KtorHeatingApi(
         contentType(ContentType.Application.Json)
         setBody(request)
     }.body()
+
+    override suspend fun suggestedRules(device: String?): List<RuleSuggestion> =
+        client.get("api/rules/suggestions") { device?.let { parameter("device", it) } }.body()
 
     override suspend fun setupStatus(): SetupStatus = client.get("api/setup/status").body()
 

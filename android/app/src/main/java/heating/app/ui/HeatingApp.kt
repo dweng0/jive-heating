@@ -187,7 +187,7 @@ private fun Connected(connection: Connection, onSignOut: () -> Unit, onPasswordC
         "connection" -> "Connection"
         "events" -> "Events"
         "rules" -> "Notifications"
-        "rules/new?topic={topic}&field={field}&value={value}" -> "New rule"
+        "rules/new?topic={topic}&field={field}&value={value}&draft={draft}" -> "New rule"
         "rules/edit/{id}" -> "Edit rule"
         else -> null
     }
@@ -362,19 +362,20 @@ private fun Connected(connection: Connection, onSignOut: () -> Unit, onPasswordC
                 if (state.admin) ConnectionSetupScreen(connection.api, onFinish = { nav.popBackStack() }, contentPadding = padding)
             }
             composable("events") {
-                if (state.admin) EventsScreen(connection.api, onNotify = { topic, field, value -> nav.navigate(heating.app.data.ruleRoute(topic, field, value)) }, onError = showError, contentPadding = padding)
+                if (state.admin) EventsScreen(connection.api, onNotify = { topic, field, value -> nav.navigate(heating.app.data.ruleRoute(topic, field, value)) }, onDraft = { nav.navigate(it) }, onError = showError, contentPadding = padding)
             }
             composable("rules") {
-                if (state.admin) heating.app.ui.rules.RulesScreen(connection.api, onEdit = { nav.navigate("rules/edit/$it") }, onError = showError, contentPadding = padding)
+                if (state.admin) heating.app.ui.rules.RulesScreen(connection.api, onEdit = { nav.navigate("rules/edit/$it") }, onDraft = { nav.navigate(it) }, onError = showError, contentPadding = padding)
             }
             composable(
-                "rules/new?topic={topic}&field={field}&value={value}",
-                arguments = listOf("topic", "field", "value").map { navArgument(it) { type = NavType.StringType; defaultValue = "" } },
+                "rules/new?topic={topic}&field={field}&value={value}&draft={draft}",
+                arguments = listOf("topic", "field", "value", "draft").map { navArgument(it) { type = NavType.StringType; defaultValue = "" } },
             ) { e ->
                 if (state.admin) {
                     heating.app.ui.rules.RuleFormScreen(
                         connection.api, ruleId = null,
                         topic = e.arguments?.getString("topic").orEmpty(), field = e.arguments?.getString("field").orEmpty(), value = e.arguments?.getString("value").orEmpty(),
+                        draft = e.arguments?.getString("draft").orEmpty(),
                         onDone = { nav.popBackStack() }, onError = showError, contentPadding = padding,
                     )
                 }

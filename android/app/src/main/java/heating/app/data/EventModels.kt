@@ -186,6 +186,13 @@ fun prettyPayload(event: LoggedEvent): String =
 fun ruleRoute(topic: String, field: String? = null, value: String? = null): String =
     "rules/new?topic=${percent(topic)}&field=${percent(field.orEmpty())}&value=${percent(value.orEmpty())}"
 
+/** Where a suggestion goes: the rule builder, carrying the whole draft. */
+fun draftRoute(request: RuleRequest): String = "rules/new?draft=${percent(apiJson.encodeToString(RuleRequest.serializer(), request))}"
+
+/** The draft a route carried, or null. */
+fun ruleDraft(text: String): RuleRequest? =
+    if (text.isBlank()) null else runCatching { apiJson.decodeFromString(RuleRequest.serializer(), text) }.getOrNull()
+
 private fun percent(text: String) = java.net.URLEncoder.encode(text, "UTF-8").replace("+", "%20")
 
 /** A level of the topic tree: [count] messages here and below, [own] set when messages were published on exactly this path. */

@@ -35,6 +35,8 @@ import heating.app.data.Rule
 import heating.app.data.RuleChip
 import heating.app.data.RuleHistoryEntry
 import heating.app.data.RuleRow
+import heating.app.data.RuleSuggestion
+import heating.app.data.draftRoute
 import heating.app.data.deleteRuleQuestion
 import heating.app.data.filterRuleRows
 import heating.app.data.friendlyError
@@ -60,7 +62,7 @@ fun RulesCard(onOpen: () -> Unit) {
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun RulesScreen(api: HeatingApi, onEdit: (String) -> Unit, onError: (String) -> Unit = {}, contentPadding: PaddingValues = PaddingValues()) {
+fun RulesScreen(api: HeatingApi, onEdit: (String) -> Unit, onDraft: (String) -> Unit = {}, onError: (String) -> Unit = {}, contentPadding: PaddingValues = PaddingValues()) {
     val scope = rememberCoroutineScope()
     var rows by remember { mutableStateOf<List<RuleRow>?>(null) }
     var chips by remember { mutableStateOf(emptySet<RuleChip>()) }
@@ -69,6 +71,8 @@ fun RulesScreen(api: HeatingApi, onEdit: (String) -> Unit, onError: (String) -> 
     var deleting by remember { mutableStateOf<Rule?>(null) }
     var history by remember { mutableStateOf<Pair<Rule, List<RuleHistoryEntry>>?>(null) }
     var reload by remember { mutableStateOf(0) }
+    var suggesting by remember { mutableStateOf(false) }
+    var suggestions by remember { mutableStateOf<List<RuleSuggestion>?>(null) }
 
     LaunchedEffect(reload) {
         runCatching {
@@ -76,6 +80,9 @@ fun RulesScreen(api: HeatingApi, onEdit: (String) -> Unit, onError: (String) -> 
             val areas = runCatching { api.energyAreas().map { it to api.areaAlert(it.id) } }.getOrDefault(emptyList())
             ruleRows(rules, areas)
         }.onSuccess { rows = it }.onFailure { onError(friendlyError(it)) }
+    }
+    LaunchedEffect(suggesting, reload) {
+        if (suggesting) suggestions = runCatching { api.suggestedRules() }.getOrElse { onError(friendlyError(it)); emptyList() }
     }
     fun act(block: suspend () -> Unit) = scope.launch { runCatching { block() }.onFailure { onError(friendlyError(it)) }; reload++ }
 
@@ -87,8 +94,15 @@ fun RulesScreen(api: HeatingApi, onEdit: (String) -> Unit, onError: (String) -> 
                     FilterChip(c in chips, { chips = if (c in chips) chips - c else chips + c }, label = { Text(c.label) })
                 }
                 FilterChip(topicChip, { topicChip = !topicChip }, label = { Text("Topic") })
+                FilterChip(suggesting, { suggesting = !suggesting }, label = { Text("Suggested") })
             }
             if (topicChip) OutlinedTextField(topic, { topic = it }, label = { Text("Topic contains") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        }
+        if (suggesting) item {
+            suggestions?.let { list ->
+                if (list.isEmpty()) Text("No Zigbee2MQTT devices to suggest rules for.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                else SuggestedRulesCard("Suggested", list) { onDraft(draftRoute(it.toRequest())) }
+            }
         }
         if (rows != null && shown.isEmpty()) item { Text(if (rows!!.isEmpty()) "No rules yet. Open an event and choose Notify me when…" else "No rules match.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
         items(shown, key = { it.rule?.id ?: "area-${it.areaId}" }) { row ->

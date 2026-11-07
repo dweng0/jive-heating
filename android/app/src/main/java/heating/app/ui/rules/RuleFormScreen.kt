@@ -12,6 +12,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -30,7 +31,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import heating.app.data.EventTopic
 import heating.app.data.HeatingApi
+import heating.app.data.isWildcard
+import heating.app.data.perDevice
+import heating.app.data.ruleDraft
+import heating.app.data.topicDevice
+import heating.app.data.widenedMatches
+import heating.app.data.widenedTopic
 import heating.app.data.NOTIFY_EVERYONE
 import heating.app.data.NOTIFY_ME
 import heating.app.data.QuietHours
@@ -53,8 +61,10 @@ import kotlinx.serialization.json.JsonElement
 private const val PREVIEW_EVENTS = 5
 
 /**
- * The rule builder (admins). With [ruleId] it edits that rule; otherwise it starts from the event "Notify me when…" came
- * from: [topic] and, from a field, its path and [value]. It shows how the last 5 events on the topic would have gone.
+ * The rule builder (admins). With [ruleId] it edits that rule; otherwise it starts from a suggestion's [draft] (a RuleRequest
+ * as JSON), or the event "Notify me when…" came from: [topic] and, from a field, its path and [value]. It shows how the last
+ * 5 events on the topic would have gone. A new rule can be widened to "Any device like this" (the device level becomes "+"),
+ * which lists the topics it matches and which have the conditions' fields, or one rule made per device picked from them.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -64,6 +74,7 @@ fun RuleFormScreen(
     topic: String = "",
     field: String = "",
     value: String = "",
+    draft: String = "",
     onDone: () -> Unit,
     onError: (String) -> Unit = {},
     contentPadding: PaddingValues = PaddingValues(),
@@ -74,15 +85,21 @@ fun RuleFormScreen(
     var saving by remember { mutableStateOf(false) }
     var sending by remember { mutableStateOf(false) }
     var sentText by remember { mutableStateOf<String?>(null) }
+    var allTopics by remember { mutableStateOf<List<EventTopic>>(emptyList()) }
+    /** The topic the rule started from, before widening. */
+    var started by remember { mutableStateOf("") }
+    /** The topics ticked in "Pick devices from a list"; null while that list is closed. */
+    var chosen by remember { mutableStateOf<Set<String>?>(null) }
 
     LaunchedEffect(ruleId) {
         runCatching {
             if (ruleId != null) api.rules().first { it.id == ruleId }.toRequest()
-            else {
+            else ruleDraft(draft) ?: run {
                 val last: JsonElement? = if (topic.isEmpty()) null else api.events(listOf("topic" to topic, "limit" to "1")).events.firstOrNull()?.payload
                 draftFromEvent(topic, last, field.ifEmpty { null }, value.ifEmpty { null })
             }
         }.onSuccess { request = it }.onFailure { onError(friendlyError(it)) }
+        if (ruleId == null) allTopics = runCatching { api.eventTopics() }.getOrDefault(emptyList())
     }
     val r = request ?: return
     var seen by remember { mutableStateOf<List<SeenField>>(emptyList()) }
@@ -97,7 +114,31 @@ fun RuleFormScreen(
 
     Column(Modifier.verticalScroll(rememberScrollState()).padding(contentPadding).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         OutlinedTextField(r.name, { request = r.copy(name = it) }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(r.topic, { request = r.copy(topic = it) }, label = { Text("Topic") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(r.topic, { chosen = null; request = r.copy(topic = it) }, label = { Text("Topic") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        if (ruleId == null) {
+            val widened = widenedTopic(r.topic)
+            if (!isWildcard(r.topic) && widened != null) {
+                OutlinedButton({ started = started.ifEmpty { r.topic }; request = r.copy(topic = widened) }) {
+                    Text("Any device like this ($widened, ${widenedMatches(widened, r.conditions, allTopics).size} topics)")
+                }
+            }
+            if (isWildcard(r.topic)) {
+                val matches = widenedMatches(r.topic, r.conditions, allTopics)
+                val fieldNote = r.conditions.map { it.field }.filter { it.isNotBlank() }.joinToString(", ")
+                Text("${r.topic} matches ${matches.size} ${if (matches.size == 1) "topic" else "topics"}", style = MaterialTheme.typography.titleSmall)
+                val picked = chosen
+                matches.forEach { m ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (picked != null) Checkbox(m.topic in picked, { on -> chosen = if (on) picked + m.topic else picked - m.topic })
+                        Text(if (picked != null) topicDevice(m.topic) else m.topic, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                        if (m.hasFields) Text("has $fieldNote", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                if (picked == null && matches.isNotEmpty()) {
+                    OutlinedButton({ chosen = matches.filter { it.hasFields }.map { it.topic }.toSet() }) { Text("Pick devices from a list") }
+                }
+            }
+        }
 
         Text("When", style = MaterialTheme.typography.titleSmall)
         if (r.conditions.isEmpty()) Text("Every message on the topic", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -169,13 +210,29 @@ fun RuleFormScreen(
             onClick = {
                 saving = true
                 scope.launch {
-                    runCatching { if (ruleId == null) api.createRule(r) else api.updateRule(ruleId, r) }
+                    val picked = chosen
+                    runCatching {
+                        when {
+                            ruleId != null -> api.updateRule(ruleId, r)
+                            picked != null -> picked.forEach { api.createRule(perDevice(r, started, it)) }
+                            else -> api.createRule(r)
+                        }
+                    }
                         .onSuccess { onDone() }.onFailure { onError(friendlyError(it)) }
                     saving = false
                 }
             },
-            enabled = !saving,
+            enabled = !saving && chosen?.isEmpty() != true,
             modifier = Modifier.fillMaxWidth(),
-        ) { Text(if (ruleId == null) "Create rule" else "Save rule") }
+        ) {
+            val picked = chosen
+            Text(
+                when {
+                    ruleId != null -> "Save rule"
+                    picked != null -> "Add ${picked.size} ${if (picked.size == 1) "rule" else "rules"}"
+                    else -> "Create rule"
+                },
+            )
+        }
     }
 }

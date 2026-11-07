@@ -58,6 +58,10 @@ import heating.app.data.EventTopic
 import heating.app.data.FieldValue
 import heating.app.data.HeatingApi
 import heating.app.data.LoggedEvent
+import heating.app.data.RuleSuggestion
+import heating.app.data.draftRoute
+import heating.app.data.toRequest
+import heating.app.ui.rules.SuggestedRulesCard
 import heating.app.data.TopicNode
 import heating.app.data.eventParams
 import heating.app.data.filterablePath
@@ -96,13 +100,24 @@ private fun ago(iso: String, now: Instant = Instant.now()): String {
 
 /**
  * Settings > Events (admins): the newest events with chips to filter them, a Topics tree, and a payload view for the one
- * tapped. [onNotify] opens the rule builder with the topic and, from a field, its path and value.
+ * tapped. [onNotify] opens the rule builder with the topic and, from a field, its path and value. A chosen device shows the
+ * rules suggested for it; [onDraft] opens the builder at a route carrying one.
  */
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
-fun EventsScreen(api: HeatingApi, onNotify: (topic: String, field: String?, value: String?) -> Unit, onError: (String) -> Unit = {}, contentPadding: PaddingValues = PaddingValues()) {
+fun EventsScreen(
+    api: HeatingApi,
+    onNotify: (topic: String, field: String?, value: String?) -> Unit,
+    onDraft: (String) -> Unit = {},
+    onError: (String) -> Unit = {},
+    contentPadding: PaddingValues = PaddingValues(),
+) {
     val scope = rememberCoroutineScope()
     var filter by remember { mutableStateOf(EventFilter()) }
+    var deviceSuggestions by remember { mutableStateOf(emptyList<RuleSuggestion>()) }
+    LaunchedEffect(filter.device) {
+        deviceSuggestions = filter.device?.let { d -> runCatching { api.suggestedRules(d) }.getOrDefault(emptyList()) }.orEmpty()
+    }
     var sort by remember { mutableStateOf(EventSort.AT) }
     var descending by remember { mutableStateOf(true) }
     var showTopics by remember { mutableStateOf(false) }
@@ -211,6 +226,9 @@ fun EventsScreen(api: HeatingApi, onNotify: (topic: String, field: String?, valu
                 if (live) TextButton(onClick = { paused = !paused }) { Text(if (paused) "Resume" else "Pause") }
             }
             LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.testTag("event-list")) {
+                if (filter.device != null && deviceSuggestions.isNotEmpty()) item(key = "suggestions") {
+                    SuggestedRulesCard("Suggested rules for ${filter.device}", deviceSuggestions) { onDraft(draftRoute(it.toRequest())) }
+                }
                 items(events, key = { it.id }) { e ->
                     Card(Modifier.fillMaxWidth().clickable { open = e }) {
                         Column(Modifier.padding(12.dp)) {
