@@ -187,6 +187,7 @@ private fun Connected(connection: Connection, onSignOut: () -> Unit, onPasswordC
         "users" -> "People"
         "connection" -> "Connection"
         "events" -> "Events"
+        "rules" -> "Notifications"
         "rules/new?topic={topic}&field={field}&value={value}" -> "New rule"
         else -> null
     }
@@ -352,6 +353,7 @@ private fun Connected(connection: Connection, onSignOut: () -> Unit, onPasswordC
                         IgnoredDevicesCard(energyState.ignored, energy::showAgain)
                         heating.app.ui.account.FailedDeliveries(connection.api, onError = showError)
                         EventsCard(onOpen = { nav.navigate("events") })
+                        heating.app.ui.rules.RulesCard(onOpen = { nav.navigate("rules") })
                         ConnectionCard(onOpen = { nav.navigate("connection") })
                     }) else null,
                 )
@@ -361,6 +363,9 @@ private fun Connected(connection: Connection, onSignOut: () -> Unit, onPasswordC
             }
             composable("events") {
                 if (state.admin) EventsScreen(connection.api, onNotify = { topic, field, value -> nav.navigate(heating.app.data.ruleRoute(topic, field, value)) }, onError = showError, contentPadding = padding)
+            }
+            composable("rules") {
+                if (state.admin) heating.app.ui.rules.RulesScreen(connection.api, onEdit = {}, onError = showError, contentPadding = padding)
             }
             composable(
                 "rules/new?topic={topic}&field={field}&value={value}",

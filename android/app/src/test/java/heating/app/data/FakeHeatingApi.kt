@@ -65,7 +65,8 @@ class FakeHeatingApi : HeatingApi {
         ).also { rooms[id] = it }
     }
     override suspend fun deleteRoom(id: String) { call("deleteRoom $id"); rooms.remove(id) }
-    override suspend fun energyAreas(): List<EnergyArea> = emptyList()
+    val areaList = mutableListOf<EnergyArea>()
+    override suspend fun energyAreas(): List<EnergyArea> = areaList.toList()
     override suspend fun addEnergyArea(name: String) = EnergyArea(name.lowercase(), name)
     override suspend fun renameEnergyArea(id: String, name: String) = EnergyArea(id, name)
     val areaAlerts = mutableMapOf<String, AreaAlert>()
@@ -132,6 +133,34 @@ class FakeHeatingApi : HeatingApi {
             EventTopic(topic, list.size.toLong(), last.at, last.payload, last.json)
         }
     }
+    /** Notification rules, with a history (newest first) by rule id; [testResult] answers [testRule]. */
+    val ruleList = mutableListOf<Rule>()
+    val historyFor = mutableMapOf<String, List<RuleHistoryEntry>>()
+    var testResult = RuleTestResult()
+    override suspend fun rules(): List<Rule> { call("rules"); return ruleList.toList() }
+    override suspend fun createRule(request: RuleRequest): Rule {
+        call("createRule ${request.name}")
+        return Rule(
+            "rule-${ruleList.size + 1}", request.name, request.topic, request.conditions, request.trigger, request.title, request.message,
+            request.notify, request.cooldownSeconds, request.quietHours, request.enabled, by = "jane", byUserId = "u1", createdAt = "2026-11-07T10:00:00Z",
+        ).also { ruleList += it }
+    }
+    override suspend fun updateRule(id: String, request: RuleRequest): Rule {
+        call("updateRule $id ${request.name}")
+        val old = ruleList.first { it.id == id }
+        return old.copy(
+            name = request.name, topic = request.topic, conditions = request.conditions, trigger = request.trigger, title = request.title,
+            message = request.message, notify = request.notify, cooldownSeconds = request.cooldownSeconds, quietHours = request.quietHours, enabled = request.enabled,
+        ).also { n -> ruleList.replaceAll { if (it.id == id) n else it } }
+    }
+    override suspend fun deleteRule(id: String) { call("deleteRule $id"); ruleList.removeAll { it.id == id } }
+    override suspend fun resumeRule(id: String): Rule {
+        call("resumeRule $id")
+        return ruleList.first { it.id == id }.copy(pausedUntil = null, pausedUntilLocal = null).also { n -> ruleList.replaceAll { if (it.id == id) n else it } }
+    }
+    override suspend fun ruleHistory(id: String, limit: Int): List<RuleHistoryEntry> { call("ruleHistory $id $limit"); return historyFor[id].orEmpty().take(limit) }
+    val testedRules = mutableListOf<RuleRequest>()
+    override suspend fun testRule(request: RuleRequest): RuleTestResult { call("testRule ${request.name}"); testedRules += request; return testResult }
     var setupStatus = SetupStatus()
     var broker: BrokerView? = null
     var brokerTest = BrokerTestResult(ok = true)
