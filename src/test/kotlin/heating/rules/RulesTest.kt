@@ -258,4 +258,127 @@ class RulesTest {
             assertEquals(HttpStatusCode.Forbidden, send("GET", "/api/rules/$id/history", tokens.getValue("sam")).status)
         }
     }
+
+    // BDD: A wildcard rule tracks each topic on its own
+    @Test
+    fun `a wildcard rule tracks each topic on its own`() {
+        val t = TestHeating()
+        t.api {
+            val jane = household().getValue("jane")
+            createRule(jane, rule(name = "A door opened", topic = "z2m/+"))
+            t.bus.receive("z2m/front_door", """{"contact":false}""")
+            assertEquals(3, t.pushed.size)
+            t.bus.receive("z2m/back_door", """{"contact":false}""")
+            assertEquals(6, t.pushed.size) // its own notification, though the front door's cooldown is running
+
+            // the cooldown is kept per topic: the front door again inside it is held back
+            t.bus.receive("z2m/front_door", """{"contact":true}""")
+            t.bus.receive("z2m/front_door", """{"contact":false}""")
+            assertEquals(6, t.pushed.size)
+            t.clock.advance(Duration.ofSeconds(61))
+            t.bus.receive("z2m/back_door", """{"contact":true}""")
+            t.bus.receive("z2m/back_door", """{"contact":false}""")
+            assertEquals(9, t.pushed.size)
+
+            // a topic with no contact field never matches, nor does text or another depth
+            t.bus.receive("z2m/hall_motion", """{"occupancy":true}""")
+            t.bus.receive("z2m/bridge_state", "online")
+            t.bus.receive("z2m/deeper/front_door", """{"contact":false}""")
+            assertEquals(9, t.pushed.size)
+        }
+    }
+
+    // BDD: The message fills in from the event
+    @Test
+    fun `the message fills in from the event`() {
+        val t = TestHeating()
+        t.api {
+            val jane = household().getValue("jane")
+            createRule(jane, rule(name = "Opened", title = "{{topic.last}}", message = "{{topic.last}} opened, battery {{payload.battery}}%"))
+            t.bus.receive(frontDoor, """{"contact":false,"battery":91}""")
+            assertEquals(setOf("front_door"), t.pushed.map { it.title }.toSet())
+            assertEquals(setOf("front_door opened, battery 91%"), t.pushed.map { it.body }.toSet())
+        }
+    }
+
+    // BDD: The message fills in from the event
+    @Test
+    fun `a zigbee topic offers device and a missing field fills in as a question mark`() {
+        val t = TestHeating()
+        t.api {
+            val jane = household().getValue("jane")
+            createRule(
+                jane,
+                rule(topic = "zigbee2mqtt/Front Door", title = "{{device}}", message = "{{payload.battery}}% {{payload.nothing.here}} {{ payload.contact }} {{topic}}", notify = "me"),
+            )
+            t.bus.receive("zigbee2mqtt/Front Door", """{"contact":false,"battery":91}""")
+            assertEquals(1, t.pushed.size)
+            assertEquals("Front Door", t.pushed.single().title)
+            assertEquals("91% ? false zigbee2mqtt/Front Door", t.pushed.single().body)
+            // a topic outside Zigbee2MQTT has no device
+            createRule(jane, rule(topic = "other/x", conditions = "[]", title = "{{device}}", notify = "me"))
+            t.bus.receive("other/x", "{}")
+            assertEquals("?", t.pushed.last().title)
+        }
+    }
+
+    // BDD: The message fills in from the event
+    @Test
+    fun `the api refuses a template with an unknown placeholder`() {
+        val t = TestHeating()
+        t.api {
+            val jane = household().getValue("jane")
+            assertRefused(jane, rule(title = "{{nope}}"), "title")
+            assertRefused(jane, rule(message = "Door {{payload.}} {{colour}}"), "message")
+            assertRefused(jane, rule(message = "Door {{topic"), "message")
+            createRule(jane, rule(title = "{{topic}} {{topic.last}} {{device}} {{payload}} {{value}} {{payload.a.b}}"))
+        }
+    }
+
+    // BDD: A payload that is not JSON can still match
+    @Test
+    fun `a payload that is not JSON can still match`() {
+        val t = TestHeating()
+        t.api {
+            val jane = household().getValue("jane")
+            val id = createRule(
+                jane,
+                rule(name = "Garage cold", topic = "garage/temp", conditions = """[{"field":"value","operator":"<","value":5}]""", title = "Garage", message = "Cold: {{value}}", notify = "me"),
+            )["id"]!!.jsonPrimitive.content
+            t.bus.receive("garage/temp", "4.5")
+            assertEquals(1, t.pushed.size)
+            assertEquals("Cold: 4.5", t.pushed.single().body)
+            assertEquals(listOf("sent"), history(jane, id).outcomes())
+            t.bus.receive("garage/temp", "7")
+            assertEquals(1, t.pushed.size)
+
+            // a JSON rule on a text payload never matches, and logs nothing
+            val json = createRule(jane, rule(topic = "garage/door", notify = "me"))["id"]!!.jsonPrimitive.content
+            t.bus.receive("garage/door", "open")
+            t.bus.receive("garage/door", "[1,2]")
+            assertEquals(1, t.pushed.size)
+            assertEquals(0, history(jane, json).size)
+        }
+    }
+
+    // BDD: A payload that is not JSON can still match
+    @Test
+    fun `text payloads compare as text and an exists condition needs the field`() {
+        val t = TestHeating()
+        t.api {
+            val jane = household().getValue("jane")
+            createRule(jane, rule(name = "Online", topic = "bridge/state", conditions = """[{"field":"value","operator":"=","value":"online"}]""", notify = "me", trigger = "is"))
+            createRule(jane, rule(name = "Has battery", topic = "dev/+", conditions = """[{"field":"battery","operator":"exists"},{"field":"contact","operator":"≠","value":true}]""", notify = "me", trigger = "is"))
+            t.bus.receive("bridge/state", "offline")
+            assertEquals(0, t.pushed.size)
+            t.bus.receive("bridge/state", "online")
+            assertEquals(1, t.pushed.size)
+            t.bus.receive("dev/a", """{"contact":false}""")
+            assertEquals(1, t.pushed.size)
+            t.bus.receive("dev/a", """{"contact":false,"battery":50}""")
+            assertEquals(2, t.pushed.size)
+            t.bus.receive("dev/a", """{"contact":true,"battery":50}""")
+            assertEquals(2, t.pushed.size)
+        }
+    }
 }
