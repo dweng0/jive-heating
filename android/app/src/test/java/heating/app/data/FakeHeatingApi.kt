@@ -76,6 +76,22 @@ class FakeHeatingApi : HeatingApi {
     }
     override suspend fun clearAreaAlert(id: String) { call("clearAreaAlert $id"); areaAlerts.remove(id) }
     override suspend fun deleteEnergyArea(id: String) {}
+    val deliveryList = mutableListOf<Delivery>()
+    override suspend fun deliveries(status: String?): DeliveriesList {
+        call("deliveries $status")
+        return DeliveriesList(deliveryList.filter { status == null || it.status == status }, deliveryList.count { it.status == "failed" })
+    }
+    override suspend fun retryDelivery(id: String) {
+        call("retryDelivery $id")
+        deliveryList.replaceAll { if (it.id == id) it.copy(status = "queued") else it }
+    }
+    override suspend fun retryAllDeliveries(): Int {
+        call("retryAllDeliveries")
+        val failed = deliveryList.count { it.status == "failed" }
+        deliveryList.replaceAll { if (it.status == "failed") it.copy(status = "queued") else it }
+        return failed
+    }
+    override suspend fun clearDelivery(id: String) { call("clearDelivery $id"); deliveryList.removeAll { it.id == id } }
     override suspend fun stopUsingMeterForHouse(meter: String): EnergySettings { call("stopUsingMeterForHouse $meter"); return EnergySettings() }
     override suspend fun labelMeter(meter: String, label: String): Meter { call("labelMeter $meter $label"); return Meter(meter, label = label) }
     override suspend fun setMeterJob(meter: String, job: MeterJob): Meter { call("setMeterJob $meter $job"); return Meter(meter) }

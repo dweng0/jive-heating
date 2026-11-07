@@ -126,6 +126,12 @@ interface HeatingApi {
     suspend fun clearAreaAlert(id: String)
     suspend fun deleteEnergyArea(id: String)
 
+    /** Notification deliveries (admins): [status] "failed" lists the failed ones; retry or clear them. */
+    suspend fun deliveries(status: String? = null): DeliveriesList
+    suspend fun retryDelivery(id: String)
+    suspend fun retryAllDeliveries(): Int
+    suspend fun clearDelivery(id: String)
+
     /** Colour bands and the last 30 minutes of house readings for the live power dial. */
     suspend fun stopUsingMeterForHouse(meter: String): EnergySettings
     suspend fun labelMeter(meter: String, label: String): Meter
@@ -401,6 +407,20 @@ class KtorHeatingApi(
 
     override suspend fun clearAreaAlert(id: String) {
         client.delete("api/energy/areas/${id.encodeURLPathPart()}/alert")
+    }
+
+    override suspend fun deliveries(status: String?): DeliveriesList =
+        client.get("api/deliveries") { status?.let { parameter("status", it) } }.body()
+
+    override suspend fun retryDelivery(id: String) {
+        client.post("api/deliveries/${id.encodeURLPathPart()}/retry") { contentType(ContentType.Application.Json); setBody("{}") }
+    }
+
+    override suspend fun retryAllDeliveries(): Int =
+        client.post("api/deliveries/retry-all") { contentType(ContentType.Application.Json); setBody("{}") }.body<RetriedDeliveries>().retried
+
+    override suspend fun clearDelivery(id: String) {
+        client.delete("api/deliveries/${id.encodeURLPathPart()}")
     }
 
     override suspend fun deleteEnergyArea(id: String) {

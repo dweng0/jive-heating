@@ -555,6 +555,50 @@
           "mine": { "type": "boolean", "description": "Whether the caller set it up" }
         }
       },
+      "DeliveryEvent": {
+        "type": "object",
+        "description": "The event that caused a delivery, as its rule saw it",
+        "properties": {
+          "id": { "type": "string", "nullable": true },
+          "topic": { "type": "string", "nullable": true },
+          "payload": { "nullable": true, "description": "The event's JSON payload" },
+          "at": { "type": "string", "format": "date-time", "nullable": true }
+        }
+      },
+      "DeliveryAttempt": {
+        "type": "object", "required": ["at", "error"],
+        "properties": { "at": { "type": "string", "format": "date-time" }, "error": { "type": "string" } }
+      },
+      "Delivery": {
+        "type": "object", "required": ["id", "at", "source", "userId", "person", "title", "body", "status", "tries", "sentTo", "attempts"],
+        "description": "One notification for one person, queued then sent to each of their phones and browsers",
+        "properties": {
+          "id": { "type": "string" },
+          "at": { "type": "string", "format": "date-time", "description": "When it was queued" },
+          "source": { "type": "string", "description": "What sent it: a rule's name, \"Area notification\" or \"Heating alert\"" },
+          "ruleId": { "type": "string", "nullable": true },
+          "userId": { "type": "string" },
+          "person": { "type": "string", "description": "Username" },
+          "title": { "type": "string" },
+          "body": { "type": "string" },
+          "status": { "type": "string", "enum": ["queued", "retrying", "sent", "failed"] },
+          "tries": { "type": "integer" },
+          "sentAt": { "type": "string", "format": "date-time", "nullable": true },
+          "sentTo": { "type": "array", "items": { "type": "string" }, "description": "The phones and browsers that took it" },
+          "attempts": { "type": "array", "items": { "$ref": "#/components/schemas/DeliveryAttempt" }, "description": "Each failed try" },
+          "nextAttemptAt": { "type": "string", "format": "date-time", "nullable": true },
+          "event": { "allOf": [{ "$ref": "#/components/schemas/DeliveryEvent" }], "nullable": true, "description": "What caused it; null for heating alerts, whose source says what did" }
+        }
+      },
+      "Deliveries": {
+        "type": "object", "required": ["deliveries", "failed", "sources", "people"],
+        "properties": {
+          "deliveries": { "type": "array", "items": { "$ref": "#/components/schemas/Delivery" } },
+          "failed": { "type": "integer", "description": "Failed deliveries in all, whatever the filter" },
+          "sources": { "type": "array", "items": { "type": "string" }, "description": "Choices for the rule filter" },
+          "people": { "type": "array", "items": { "type": "object", "required": ["id", "name"], "properties": { "id": { "type": "string" }, "name": { "type": "string" } } } }
+        }
+      },
       "GasDay": {
         "type": "object", "required": ["date", "kwh", "cost", "currency", "halfHours", "previous", "next", "measuredBoilerKw", "boilerAverageKw"],
         "description": "A day of the smart gas meter, half-hour by half-hour",
@@ -1129,6 +1173,46 @@
       "delete": {
         "summary": "Turn the area's notification off. Admins.",
         "responses": { "204": { "description": "Off" }, "404": { "description": "No such area" } }
+      }
+    },
+    "/api/deliveries": {
+      "get": {
+        "summary": "Notification deliveries, newest first unless sorted. Admins; members get 403.",
+        "parameters": [
+          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["queued", "retrying", "sent", "failed"] } },
+          { "name": "rule", "in": "query", "schema": { "type": "string" }, "description": "A source, as listed in sources" },
+          { "name": "person", "in": "query", "schema": { "type": "string" }, "description": "Username" },
+          { "name": "from", "in": "query", "schema": { "type": "string", "format": "date-time" } },
+          { "name": "to", "in": "query", "schema": { "type": "string", "format": "date-time" } },
+          { "name": "sort", "in": "query", "schema": { "type": "string", "enum": ["time", "rule", "person", "status", "tries"] } },
+          { "name": "dir", "in": "query", "schema": { "type": "string", "enum": ["asc", "desc"] } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer" } }
+        ],
+        "responses": { "200": { "description": "Deliveries", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Deliveries" } } } }, "400": { "description": "Unknown status or sort, or unreadable time" }, "403": { "description": "Not an admin" } }
+      }
+    },
+    "/api/deliveries/{id}": {
+      "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+      "get": {
+        "summary": "One delivery, with the event that caused it. Admins.",
+        "responses": { "200": { "description": "The delivery", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Delivery" } } } }, "404": { "description": "No such delivery" } }
+      },
+      "delete": {
+        "summary": "Clear a delivery. Admins.",
+        "responses": { "204": { "description": "Cleared" }, "404": { "description": "No such delivery" } }
+      }
+    },
+    "/api/deliveries/{id}/retry": {
+      "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+      "post": {
+        "summary": "Queue a failed delivery again. Admins.",
+        "responses": { "200": { "description": "The delivery", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Delivery" } } } }, "404": { "description": "No such failed delivery" } }
+      }
+    },
+    "/api/deliveries/retry-all": {
+      "post": {
+        "summary": "Queue every failed delivery again. Admins.",
+        "responses": { "200": { "description": "How many", "content": { "application/json": { "schema": { "type": "object", "required": ["retried"], "properties": { "retried": { "type": "integer" } } } } } } }
       }
     },
     "/api/energy/gas": {
