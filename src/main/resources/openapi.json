@@ -569,6 +569,93 @@
         "properties": { "baseTopic": { "type": "string" }, "version": { "type": ["string", "null"] }, "devices": { "type": "integer" } },
         "required": ["baseTopic", "devices"]
       },
+      "RuleCondition": {
+        "type": "object", "required": ["field", "operator"],
+        "description": "One test on the payload; all of a rule's conditions must hold",
+        "properties": {
+          "field": { "type": "string", "description": "Path in the JSON payload, dots for nesting (contact, action, color.x). \"value\" is the whole payload of a message that is not a JSON object, as a number when it reads as one." },
+          "operator": { "type": "string", "enum": ["=", "≠", ">", "<", "≥", "≤", "contains", "exists"], "description": "!=, >= and <= are accepted for ≠, ≥ and ≤. A missing field never matches." },
+          "value": { "description": "A string, number or boolean; not used by exists" }
+        }
+      },
+      "RuleQuietHours": {
+        "type": "object", "required": ["from", "to"],
+        "properties": {
+          "from": { "type": "string", "description": "HH:mm in the house's time zone" },
+          "to": { "type": "string", "description": "HH:mm; before from means the window crosses midnight" },
+          "sendSummary": { "type": "boolean", "description": "Hold the matches and send one summary when quiet hours end (\"Front door opened 3 times overnight\") instead of dropping them" }
+        }
+      },
+      "RuleRequest": {
+        "type": "object", "required": ["name", "topic", "title"],
+        "properties": {
+          "name": { "type": "string" },
+          "topic": { "type": "string", "description": "MQTT topic filter, + and # allowed" },
+          "conditions": { "type": "array", "items": { "$ref": "#/components/schemas/RuleCondition" } },
+          "trigger": { "type": "string", "enum": ["changes to", "is"], "description": "changes to: fire when the conditions start to match on a topic; is: fire on every matching message" },
+          "title": { "type": "string", "description": "May use {{topic}}, {{topic.last}}, {{device}}, {{payload}}, {{value}}, {{payload.some.field}}; a missing field fills in as ?. An unknown placeholder is a 400." },
+          "message": { "type": "string" },
+          "notify": { "type": "string", "enum": ["me", "everyone"], "description": "me: the rule's owner" },
+          "cooldownSeconds": { "type": "integer", "minimum": 0, "maximum": 86400, "description": "Kept per topic" },
+          "quietHours": { "$ref": "#/components/schemas/RuleQuietHours", "nullable": true },
+          "enabled": { "type": "boolean" }
+        }
+      },
+      "Rule": {
+        "type": "object", "required": ["id", "name", "topic", "conditions", "trigger", "title", "message", "notify", "cooldownSeconds", "enabled", "by", "createdAt"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "topic": { "type": "string" },
+          "conditions": { "type": "array", "items": { "$ref": "#/components/schemas/RuleCondition" } },
+          "trigger": { "type": "string", "enum": ["changes to", "is"] },
+          "title": { "type": "string" },
+          "message": { "type": "string" },
+          "notify": { "type": "string", "enum": ["me", "everyone"] },
+          "cooldownSeconds": { "type": "integer" },
+          "quietHours": { "$ref": "#/components/schemas/RuleQuietHours", "nullable": true },
+          "enabled": { "type": "boolean" },
+          "by": { "type": "string", "description": "Username of the admin who made it" },
+          "byUserId": { "type": "string", "nullable": true },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "pausedUntil": { "type": "string", "format": "date-time", "nullable": true, "description": "Set while the rule is paused for firing 30 times in 10 minutes" },
+          "pausedUntilLocal": { "type": "string", "nullable": true, "description": "pausedUntil as HH:mm in the house's time zone (\"Paused until 19:10\")" }
+        }
+      },
+      "RuleHistoryEntry": {
+        "type": "object", "required": ["at", "topic", "payload", "outcome", "text"],
+        "properties": {
+          "at": { "type": "string", "format": "date-time" },
+          "topic": { "type": "string" },
+          "payload": { "type": "string" },
+          "outcome": { "type": "string", "enum": ["sent", "skipped by cooldown", "skipped by quiet hours", "held until quiet hours end", "paused", "summary sent"] },
+          "text": { "type": "string", "description": "For display, such as \"sent to 3 people\"" },
+          "recipients": { "type": "integer" },
+          "deliveryIds": { "type": "array", "items": { "type": "string" }, "description": "Open with GET /api/deliveries/{id}" },
+          "detail": { "type": "string", "nullable": true }
+        }
+      },
+      "RuleTestEvent": {
+        "type": "object", "required": ["id", "at", "topic", "payload", "status", "result"],
+        "properties": {
+          "id": { "type": "integer" },
+          "at": { "type": "string", "format": "date-time" },
+          "topic": { "type": "string" },
+          "payload": { "type": "string" },
+          "status": { "type": "string", "enum": ["would_send", "not_met", "no_change"] },
+          "result": { "type": "string", "description": "would send, conditions not met: contact is true, or no change" },
+          "title": { "type": "string", "nullable": true, "description": "Filled in, for would_send" },
+          "message": { "type": "string", "nullable": true }
+        }
+      },
+      "RuleTestResult": {
+        "type": "object", "required": ["events"],
+        "properties": { "events": { "type": "array", "items": { "$ref": "#/components/schemas/RuleTestEvent" }, "description": "The last 20 events on the rule's topic, newest first" } }
+      },
+      "RuleTestSend": {
+        "type": "object", "required": ["title", "message", "deliveryIds"],
+        "properties": { "title": { "type": "string" }, "message": { "type": "string" }, "deliveryIds": { "type": "array", "items": { "type": "string" } } }
+      },
       "AreaAlertRequest": {
         "type": "object", "required": ["hours", "notify"],
         "properties": {
@@ -741,6 +828,30 @@
   },
   "security": [{ "bearer": [] }],
   "paths": {
+    "/api/rules": {
+      "get": { "summary": "Notification rules. Admins; members get 403.", "responses": { "200": { "description": "The rules", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Rule" } } } } }, "403": { "description": "Not an admin" } } },
+      "post": { "summary": "Create a rule, owned by the caller. Admins.", "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RuleRequest" } } } }, "responses": { "201": { "description": "The rule", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Rule" } } } }, "400": { "description": "A field is wrong; the error names it" }, "403": { "description": "Not an admin" } } }
+    },
+    "/api/rules/test": {
+      "post": { "summary": "Run a rule (not saved) over the last 20 events on its topic: which would send, with the notification each would send. Sends nothing. Admins.", "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RuleRequest" } } } }, "responses": { "200": { "description": "The events, newest first", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RuleTestResult" } } } }, "400": { "description": "A field is wrong; the error names it" }, "403": { "description": "Not an admin" } } }
+    },
+    "/api/rules/test/send": {
+      "post": { "summary": "Send the rule's filled-in notification (from the newest event on its topic) to the caller only. Admins.", "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RuleRequest" } } } }, "responses": { "200": { "description": "What was sent", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RuleTestSend" } } } }, "400": { "description": "A field is wrong; the error names it" }, "403": { "description": "Not an admin" } } }
+    },
+    "/api/rules/{id}": {
+      "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }], 
+      "get": { "summary": "One rule. Admins.", "responses": { "200": { "description": "The rule", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Rule" } } } }, "404": { "description": "No such rule" } } },
+      "put": { "summary": "Replace a rule; who made it and when stay. Admins.", "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RuleRequest" } } } }, "responses": { "200": { "description": "The rule", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Rule" } } } }, "400": { "description": "A field is wrong; the error names it" }, "403": { "description": "Not an admin" }, "404": { "description": "No such rule" } } },
+      "delete": { "summary": "Delete a rule and its history. Admins.", "responses": { "204": { "description": "Deleted" }, "404": { "description": "No such rule" } } }
+    },
+    "/api/rules/{id}/history": {
+      "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }], 
+      "get": { "summary": "What the rule did with each match, newest first (30 days kept). Query limit (default 100). Admins.", "responses": { "200": { "description": "The history", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/RuleHistoryEntry" } } } } }, "404": { "description": "No such rule" } } }
+    },
+    "/api/rules/{id}/resume": {
+      "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }], 
+      "post": { "summary": "Resume a rule paused for being noisy (Resume now). Admins.", "responses": { "200": { "description": "The rule", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Rule" } } } }, "404": { "description": "No such rule" } } }
+    },
     "/api/events": {"get": {"summary": "Search the event log (every MQTT message the service saw). Admins.", "parameters": [{"name": "topic", "in": "query", "required": false, "description": "Topic or MQTT wildcard filter (+ one level, # the rest)", "schema": {"type": "string"}}, {"name": "from", "in": "query", "required": false, "description": "Earliest arrival time, ISO-8601 instant", "schema": {"type": "string"}}, {"name": "to", "in": "query", "required": false, "description": "Latest arrival time, ISO-8601 instant", "schema": {"type": "string"}}, {"name": "text", "in": "query", "required": false, "description": "Matches in topic or payload, ignoring case", "schema": {"type": "string"}}, {"name": "field", "in": "query", "required": false, "description": "Only events whose JSON payload has this field (a.b for nested)", "schema": {"type": "string"}}, {"name": "sort", "in": "query", "required": false, "description": "'at' or 'topic', then 'asc' or 'desc'; default 'at desc'", "schema": {"type": "string"}}, {"name": "limit", "in": "query", "required": false, "description": "1 to 1000, default 100", "schema": {"type": "integer"}}, {"name": "cursor", "in": "query", "required": false, "description": "The 'next' of the previous page", "schema": {"type": "string"}}], "responses": {"200": {"description": "Matching events and the total matched", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/EventPage"}}}}, "400": {"description": "Bad parameter"}, "403": {"description": "Admins only"}}}},
     "/api/events/topics": {"get": {"summary": "Each topic seen, with its message count, last seen time and last payload. Admins.", "responses": {"200": {"description": "OK", "content": {"application/json": {"schema": {"type": "array", "items": {"$ref": "#/components/schemas/EventTopic"}}}}}, "403": {"description": "Admins only"}}}},
     "/api/events/settings": {"get": {"summary": "Days events are kept, excluded topics with their messages a minute, and the log's status. Admins.", "responses": {"200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/EventSettings"}}}}, "403": {"description": "Admins only"}}}, "put": {"summary": "Set the days kept (1 to 90) and/or the excluded topic filters. Admins.", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/EventSettingsRequest"}}}}, "responses": {"200": {"description": "Saved", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/EventSettings"}}}}, "400": {"description": "Days out of range or a bad topic filter"}, "403": {"description": "Admins only"}}}},

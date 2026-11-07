@@ -622,4 +622,61 @@ class RulesTest {
             assertEquals(HttpStatusCode.BadRequest, send("POST", "/api/rules/test/send", TEST_TOKEN, rule()).status)
         }
     }
+
+    // BDD: A rule's history shows what it did
+    @Test
+    fun `a rules history shows what it did`() {
+        val t = TestHeating()
+        t.api {
+            val tokens = household()
+            val jane = tokens.getValue("jane")
+            val id = createRule(jane, rule(cooldown = 3600, extra = quiet))["id"]!!.jsonPrimitive.content
+            val other = createRule(jane, rule(name = "Other", topic = "z2m/other", notify = "me"))["id"]!!.jsonPrimitive.content
+            t.clock.set(Instant.parse("2026-10-05T09:00:00Z")) // 10:00, a week before the end
+            repeat(7) { day ->
+                t.bus.receive(frontDoor, """{"contact":true}""")
+                t.bus.receive(frontDoor, """{"contact":false,"day":$day}""") // sent
+                t.clock.advance(Duration.ofMinutes(10))
+                t.bus.receive(frontDoor, """{"contact":true}""")
+                t.bus.receive(frontDoor, """{"contact":false,"day":$day,"again":true}""") // inside the cooldown
+                t.clock.advance(Duration.ofHours(13)) // 23:10, quiet
+                t.bus.receive(frontDoor, """{"contact":true}""")
+                t.bus.receive(frontDoor, """{"contact":false,"day":$day,"late":true}""")
+                t.clock.advance(Duration.ofHours(10).plusMinutes(50)) // back at 10:00 next day
+            }
+            t.bus.receive("z2m/other", """{"contact":false}""")
+            val entries = history(jane, id)
+            assertEquals(21, entries.size)
+            assertEquals(listOf("skipped by quiet hours", "skipped by cooldown", "sent"), entries.outcomes().take(3))
+            // newest first, each with its time, topic and payload
+            val newest = entries[0].jsonObject
+            assertEquals(frontDoor, newest["topic"]!!.jsonPrimitive.content)
+            assertEquals("""{"contact":false,"day":6,"late":true}""", newest["payload"]!!.jsonPrimitive.content)
+            assertEquals("2026-10-11T22:10:00Z", newest["at"]!!.jsonPrimitive.content)
+            assertEquals(entries.map { it.jsonObject["at"]!!.jsonPrimitive.content }.sortedDescending(), entries.map { it.jsonObject["at"]!!.jsonPrimitive.content })
+            val sent = entries[2].jsonObject
+            assertEquals("sent to 3 people", sent["text"]!!.jsonPrimitive.content)
+            assertEquals(3, sent["recipients"]!!.jsonPrimitive.int)
+            // each sent notification links to its delivery, which links back
+            val deliveryIds = sent["deliveryIds"]!!.jsonArray.map { it.jsonPrimitive.content }
+            assertEquals(3, deliveryIds.size)
+            deliveryIds.forEach { delivery ->
+                val view = heatingJson.parseToJsonElement(send("GET", "/api/deliveries/$delivery", jane).bodyAsText()).jsonObject
+                assertEquals(id, view["ruleId"]!!.jsonPrimitive.content)
+                assertEquals("Front door opened", view["source"]!!.jsonPrimitive.content)
+            }
+            assertEquals(listOf("skipped by quiet hours", "skipped by cooldown", "sent"), JsonArray(entries.takeLast(3)).outcomes())
+            // another rule has its own history, and a limit trims it
+            assertEquals(listOf("sent"), history(jane, other).outcomes())
+            val limited = heatingJson.parseToJsonElement(send("GET", "/api/rules/$id/history?limit=2", jane).bodyAsText()).jsonArray
+            assertEquals(2, limited.size)
+            assertEquals(HttpStatusCode.NotFound, send("GET", "/api/rules/nope/history", jane).status)
+            assertEquals(HttpStatusCode.Forbidden, send("GET", "/api/rules/$id/history", tokens.getValue("sam")).status)
+
+            // old entries are dropped after 30 days
+            t.clock.advance(Duration.ofDays(31))
+            t.app.tick()
+            assertEquals(0, history(jane, id).size)
+        }
+    }
 }

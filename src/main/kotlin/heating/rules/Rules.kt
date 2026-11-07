@@ -184,7 +184,21 @@ class Rules(
     }
 
     /** Sends the summary of what quiet hours held back, for each rule whose quiet hours have ended. */
-    val tick = heating.Periodic { checkQuietHours() }
+    val tick = heating.Periodic {
+        checkQuietHours()
+        purgeHistory()
+    }
+
+    private var lastPurge: Instant = Instant.EPOCH
+
+    /** Drops history older than [KEEP_HISTORY], looking at most every ten minutes. */
+    @Synchronized
+    private fun purgeHistory() {
+        val at = now()
+        if (Duration.between(lastPurge, at) < Duration.ofMinutes(10)) return
+        lastPurge = at
+        history.deleteOlderThan(at.minus(KEEP_HISTORY))
+    }
 
     @Synchronized
     private fun checkQuietHours() {
@@ -282,6 +296,9 @@ class Rules(
         private val log = LoggerFactory.getLogger(Rules::class.java)
         private const val KEY = "rules"
         private val SERIALIZER = ListSerializer(Rule.serializer())
+
+        /** How long a rule's history is kept. */
+        val KEEP_HISTORY: Duration = Duration.ofDays(30)
 
         /** POST /api/rules/test looks at this many of the newest events on the rule's topic. */
         const val TEST_EVENTS = 20
