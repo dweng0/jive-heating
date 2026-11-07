@@ -1,6 +1,6 @@
 # BDD Status
 
-Checked 460 scenario(s) across 142 test file(s).
+Checked 460 scenario(s) across 144 test file(s).
 
 
 ## Feature: Service foundation
