@@ -132,6 +132,13 @@ fun pointLines(row: UsageRow?, currency: String): List<String> {
 fun usageSlides(roomName: String, meters: List<String>): List<Pair<String, String>> =
     if (meters.size == 1) listOf(meters[0] to meters[0]) else listOf(WHOLE to roomName) + meters.map { it to it }
 
+/** An area's carousel: the whole area, then each of its [plugs] by its label in [meters]. */
+fun areaSlides(areaName: String, plugs: List<String>, meters: List<heating.app.data.Meter>): List<Pair<String, String>> =
+    listOf(WHOLE to areaName) + plugs.map { p -> p to (meters.firstOrNull { it.name == p }?.shownAs ?: p) }
+
+/** What the plug table calls a plug: its label, else its meter name. */
+fun plugName(plug: heating.app.data.RoomPlug): String = plug.label?.takeIf { it.isNotBlank() } ?: plug.meter
+
 enum class PlugColumn(val label: String, val width: Int) {
     METER("Plug", 0),
     STATE("State", 72),

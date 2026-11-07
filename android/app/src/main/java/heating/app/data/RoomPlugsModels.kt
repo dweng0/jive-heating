@@ -23,6 +23,8 @@ data class RoomPlug(
     val offline: List<OfflinePeriod> = emptyList(),
     val offlineSince: String? = null,
     val totalStuckSince: String? = null,
+    /** What the app shows it as (its meter label); filled in by the app, never sent by the service. */
+    val label: String? = null,
 )
 
 /** openapi: RoomPlugs. A room's plugs today: the room's sum, "of which" the house meter's use, and each plug by name. */

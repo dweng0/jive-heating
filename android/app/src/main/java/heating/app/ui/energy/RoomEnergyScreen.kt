@@ -196,7 +196,7 @@ fun AreaEnergyScreen(api: HeatingApi, areaId: String, contentPadding: PaddingVal
         if (area != null) {
             val name = area.name
             val plugMeters = area.plugs.map { it.meter }
-            val slides = remember(plugMeters, name) { listOf(WHOLE to name) + plugMeters.map { it to it } }
+            val slides = remember(plugMeters, name, meters) { areaSlides(name, plugMeters, meters) }
             val pager = rememberPagerState { slides.size }
             val scope = rememberCoroutineScope()
             UsageCarousel(slides, { scope.launch { pager.animateScrollToPage(it) } }, { window, to -> api.areaUsage(areaId, window, to) }) { chart ->
@@ -210,7 +210,7 @@ fun AreaEnergyScreen(api: HeatingApi, areaId: String, contentPadding: PaddingVal
                     cost = area.cost,
                     plugs = area.plugs.map { p ->
                         val m = meters.firstOrNull { it.name == p.meter }
-                        heating.app.data.RoomPlug(p.meter, power = m?.power, kwh = p.kwh, cost = p.cost, offlineSince = if (m != null && !m.online) m.lastReading else null)
+                        heating.app.data.RoomPlug(p.meter, power = m?.power, kwh = p.kwh, cost = p.cost, offlineSince = if (m != null && !m.online) m.lastReading else null, label = m?.shownAs)
                     },
                 )
                 PlugTable(table, restLabel = "Rest of $name") { meter ->
@@ -536,7 +536,7 @@ private fun PlugTable(plugs: RoomPlugs, restLabel: String = "Moved out", onPick:
                 HorizontalDivider()
                 Row(Modifier.height(48.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        plug.meter,
+                        plugName(plug),
                         Modifier.width(nameWidth).clickable(onClickLabel = "Show its chart") { onPick(plug.meter) }.padding(horizontal = 6.dp, vertical = 12.dp),
                         fontWeight = FontWeight.Medium,
                         style = MaterialTheme.typography.bodyMedium,

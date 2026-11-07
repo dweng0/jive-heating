@@ -13,6 +13,8 @@ export interface OfflinePeriod {
 /** One plug today: power now (null while offline or stale) and its use and cost so far. */
 export interface RoomPlug {
   meter: string
+  /** What the table shows it as; the meter name when left out. */
+  label?: string
   power: number | null
   kwh: number
   cost: number

@@ -21,7 +21,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { ApiError } from '@/lib/api'
-import { alsoCountedIn, energyApi, type EnergyArea, type EnergyDashboard, type Meter } from '@/lib/energy'
+import { alsoCountedIn, energyApi, type EnergyArea, type EnergyDashboard, type Meter, meterLabel } from '@/lib/energy'
 import { WHOLE, usageApi, type UsageWindow } from '@/lib/energyUsage'
 import { useHome } from '@/lib/home'
 import type { RoomPlugs } from '@/lib/roomPlugs'
@@ -79,11 +79,16 @@ export function AreaEnergyPage() {
   const day = today?.areas?.find((a) => a.area === id)
   const currency = today?.currency ?? 'GBP'
   const plugNames = day?.plugs.map((p) => p.meter) ?? []
+  /** A meter as the admin named it: its label, else its name. */
+  const shownAs = (name: string) => {
+    const m = meters.find((x) => x.name === name)
+    return m ? meterLabel(m) : name
+  }
   // With no clamp and one plug, the plug's chart alone: the area's would only repeat it.
   const slides: UsageSlide[] =
     !area?.wholeMeter && plugNames.length === 1
-      ? [{ key: plugNames[0], name: plugNames[0] }]
-      : [{ key: WHOLE, name: area?.name ?? 'Area' }, ...plugNames.map((m) => ({ key: m, name: m }))]
+      ? [{ key: plugNames[0], name: shownAs(plugNames[0]) }]
+      : [{ key: WHOLE, name: area?.name ?? 'Area' }, ...plugNames.map((m) => ({ key: m, name: shownAs(m) }))]
   const others = (areas ?? []).filter((a) => a.id !== id)
   const overlaps = others.filter((a) => area?.overlaps?.includes(a.id))
 
@@ -101,6 +106,7 @@ export function AreaEnergyPage() {
           const offline = m != null && (!m.online || m.stale)
           return {
             meter: p.meter,
+            label: shownAs(p.meter),
             power: offline ? null : (m?.power ?? null),
             kwh: p.kwh,
             cost: p.cost,

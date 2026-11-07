@@ -294,6 +294,17 @@ test('an area card opens a dashboard with the whole area first, then its plugs, 
   await expect(rest.getByRole('button')).toHaveCount(0)
 })
 
+// BDD: An admin names a meter
+test('an area dashboard shows its plugs and clamps by their labels', async ({ page }) => {
+  const labelled = { ...garage, meters: garage.meters.map((m) => (m.name === 'Desk Plug' ? { ...m, label: 'Office lights' } : m)) }
+  await serve(page, labelled)
+  await page.goto('/energy/areas/garage-office')
+  await page.getByRole('button', { name: 'Next chart' }).click()
+  await expect(page.getByTestId('chart-title')).toHaveText('Office lights')
+  await expect(page.getByTestId('plug-table').getByTestId('plug-row')).toContainText('Office lights')
+  await expect(page.getByTestId('plug-table').getByTestId('plug-row')).not.toContainText('Desk Plug')
+})
+
 // BDD: An area card opens its energy dashboard
 test('an area measured by a clamp alone has one chart and no table', async ({ page }) => {
   await serve(page, garage)

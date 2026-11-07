@@ -303,6 +303,8 @@ private fun Connected(connection: Connection, onSignOut: () -> Unit, onPasswordC
                 if (state.admin) EnergyManageScreen(connection.api, state.rooms, contentPadding = padding, onMessage = { scope.launch { snackbar.showSnackbar(it) } })
             }
             composable("energy/area/{id}") { e ->
+                // The title comes from the dashboard, so fetch it afresh: the area may have been renamed since.
+                LaunchedEffect(Unit) { if (state.admin) energy.loadDashboard(energyState.period) }
                 if (state.admin) AreaEnergyScreen(connection.api, e.arguments?.getString("id")!!, contentPadding = padding)
             }
             composable("energy/else") {

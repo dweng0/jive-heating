@@ -45,7 +45,7 @@ export function PlugTable({ plugs, onPick, rest }: { plugs: RoomPlugs; onPick: (
               return (
                 <tr key={plug.meter} data-testid="plug-row" className="border-b last:border-0">
                   <th scope="row" className={cn('px-4 py-3 text-left font-medium', STICKY)}>
-                    <button type="button" className="text-left underline-offset-2 hover:underline" onClick={() => onPick(plug.meter)}>{plug.meter}</button>
+                    <button type="button" className="text-left underline-offset-2 hover:underline" onClick={() => onPick(plug.meter)}>{plug.label || plug.meter}</button>
                   </th>
                   <td data-testid="plug-state" className="px-4 py-3 text-right">{plugState(plug)}</td>
                   <td data-testid="plug-power" className="px-4 py-3 text-right">{plug.offlineSince ? 'Offline' : formatPower(plug.power)}</td>
