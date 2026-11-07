@@ -167,3 +167,15 @@ test('members cannot open the deliveries page', async ({ page }) => {
   await page.goto('/account/deliveries')
   await expect(page).toHaveURL(/\/$/)
 })
+
+// BDD: Rules are managed in the app
+test('a delivery link from a rule history opens that delivery', async ({ page }) => {
+  const all = [
+    row('a', 'sam', 'Front door opened', 'sent', 1, '2026-11-07T08:00:00Z', { topic: 'z2m/front_door', payload: { contact: false }, at: '2026-11-07T08:00:00Z' }),
+    row('b', 'jane', 'Heating alert', 'retrying', 2, '2026-11-07T09:00:00Z'),
+  ]
+  await serve(page, jane, all)
+  await page.goto('/account/deliveries?delivery=a')
+  await expect(page.getByTestId('delivery-cause')).toContainText('z2m/front_door')
+  await expect(page.getByTestId('delivery-cause')).toContainText('"contact": false')
+})
