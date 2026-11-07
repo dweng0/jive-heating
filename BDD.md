@@ -2871,6 +2871,23 @@ Engineering rules (apply to every scenario):
             And next to the odometer on the web app and the Android app a counter labelled "GAS · THU 5 NOV" shows "068.0"
                 kWh on wheels with its cost and "▲ 4.2 kWh vs Wed", or "▼" when less
 
+        Scenario: A day of gas, half-hour by half-hour
+            Given the meter has reported up to the end of 5 November
+            When someone with energy access sends GET /api/energy/gas
+            Then it has date "2026-11-05" (the latest whole day), kwh, cost at the gas price, currency and halfHours, each with at and kwh
+            And previous and next are the nearest days either side with readings, null at either end
+            And date=2026-11-04 gives that day, a day with no readings gets 404, and with no readings at all it is 404
+            And on the Energy tab of the web app and the Android app a "Gas" card charts the half-hours as bars, with
+                the day's kWh, cost and busiest half-hour, and buttons for the day before and the day after
+
+        Scenario: The boiler's average burn rate from the meter
+            Given over the 7 days up to the latest whole day the boiler burned for 30 hours and the meter recorded 363 kWh
+            When someone with energy access sends GET /api/energy/gas
+            Then measuredBoilerKw is 12.1 (the meter's kWh over the boiler's hours on those days), null with under 5 hours
+            And boilerAverageKw is the setting the estimate uses
+            And on the Gas card admins see "Boiler average from the meter: 12.1 kW" and, when it is 0.1 kW or more from
+                boilerAverageKw, a "Use 12.1 kW" button that sends PUT /api/settings/energy with boilerAverageKw 12.1
+
 # Deferred (not to be built yet)
 # - Mirror schedules to the valve weekly_schedule as a fallback when the service is down
 # - Open-window alerts (TRVZB exposes the setting, not a state; needs inference)

@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { NO_METER, READINGS_MISSING, SET_TARGET, gasEstimate, gasSource, targetDelta, targetProgress, type EnergyTarget, energyApi, energyPlace, formatCost, formatKwh, plugNowWarning, type DeviceEnergy, type EnergyDashboard, type RoomEnergy, type EverythingElse, type EnergyDay, type EnergyPeriod } from '@/lib/energy'
 import { IncompleteWarning } from './IncompleteWarning'
+import { GasCard } from './GasCard'
 import { cn } from '@/lib/utils'
 import { useHome } from '@/lib/home'
 
@@ -103,6 +104,7 @@ export function EnergySection() {
           {period !== 'today' && <DayBars days={shown.days} currency={shown.currency} dailyTarget={shown.target ? shown.target.kwh / shown.days.length : null} price={shown.electricityKwh ? (shown.electricityCost ?? 0) / shown.electricityKwh : null} />}
         </>
       )}
+      <GasCard />
     </section>
   )
 }

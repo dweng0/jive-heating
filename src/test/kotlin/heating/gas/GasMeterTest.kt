@@ -183,6 +183,80 @@ class GasMeterTest {
         assertEquals(JsonNull, totals(TestHeating())["gas"])
     }
 
+    private fun gasDay(t: TestHeating, query: String = "", status: HttpStatusCode = HttpStatusCode.OK): JsonObject? {
+        var result: JsonObject? = null
+        t.api { client ->
+            val response = client.get("/api/energy/gas$query")
+            assertEquals(status, response.status, response.bodyAsText())
+            if (status == HttpStatusCode.OK) result = heatingJson.parseToJsonElement(response.bodyAsText()).jsonObject
+        }
+        return result
+    }
+
+    // BDD: A day of gas, half-hour by half-hour
+    @Test
+    fun `a day of gas, half-hour by half-hour`() {
+        // 2 to 5 November, a kWh a half-hour; 4 November is missing.
+        val slots = halfHours(Instant.parse("2026-11-02T00:00:00Z"), last, 1.0)
+        slots.keys.removeIf { it >= Instant.parse("2026-11-04T00:00:00Z") && it < Instant.parse("2026-11-05T00:00:00Z") }
+        slots[Instant.parse("2026-11-05T18:30:00Z")] = 6.5
+        val t = TestHeating(clock = MutableClock(Instant.parse("2026-11-07T07:00:00Z")), gasMeter = FakeGasMeter(slots))
+        t.app.tick()
+        val day = gasDay(t)!!
+        assertEquals("2026-11-05", day["date"]!!.jsonPrimitive.content)
+        assertEquals(47 + 6.5, day.number("kwh"), 1e-9)
+        assertEquals(Math.round((47 + 6.5) * t.app.energySettings.get().gasPencePerKwh * 100) / 100.0, day.number("cost"), 1e-9)
+        assertEquals("GBP", day["currency"]!!.jsonPrimitive.content)
+        val halves = day["halfHours"]!!.jsonArray.map { it.jsonObject }
+        assertEquals(48, halves.size)
+        assertEquals("2026-11-05T00:00:00Z", halves.first()["at"]!!.jsonPrimitive.content)
+        assertEquals(6.5, halves.single { it["at"]!!.jsonPrimitive.content == "2026-11-05T18:30:00Z" }.number("kwh"))
+        // The nearest days with readings: 4 November has none.
+        assertEquals("2026-11-03", day["previous"]!!.jsonPrimitive.content)
+        assertEquals(JsonNull, day["next"])
+        val first = gasDay(t, "?date=2026-11-02")!!
+        assertEquals(JsonNull, first["previous"])
+        assertEquals("2026-11-03", first["next"]!!.jsonPrimitive.content)
+        assertEquals("2026-11-05", gasDay(t, "?date=2026-11-03")!!["next"]!!.jsonPrimitive.content)
+        gasDay(t, "?date=2026-11-04", HttpStatusCode.NotFound)
+        gasDay(t, "?date=nonsense", HttpStatusCode.BadRequest)
+        gasDay(TestHeating(), status = HttpStatusCode.NotFound)
+    }
+
+    // BDD: The boiler's average burn rate from the meter
+    @Test
+    fun `the boiler's average burn rate from the meter`() {
+        // 30 October to 5 November: the meter records 363 kWh over the 7 days, the boiler burns 30 hours.
+        val from = Instant.parse("2026-10-30T00:00:00Z")
+        val slots = halfHours(from, last, 363.0 / (7 * 48))
+        val t = TestHeating(clock = MutableClock(Instant.parse("2026-10-30T00:00:00Z")), gasMeter = FakeGasMeter(slots))
+        // 4 hours heating and 20 minutes cycling a day, but on 5 November 3 hours heating and 1 cycling.
+        (0L until 7L).forEach { d ->
+            val day = from.plus(Duration.ofDays(d))
+            val heating = if (d == 6L) 3L else 4L
+            val cycling = if (d == 6L) 60L else 20L
+            t.app.history.boilerChanged("heating", day.plus(Duration.ofHours(6)))
+            t.app.history.boilerChanged("cycling", day.plus(Duration.ofHours(6 + heating)))
+            t.app.history.boilerChanged("idle", day.plus(Duration.ofHours(6 + heating)).plus(Duration.ofMinutes(cycling)))
+        }
+        // Burning on 6 November too, outside the 7 days.
+        t.app.history.boilerChanged("heating", Instant.parse("2026-11-06T06:00:00Z"))
+        t.app.history.boilerChanged("idle", Instant.parse("2026-11-06T10:00:00Z"))
+        t.clock.set(Instant.parse("2026-11-07T07:00:00Z"))
+        t.app.tick()
+        val day = gasDay(t)!!
+        assertEquals(12.1, day.number("measuredBoilerKw"), 1e-9)
+        assertEquals(t.app.energySettings.get().boilerAverageKw, day.number("boilerAverageKw"))
+
+        // Under 5 boiler hours: not enough to measure.
+        val few = TestHeating(clock = MutableClock(Instant.parse("2026-11-05T00:00:00Z")), gasMeter = FakeGasMeter(halfHours(Instant.parse("2026-11-05T00:00:00Z"), last, 1.0)))
+        few.app.history.boilerChanged("heating", Instant.parse("2026-11-05T06:00:00Z"))
+        few.app.history.boilerChanged("idle", Instant.parse("2026-11-05T10:00:00Z"))
+        few.clock.set(Instant.parse("2026-11-07T07:00:00Z"))
+        few.app.tick()
+        assertEquals(JsonNull, gasDay(few)!!["measuredBoilerKw"])
+    }
+
     private fun totals(t: TestHeating): JsonObject {
         var result: JsonObject? = null
         t.api { client ->

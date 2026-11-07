@@ -38,7 +38,19 @@ const TOTALS = {
   yesterdaySoFar: { kwh: 7, cost: 189 },
 }
 
-async function serve(page: Page, opts: { metered?: boolean; gas?: object | null } = {}) {
+/** Gas days 3 to 5 November: a kWh a half-hour, 6.5 at 18:30. */
+function gasDay(date: string, measured: number | null = 12.1) {
+  const halfHours = Array.from({ length: 48 }, (_, i) => ({ at: new Date(Date.parse(`${date}T00:00:00Z`) + i * 1_800_000).toISOString(), kwh: i === 37 ? 6.5 : 1 }))
+  const days = ['2026-11-03', '2026-11-04', '2026-11-05']
+  const i = days.indexOf(date)
+  return {
+    date, kwh: 53.5, cost: 369.47, currency: 'GBP', halfHours,
+    previous: days[i - 1] ?? null, next: days[i + 1] ?? null, measuredBoilerKw: measured, boilerAverageKw: 12.0,
+  }
+}
+
+async function serve(page: Page, opts: { metered?: boolean; gas?: object | null; me?: typeof jane; measured?: number | null } = {}) {
+  const puts: unknown[] = []
   await page.routeWebSocket('**/ws', () => {})
   await page.routeWebSocket('**/ws/power', (ws) => {
     ws.send(JSON.stringify({ watts: 0, at: new Date().toISOString(), rooms: [], devices: [], areas: [], elseWatts: 0 }))
@@ -46,7 +58,12 @@ async function serve(page: Page, opts: { metered?: boolean; gas?: object | null 
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url())
     const { pathname } = url
-    if (pathname === '/api/auth/me') return route.fulfill({ json: jane })
+    if (pathname === '/api/auth/me') return route.fulfill({ json: opts.me ?? jane })
+    if (pathname === '/api/energy/gas') return route.fulfill({ json: gasDay(url.searchParams.get('date') ?? '2026-11-05', opts.measured === undefined ? 12.1 : opts.measured) })
+    if (pathname === '/api/settings/energy' && route.request().method() === 'PUT') {
+      puts.push(route.request().postDataJSON())
+      return route.fulfill({ json: {} })
+    }
     if (pathname === '/api/rooms') return route.fulfill({ json: [] })
     if (pathname === '/api/status') return route.fulfill({ json: STATUS })
     if (pathname === '/api/groups') return route.fulfill({ json: [] })
@@ -58,6 +75,7 @@ async function serve(page: Page, opts: { metered?: boolean; gas?: object | null 
     if (pathname === '/api/energy/history') return route.fulfill({ json: { currency: 'GBP', range: 'day', from: new Date().toISOString(), to: new Date().toISOString(), earliest: null, points: [] } })
     return route.fulfill({ status: 404, json: { error: 'not mocked' } })
   })
+  return { puts }
 }
 
 // BDD: The Energy tab says where gas comes from
@@ -102,4 +120,46 @@ test('the gas counter shows less with ▼ and is not shown before a whole day', 
   await page.reload()
   await expect(page.getByTestId('odometer-kwh')).toBeVisible()
   await expect(page.getByTestId('gas-day')).toHaveCount(0)
+})
+
+// BDD: A day of gas, half-hour by half-hour
+test('a day of gas, half-hour by half-hour', async ({ page }) => {
+  await serve(page)
+  await page.goto('/energy')
+  const card = page.getByTestId('gas-card')
+  await expect(card.getByTestId('gas-card-date')).toHaveText('Thu 5 Nov')
+  await expect(card.getByTestId('gas-half-hour')).toHaveCount(48)
+  await expect(card.getByTestId('gas-card-figures')).toContainText('53.5 kWh · £3.69')
+  await expect(card.getByTestId('gas-card-figures')).toContainText('busiest 18:30, 6.5 kWh')
+  await expect(card.getByRole('button', { name: 'Day after' })).toBeDisabled()
+  await card.getByRole('button', { name: 'Day before' }).click()
+  await expect(card.getByTestId('gas-card-date')).toHaveText('Wed 4 Nov')
+  await card.getByRole('button', { name: 'Day before' }).click()
+  await expect(card.getByTestId('gas-card-date')).toHaveText('Tue 3 Nov')
+  await expect(card.getByRole('button', { name: 'Day before' })).toBeDisabled()
+  await card.getByRole('button', { name: 'Day after' }).click()
+  await expect(card.getByTestId('gas-card-date')).toHaveText('Wed 4 Nov')
+})
+
+// BDD: The boiler's average burn rate from the meter
+test("the boiler's average burn rate from the meter", async ({ page }) => {
+  const { puts } = await serve(page)
+  await page.goto('/energy')
+  const measured = page.getByTestId('boiler-measured')
+  await expect(measured).toContainText('Boiler average from the meter: 12.1 kW')
+  await measured.getByRole('button', { name: 'Use 12.1 kW' }).click()
+  await expect.poll(() => puts).toEqual([{ boilerAverageKw: 12.1 }])
+  await expect(measured.getByRole('button', { name: 'Use 12.1 kW' })).toHaveCount(0)
+})
+
+test('members do not see the burn rate, and no button when it matches', async ({ page }) => {
+  await serve(page, { me: { ...jane, admin: false }, measured: 12.1 })
+  await page.goto('/energy')
+  await expect(page.getByTestId('gas-card')).toBeVisible()
+  await expect(page.getByTestId('boiler-measured')).toHaveCount(0)
+  await page.unrouteAll({ behavior: 'ignoreErrors' })
+  await serve(page, { measured: 12.05 })
+  await page.reload()
+  await expect(page.getByTestId('boiler-measured')).toContainText('12.1 kW')
+  await expect(page.getByTestId('boiler-measured').getByRole('button')).toHaveCount(0)
 })

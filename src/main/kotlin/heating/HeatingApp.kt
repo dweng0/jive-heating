@@ -118,6 +118,7 @@ class HeatingApp(
     )
     val meterRecorder = heating.energy.MeterRecorder(energyHistory, meters, energySettings, monitoredMeters, clock::instant, energyAreas)
     val gasReadings = heating.gas.GasReadings(config.dbPath)
+    val gasDays = heating.gas.GasDayReport(gasReadings, history, energySettings, config.timezone)
     val energyDashboards = heating.energy.EnergyDashboards(history, energyHistory, energySettings, monitoredMeters, meters, rooms::list, ::now, energyAreas::list, gasReadings)
     val roomPlugs = heating.energy.RoomPlugsReport(energyHistory, energySettings, monitoredMeters, meters, ::now)
     val roomEnergyHistory = heating.energy.RoomEnergyHistoryReport(energyHistory, config.timezone, clock)

@@ -40,6 +40,19 @@ class GasReadings(path: String) {
         s.executeQuery("SELECT MAX(at) FROM gas_readings").use { rs -> if (rs.next()) rs.getLong(1).takeUnless { rs.wasNull() }?.let(Instant::ofEpochMilli) else null }
     }
 
+    /** The start of the last half-hour kept before [at]; null with none. */
+    @Synchronized
+    fun lastBefore(at: Instant): Instant? = single("SELECT MAX(at) FROM gas_readings WHERE at < ?", at)
+
+    /** The start of the first half-hour kept at or after [at]; null with none. */
+    @Synchronized
+    fun firstFrom(at: Instant): Instant? = single("SELECT MIN(at) FROM gas_readings WHERE at >= ?", at)
+
+    private fun single(sql: String, at: Instant): Instant? = connection.prepareStatement(sql).use { s ->
+        s.setLong(1, at.toEpochMilli())
+        s.executeQuery().use { rs -> if (rs.next()) rs.getLong(1).takeUnless { rs.wasNull() }?.let(Instant::ofEpochMilli) else null }
+    }
+
     /** When the meter's readings run to: the end of the last half-hour kept; null with none. */
     fun meteredTo(): Instant? = last()?.plus(HALF_HOUR)
 

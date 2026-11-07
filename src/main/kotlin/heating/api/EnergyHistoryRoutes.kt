@@ -1,5 +1,6 @@
 package heating.api
 
+import heating.ApiException
 import heating.HeatingApp
 import heating.energy.HistoryChartRange
 import io.ktor.server.response.respond
@@ -14,4 +15,10 @@ fun Route.energyHistoryRoutes(heating: HeatingApp) {
     }
 
     get("/api/energy/totals") { call.respond(heating.energyTotals.now()) }
+    get("/api/energy/gas") {
+        val date = call.request.queryParameters["date"]?.let {
+            runCatching { java.time.LocalDate.parse(it) }.getOrNull() ?: throw ApiException.badRequest("date must be YYYY-MM-DD")
+        }
+        call.respond(heating.gasDays.of(date))
+    }
 }

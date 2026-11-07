@@ -538,6 +538,21 @@
         "type": "object", "required": ["kwh", "cost"],
         "properties": { "kwh": { "type": "number" }, "cost": { "type": "number", "description": "Minor units at today's electricity price" } }
       },
+      "GasDay": {
+        "type": "object", "required": ["date", "kwh", "cost", "currency", "halfHours", "previous", "next", "measuredBoilerKw", "boilerAverageKw"],
+        "description": "A day of the smart gas meter, half-hour by half-hour",
+        "properties": {
+          "date": { "type": "string", "format": "date" },
+          "kwh": { "type": "number" },
+          "cost": { "type": "number", "description": "kwh at the gas price, in the minor unit; no standing charge" },
+          "currency": { "type": "string" },
+          "halfHours": { "type": "array", "items": { "type": "object", "required": ["at", "kwh"], "properties": { "at": { "type": "string", "format": "date-time", "description": "Its start" }, "kwh": { "type": "number" } } } },
+          "previous": { "type": "string", "format": "date", "nullable": true, "description": "The nearest earlier day with readings" },
+          "next": { "type": "string", "format": "date", "nullable": true, "description": "The nearest later day with readings" },
+          "measuredBoilerKw": { "type": "number", "nullable": true, "description": "The meter's kWh over the boiler's burning hours on the 7 days up to the latest whole day; null with under 5 hours" },
+          "boilerAverageKw": { "type": "number", "description": "The setting the gas estimate uses" }
+        }
+      },
       "GasDayTotal": {
         "type": "object", "required": ["date", "kwh", "cost", "previousKwh"],
         "properties": {
@@ -1081,6 +1096,17 @@
           { "name": "to", "in": "query", "schema": { "type": "string", "format": "date-time" }, "description": "End of the range; left out, or in the future, it is now" }
         ],
         "responses": { "200": { "description": "history", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HouseHistory" } } } }, "400": { "description": "unknown range or unreadable to" }, "403": { "description": "no energy access" } }
+      }
+    },
+    "/api/energy/gas": {
+      "get": {
+        "summary": "A day of the smart gas meter, half-hourly: the latest whole day, or ?date=YYYY-MM-DD. Energy access.",
+        "parameters": [{ "name": "date", "in": "query", "required": false, "schema": { "type": "string", "format": "date" } }],
+        "responses": {
+          "200": { "description": "The day", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GasDay" } } } },
+          "400": { "description": "Not a date" },
+          "404": { "description": "No readings that day, or none at all" }
+        }
       }
     },
     "/api/energy/totals": {
