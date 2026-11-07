@@ -34,6 +34,8 @@ data class Rule(
     /** While the rule is paused for being noisy: until when (ISO time) and as the house reads it ("19:10"). Filled in when shown, never stored. */
     val pausedUntil: String? = null,
     val pausedUntilLocal: String? = null,
+    /** When it last sent a notification (ISO time), from its history; null if never in the days the history is kept. Filled in when shown, never stored. */
+    val lastSentAt: String? = null,
 )
 
 /** POST /api/rules, PUT /api/rules/{id} and POST /api/rules/test: everything a rule is except what the service fills in. */

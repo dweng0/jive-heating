@@ -679,4 +679,29 @@ class RulesTest {
             assertEquals(0, history(jane, id).size)
         }
     }
+
+    // BDD: Rules are managed in the app
+    @Test
+    fun `the rules list shows when each rule last sent`() {
+        val t = TestHeating()
+        t.api {
+            val jane = household().getValue("jane")
+            val id = createRule(jane, rule())["id"]!!.jsonPrimitive.content
+            createRule(jane, rule(name = "Quiet one", topic = "z2m/other", notify = "me"))
+            suspend fun lastSent(rule: String) = listRules(jane).first { it.jsonObject["id"]!!.jsonPrimitive.content == rule || it.jsonObject["name"]!!.jsonPrimitive.content == rule }
+                .jsonObject["lastSentAt"]?.takeIf { it !is kotlinx.serialization.json.JsonNull }?.jsonPrimitive?.content
+            assertEquals(null, lastSent(id))
+            t.clock.set(Instant.parse("2026-10-05T09:00:00Z"))
+            t.bus.receive(frontDoor, """{"contact":true}""")
+            t.bus.receive(frontDoor, """{"contact":false}""")
+            assertEquals("2026-10-05T09:00:00Z", lastSent(id))
+            assertEquals("2026-10-05T09:00:00Z", heatingJson.parseToJsonElement(send("GET", "/api/rules/$id", jane).bodyAsText()).jsonObject["lastSentAt"]!!.jsonPrimitive.content)
+            // a rule that has not sent shows none, and a skipped match is not a send
+            assertEquals(null, lastSent("Quiet one"))
+            t.clock.advance(Duration.ofSeconds(10))
+            t.bus.receive(frontDoor, """{"contact":true}""")
+            t.bus.receive(frontDoor, """{"contact":false}""") // inside the cooldown
+            assertEquals("2026-10-05T09:00:00Z", lastSent(id))
+        }
+    }
 }

@@ -299,3 +299,103 @@ test('a device under Events is offered rules from what it exposes; one opens the
   await expect(page.getByLabel('Name')).toHaveValue('front_door opened')
   await expect(page.getByLabel('Message')).toHaveValue('front_door opened')
 })
+
+const sentEntry = { at: ago(5), topic: 'z2m/front_door', payload: '{"contact":false}', outcome: 'sent', text: 'sent to 3 people', recipients: 3, deliveryIds: ['d1', 'd2', 'd3'], detail: null }
+const skippedEntry = { at: ago(4), topic: 'z2m/front_door', payload: '{"contact":false,"again":true}', outcome: 'skipped by cooldown', text: 'skipped by cooldown', recipients: 0, deliveryIds: [], detail: null }
+
+const managed = () => [
+  rule('r1', 'Front door opened', 'z2m/front_door', { notify: 'everyone', lastSentAt: ago(5) }),
+  rule('r2', 'Hall leak', 'z2m/hall_leak', { notify: 'me', enabled: false }),
+  rule('r3', 'Noisy button', 'z2m/hall_button', { notify: 'me', lastSentAt: ago(60 * 30), pausedUntil: ago(-30), pausedUntilLocal: '19:10' }),
+]
+const garage = { id: 'a1', name: 'Garage', alert: { hours: 2, notify: 'everyone', by: 'jane', mine: true } }
+
+// BDD: Rules are managed in the app
+test('Notifications lists each rule and area notification with a switch, filters with chips, resumes a paused rule and asks before deleting', async ({ page }) => {
+  const mock = await serve(page, withBridge(), managed(), { r1: [sentEntry, skippedEntry] }, [garage])
+  await page.goto('/')
+  await page.getByRole('link', { name: 'Notifications' }).first().click()
+  await expect(page).toHaveURL(/\/rules$/)
+
+  const rows = page.getByTestId('rule-row')
+  await expect(rows).toHaveCount(3)
+  const front = rows.filter({ hasText: 'Front door opened' })
+  await expect(front).toContainText('z2m/front_door')
+  await expect(front).toContainText('Everyone')
+  await expect(front).toContainText('5 min ago')
+  await expect(rows.filter({ hasText: 'Hall leak' })).toContainText('Never sent')
+  await expect(rows.filter({ hasText: 'Hall leak' })).toContainText('Me')
+  await expect(rows.filter({ hasText: 'Noisy button' })).toContainText('Paused until 19:10')
+  // Area notifications are listed with the rules.
+  await expect(page.getByTestId('area-row')).toContainText('Garage')
+  await expect(page.getByTestId('area-row')).toContainText('2 h')
+
+  // The switch turns a rule on or off.
+  await rows.filter({ hasText: 'Hall leak' }).getByRole('switch').click()
+  await expect.poll(() => mock.calls.find((c) => c.method === 'PUT' && c.path === '/api/rules/r2')?.body?.enabled).toBe(true)
+
+  // Chips narrow the list.
+  const chip = (name: string) => page.getByTestId('rule-chips').getByRole('button', { name, exact: true })
+  await chip('Paused').click()
+  await expect(rows).toHaveText([/Noisy button/])
+  await chip('Paused').click()
+  await chip('Notifies everyone').click()
+  await expect(rows).toHaveText([/Front door opened/])
+  await expect(page.getByTestId('area-row')).toHaveCount(1)
+  await chip('Notifies everyone').click()
+  await chip('Notifies me').click()
+  await expect(rows).toHaveCount(2)
+  await expect(page.getByTestId('area-row')).toHaveCount(0)
+  await chip('Notifies me').click()
+  await page.getByLabel('Topic', { exact: true }).selectOption('z2m/front_door')
+  await expect(rows).toHaveText([/Front door opened/])
+  await page.getByLabel('Topic', { exact: true }).selectOption('')
+  await expect(rows).toHaveCount(3)
+
+  // Resume ends a pause.
+  await rows.filter({ hasText: 'Noisy button' }).getByRole('button', { name: 'Resume' }).click()
+  await expect.poll(() => mock.calls.some((c) => c.method === 'POST' && c.path === '/api/rules/r3/resume')).toBe(true)
+  await expect(rows.filter({ hasText: 'Noisy button' })).not.toContainText('Paused until')
+
+  // Deleting asks first.
+  await rows.filter({ hasText: 'Hall leak' }).getByRole('button', { name: 'Delete' }).click()
+  await expect(page.getByRole('alertdialog')).toContainText('Delete Hall leak?')
+  await page.getByRole('button', { name: 'Cancel' }).click()
+  await expect(rows).toHaveCount(3)
+  await rows.filter({ hasText: 'Hall leak' }).getByRole('button', { name: 'Delete' }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click()
+  await expect(rows).toHaveCount(2)
+  expect(mock.calls.some((c) => c.method === 'DELETE' && c.path === '/api/rules/r2')).toBe(true)
+
+  // Opening a rule shows it to edit, test, see its history (each send linking to its delivery) or delete.
+  await front.getByRole('link', { name: 'Front door opened' }).click()
+  await expect(page).toHaveURL(/\/rules\/r1$/)
+  await expect(page.getByLabel('Name')).toHaveValue('Front door opened')
+  const history = page.getByTestId('history-entry')
+  await expect(history).toHaveCount(2)
+  await expect(history.first()).toContainText('sent to 3 people')
+  await expect(history.first().getByRole('link', { name: 'Delivery 1' })).toHaveAttribute('href', /delivery=d1/)
+  await expect(history.nth(1)).toContainText('skipped by cooldown')
+  await page.getByRole('button', { name: 'Delete rule' }).click()
+  await expect(page.getByRole('alertdialog')).toContainText('Delete Front door opened?')
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click()
+  await expect(page).toHaveURL(/\/rules$/)
+  await expect(rows).toHaveCount(1)
+})
+
+// BDD: Rules are suggested for a Zigbee2MQTT device
+test('"Suggested" in Notifications offers rules for every device, with action values, occupancy and tamper', async ({ page }) => {
+  await serve(page, withBridge(), [rule('r1', 'Front door opened', 'z2m/front_door', { conditions: [{ field: 'contact', operator: '=', value: false }] })])
+  await page.goto('/rules')
+  await page.getByRole('button', { name: 'Suggested' }).click()
+  const names = page.getByTestId('suggestion').locator('span.font-medium')
+  await expect(names).toHaveText([
+    'front_door opened', 'front_door battery low', 'hall_leak battery low', 'hall_leak leak detected',
+    'hall_button single', 'hall_button double', 'hall_button hold', 'landing_motion motion detected', 'landing_motion tampered with',
+  ])
+  await expect(page.getByTestId('suggestion').filter({ hasText: 'front_door opened' })).toContainText('Set up')
+  await expect(page.getByTestId('suggestion').filter({ hasText: 'hall_leak leak detected' })).toContainText('water_leak changes to true')
+  await page.getByTestId('suggestion').filter({ hasText: 'hall_button hold' }).getByRole('button', { name: 'Add' }).click()
+  await expect(page.getByLabel('Topic', { exact: true })).toHaveValue('z2m/hall_button')
+  await expect(page.getByTestId('condition').first().getByLabel('Value')).toHaveValue('hold')
+})

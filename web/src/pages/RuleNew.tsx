@@ -4,6 +4,7 @@ import { ChevronLeft, Plus, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { DeleteRuleDialog } from '@/components/heating/DeleteRuleDialog'
 import { Input } from '@/components/ui/input'
 import { eventsApi, valueText, type EventTopic, type LoggedEvent } from '@/lib/events'
 import {
@@ -28,6 +29,7 @@ import {
   type Condition,
   type FieldKind,
   type Operator,
+  type RuleHistoryEntry,
   type RuleRequest,
   type TestEvent,
 } from '@/lib/rules'
@@ -48,6 +50,8 @@ export function RuleNewPage() {
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [history, setHistory] = useState<RuleHistoryEntry[]>([])
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const [allTopics, setAllTopics] = useState<EventTopic[]>([])
   /** The topic the rule started from, before any widening. */
   const [started, setStarted] = useState('')
@@ -86,6 +90,10 @@ export function RuleNewPage() {
       message: given.message ?? texts.message,
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
+
+  useEffect(() => {
+    if (id) rulesApi.history(id).then(setHistory, () => undefined)
   }, [id])
 
   useEffect(() => {
@@ -181,6 +189,17 @@ export function RuleNewPage() {
       setError((e as Error).message)
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function remove() {
+    setConfirmDelete(false)
+    try {
+      await rulesApi.remove(id!)
+      toast.success(`${req?.name ?? 'Rule'} deleted`)
+      navigate('/rules')
+    } catch (e) {
+      toast.error((e as Error).message)
     }
   }
 
@@ -333,6 +352,11 @@ export function RuleNewPage() {
             <Button variant="outline" onClick={sendTest}>
               Send me a test
             </Button>
+            {id && (
+              <Button variant="outline" className="ml-auto text-destructive" onClick={() => setConfirmDelete(true)}>
+                Delete rule
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -355,6 +379,32 @@ export function RuleNewPage() {
           </ul>
         </CardContent>
       </Card>
+
+      {id && (
+        <Card>
+          <CardContent className="flex flex-col gap-2 pt-6">
+            <h2 className="font-semibold">History</h2>
+            <ul className="divide-y text-sm">
+              {history.map((h, i) => (
+                <li key={i} data-testid="history-entry" className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
+                  <span className="text-xs whitespace-nowrap text-muted-foreground">{dateTime(h.at)}</span>
+                  <span className="font-mono text-xs break-all">{h.payload}</span>
+                  <span className="ml-auto flex flex-wrap items-center gap-2">
+                    <span>{h.text}</span>
+                    {h.deliveryIds.map((d, n) => (
+                      <Link key={d} to={`/account/deliveries?delivery=${encodeURIComponent(d)}`} className="text-xs underline">
+                        Delivery {n + 1}
+                      </Link>
+                    ))}
+                  </span>
+                </li>
+              ))}
+              {history.length === 0 && <li className="py-2 text-muted-foreground">Nothing yet.</li>}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+      <DeleteRuleDialog name={confirmDelete ? req.name : null} onCancel={() => setConfirmDelete(false)} onConfirm={remove} />
     </div>
   )
 }
