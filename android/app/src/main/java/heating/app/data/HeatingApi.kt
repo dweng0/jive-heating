@@ -136,6 +136,15 @@ interface HeatingApi {
     suspend fun events(params: List<Pair<String, String>>): EventPage
     suspend fun eventTopics(): List<EventTopic>
 
+    /** Notification rules (admins). [testRule] replays the last events on the topic; [ruleHistory] is newest first. */
+    suspend fun rules(): List<Rule>
+    suspend fun createRule(request: RuleRequest): Rule
+    suspend fun updateRule(id: String, request: RuleRequest): Rule
+    suspend fun deleteRule(id: String)
+    suspend fun resumeRule(id: String): Rule
+    suspend fun ruleHistory(id: String, limit: Int = 50): List<RuleHistoryEntry>
+    suspend fun testRule(request: RuleRequest): RuleTestResult
+
     /** Connection setup (admins): broker and Zigbee2MQTT. */
     suspend fun setupStatus(): SetupStatus
     suspend fun savedBroker(): BrokerView?
@@ -441,6 +450,33 @@ class KtorHeatingApi(
         client.get("api/events") { params.forEach { (k, v) -> parameter(k, v) } }.body()
 
     override suspend fun eventTopics(): List<EventTopic> = client.get("api/events/topics").body()
+
+    override suspend fun rules(): List<Rule> = client.get("api/rules").body()
+
+    override suspend fun createRule(request: RuleRequest): Rule = client.post("api/rules") {
+        contentType(ContentType.Application.Json)
+        setBody(request)
+    }.body()
+
+    override suspend fun updateRule(id: String, request: RuleRequest): Rule = client.put("api/rules/${id.encodeURLPathPart()}") {
+        contentType(ContentType.Application.Json)
+        setBody(request)
+    }.body()
+
+    override suspend fun deleteRule(id: String) {
+        client.delete("api/rules/${id.encodeURLPathPart()}")
+    }
+
+    override suspend fun resumeRule(id: String): Rule =
+        client.post("api/rules/${id.encodeURLPathPart()}/resume") { contentType(ContentType.Application.Json); setBody("{}") }.body()
+
+    override suspend fun ruleHistory(id: String, limit: Int): List<RuleHistoryEntry> =
+        client.get("api/rules/${id.encodeURLPathPart()}/history") { parameter("limit", limit) }.body()
+
+    override suspend fun testRule(request: RuleRequest): RuleTestResult = client.post("api/rules/test") {
+        contentType(ContentType.Application.Json)
+        setBody(request)
+    }.body()
 
     override suspend fun setupStatus(): SetupStatus = client.get("api/setup/status").body()
 
