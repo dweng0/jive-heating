@@ -11,6 +11,8 @@ import heating.app.notify.registerForPush
 import heating.app.notify.shouldAskToNotify
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -254,9 +256,14 @@ private fun Connected(connection: Connection, onSignOut: () -> Unit, onPasswordC
                     }
                 }
                 if (!tray) tabs()
-                else Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                else Column(
+                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)
+                        // Closed, the arrow keeps clear of the system buttons itself; open, the tabs do.
+                        .then(if (trayOpen) Modifier else Modifier.navigationBarsPadding()),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
                     // On the Echo Show the tabs wait behind an up arrow, and tuck away again once one is chosen.
-                    IconButton(onClick = { trayOpen = !trayOpen }) {
+                    IconButton(onClick = { trayOpen = !trayOpen }, modifier = Modifier.fillMaxWidth().height(36.dp)) {
                         Icon(
                             if (trayOpen) Icons.Rounded.KeyboardArrowDown else Icons.Rounded.KeyboardArrowUp,
                             if (trayOpen) "Hide tabs" else "Show tabs",
