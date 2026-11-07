@@ -92,6 +92,28 @@ data class EnergyTotals(
     val gas: GasDayTotal? = null,
 )
 
+/** openapi: GasDay. A day of the smart gas meter, half-hour by half-hour, and the boiler's burn rate the meter measured. */
+@kotlinx.serialization.Serializable
+data class GasDay(
+    val date: String,
+    val kwh: Double,
+    val cost: Double,
+    val currency: String = "GBP",
+    val halfHours: List<GasHalfHour> = emptyList(),
+    val previous: String? = null,
+    val next: String? = null,
+    val measuredBoilerKw: Double? = null,
+    val boilerAverageKw: Double = 12.0,
+)
+
+/** One half-hour of the gas meter, by its start. */
+@kotlinx.serialization.Serializable
+data class GasHalfHour(val at: String, val kwh: Double)
+
+/** PUT /api/settings/energy with only the boiler's average burn rate. */
+@kotlinx.serialization.Serializable
+data class BoilerRateRequest(val boilerAverageKw: Double)
+
 /** openapi: GasDayTotal. A whole day of the smart gas meter, its cost at the gas price, and the day before's kWh. */
 @kotlinx.serialization.Serializable
 data class GasDayTotal(val date: String, val kwh: Double, val cost: Double, val previousKwh: Double? = null)

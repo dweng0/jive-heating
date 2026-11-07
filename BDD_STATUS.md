@@ -1,6 +1,6 @@
 # BDD Status
 
-Checked 416 scenario(s) across 121 test file(s).
+Checked 418 scenario(s) across 121 test file(s).
 
 
 ## Feature: Service foundation
@@ -556,6 +556,8 @@ Checked 416 scenario(s) across 121 test file(s).
 - [x] The dashboard's gas is the meter's where it has reported
 - [x] The Energy tab says where gas comes from
 - [x] The car dashboard shows the gas meter's latest day
+- [x] A day of gas, half-hour by half-hour
+- [x] The boiler's average burn rate from the meter
 
 ---
-**416/416 scenarios covered.**
+**418/418 scenarios covered.**

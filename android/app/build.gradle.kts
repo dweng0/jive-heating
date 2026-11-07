@@ -25,8 +25,8 @@ android {
         applicationId = "heating.app"
         minSdk = 33 // Android 13 and newer
         targetSdk = 35
-        versionCode = 36
-        versionName = "0.21.0"
+        versionCode = 37
+        versionName = "0.22.0"
     }
 
     buildTypes {

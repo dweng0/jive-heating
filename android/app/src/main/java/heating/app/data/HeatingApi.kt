@@ -141,6 +141,12 @@ interface HeatingApi {
     /** The house's use today, this week, month and year, and by this time yesterday. */
     suspend fun energyTotals(): EnergyTotals
 
+    /** A day of the smart gas meter: [date], or the latest whole day; null with no readings. */
+    suspend fun gasDay(date: String? = null): GasDay?
+
+    /** Sets only the boiler's average burn rate the gas estimate uses. */
+    suspend fun setBoilerAverageKw(kw: Double): EnergySettings
+
     /** Live events from /ws until the connection drops. */
     fun liveEvents(): Flow<LiveEvent>
 
@@ -424,6 +430,18 @@ class KtorHeatingApi(
     override suspend fun powerSummary(): PowerSummary = client.get("api/power").body()
 
     override suspend fun energyTotals(): EnergyTotals = client.get("api/energy/totals").body()
+
+    override suspend fun gasDay(date: String?): GasDay? = try {
+        val response = client.get("api/energy/gas") { date?.let { parameter("date", it) } }
+        if (response.status == io.ktor.http.HttpStatusCode.NotFound) null else response.body()
+    } catch (e: io.ktor.client.plugins.ClientRequestException) {
+        if (e.response.status == io.ktor.http.HttpStatusCode.NotFound) null else throw e
+    }
+
+    override suspend fun setBoilerAverageKw(kw: Double): EnergySettings = client.put("api/settings/energy") {
+        contentType(ContentType.Application.Json)
+        setBody(BoilerRateRequest(kw))
+    }.body()
 
     override suspend fun houseHistory(range: String, to: String?): HouseHistory =
         client.get("api/energy/history") {

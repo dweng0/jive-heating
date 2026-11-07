@@ -2,7 +2,9 @@ package heating.app.ui.energy
 
 import heating.app.data.EnergyDashboard
 import heating.app.data.EnergyDay
+import heating.app.data.GasDay
 import heating.app.data.GasDayTotal
+import heating.app.data.GasHalfHour
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -40,5 +42,34 @@ class GasMeterTest {
         assertEquals("▲ 4.2 kWh vs Wed" to true, gasDelta(gas))
         assertEquals("▼ 3.8 kWh vs Wed" to false, gasDelta(gas.copy(kwh = 60.0)))
         assertNull(gasDelta(gas.copy(previousKwh = null)))
+    }
+
+    private fun gasDay(measured: Double? = 12.1) = GasDay(
+        date = "2026-11-05", kwh = 53.5, cost = 369.47, currency = "GBP",
+        halfHours = (0 until 48).map { GasHalfHour(java.time.Instant.parse("2026-11-05T00:00:00Z").plusSeconds(1800L * it).toString(), if (it == 37) 6.5 else 1.0) },
+        previous = "2026-11-04", next = null, measuredBoilerKw = measured, boilerAverageKw = 12.0,
+    )
+
+    // BDD: A day of gas, half-hour by half-hour
+    @Test
+    fun `a day of gas, half-hour by half-hour`() {
+        val day = gasDay()
+        assertEquals("Thu 5 Nov", gasDayTitle(day.date))
+        assertEquals("53.5 kWh · £3.69 · busiest 18:30, 6.5 kWh", gasDayFigures(day, java.time.ZoneId.of("Europe/London")))
+        assertEquals("53.5 kWh · £3.69", gasDayFigures(day.copy(halfHours = day.halfHours.map { it.copy(kwh = 0.0) }), java.time.ZoneId.of("Europe/London")))
+        // Each bar as a share of the busiest half-hour.
+        val bars = gasBars(day)
+        assertEquals(48, bars.size)
+        assertEquals(1f, bars[37], 1e-6f)
+        assertEquals(1f / 6.5f, bars[0], 1e-6f)
+    }
+
+    // BDD: The boiler's average burn rate from the meter
+    @Test
+    fun `the boiler's average burn rate from the meter`() {
+        assertEquals("Boiler average from the meter: 12.1 kW", boilerMeasuredLine(gasDay()))
+        assertEquals("Use 12.1 kW", useMeasuredLabel(gasDay()))
+        assertNull(useMeasuredLabel(gasDay(12.05)))
+        assertNull(boilerMeasuredLine(gasDay(null)))
     }
 }

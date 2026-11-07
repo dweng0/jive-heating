@@ -41,7 +41,7 @@ fun minorUnit(currency: String): String = if (currency == "GBP") "p" else "c"
 fun symbol(currency: String): String =
     runCatching { java.util.Currency.getInstance(currency).getSymbol(Locale.UK) }.getOrDefault(currency)
 
-private fun oneDecimal(v: Double) = String.format(Locale.UK, "%.1f", v)
+internal fun oneDecimal(v: Double) = String.format(Locale.UK, "%.1f", v)
 
 /** "27.0p per kWh", "27.0c per kWh", "12.0 kW". */
 fun formatPrice(field: PriceField, settings: EnergySettings): String {
