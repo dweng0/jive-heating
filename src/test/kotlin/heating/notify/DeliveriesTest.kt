@@ -209,4 +209,64 @@ class DeliveriesTest {
         assertTrue(t.app.deliveries.retry(id))
         assertEquals("Front door opened (sent late)", t.pushed.last().title)
     }
+
+    // BDD: Deliveries are searched in the app
+    @Test
+    fun `deliveries are searched newest first with filters and sorting and members get 403`() {
+        val t = TestHeating()
+        val ids = household(t)
+        val event = DeliveryEvent(id = "e1", topic = "z2m/front_door", payload = heatingJson.parseToJsonElement("""{"contact":false}"""), at = t.clock.instant().toString())
+        t.app.deliveries.enqueue(listOf(ids.getValue("sam")), "Front door opened", "Opened", "Front door opened", ruleId = "r1", event = event)
+        t.clock.advance(Duration.ofSeconds(10))
+        t.pushFails = true
+        t.app.deliveries.enqueue(listOf(ids.getValue("jane")), "Heating finished", "Done", "Heating alert")
+        t.clock.advance(Duration.ofSeconds(10))
+        t.pushFails = false
+        t.app.deliveries.enqueue(listOf(ids.getValue("ann")), "Garage still on", "On", "Area notification")
+
+        t.api {
+            val jane = token(t, "jane")
+            fun rows(path: String) = heatingJson.parseToJsonElement(kotlinx.coroutines.runBlocking { getAs(jane, path).bodyAsText() })
+                .jsonObject["deliveries"]!!.jsonArray.map { it.jsonObject }
+            fun titles(path: String) = rows(path).map { it["title"]!!.jsonPrimitive.content }
+
+            assertEquals(listOf("Garage still on", "Heating finished", "Front door opened"), titles("/api/deliveries"))
+            assertEquals(listOf("Heating finished"), titles("/api/deliveries?status=retrying"))
+            assertEquals(listOf("Front door opened"), titles("/api/deliveries?rule=Front+door+opened"))
+            assertEquals(listOf("Front door opened"), titles("/api/deliveries?person=sam"))
+            assertEquals(emptyList(), titles("/api/deliveries?person=nobody"))
+            val from = t.clock.instant().minus(Duration.ofSeconds(15)).toString()
+            assertEquals(listOf("Garage still on", "Heating finished"), titles("/api/deliveries?from=$from"))
+            assertEquals(listOf("Ann".lowercase(), "jane", "sam"), rows("/api/deliveries?sort=person&dir=asc").map { it["person"]!!.jsonPrimitive.content })
+            assertEquals(listOf("sent", "retrying", "sent"), rows("/api/deliveries").map { it["status"]!!.jsonPrimitive.content })
+
+            // Opening one shows the event that caused it; a heating alert has none, only its source.
+            val open = rows("/api/deliveries").last()["id"]!!.jsonPrimitive.content
+            val one = heatingJson.parseToJsonElement(getAs(jane, "/api/deliveries/$open").bodyAsText()).jsonObject
+            assertEquals("z2m/front_door", one["event"]!!.jsonObject["topic"]!!.jsonPrimitive.content)
+            val alert = rows("/api/deliveries")[1]
+            assertTrue(alert["event"] == null || alert["event"] is kotlinx.serialization.json.JsonNull)
+            assertEquals("Heating alert", alert["source"]!!.jsonPrimitive.content)
+
+            // Members get 403.
+            val sam = token(t, "sam")
+            assertEquals(HttpStatusCode.Forbidden, getAs(sam, "/api/deliveries").status)
+            assertEquals(HttpStatusCode.Forbidden, getAs(sam, "/api/deliveries/$open").status)
+        }
+    }
+
+    // BDD: Deliveries are searched in the app
+    @Test
+    fun `sent deliveries are kept 30 days`() {
+        val t = TestHeating()
+        val ids = household(t)
+        val sent = t.app.deliveries.enqueue(listOf(ids.getValue("jane")), "Old", "old", "Test").single()
+        t.pushFails = true
+        val failed = t.app.deliveries.enqueue(listOf(ids.getValue("jane")), "Stuck", "stuck", "Test").single()
+        later(t, Duration.ofDays(29))
+        assertNotNull(t.app.deliveries.get(sent))
+        later(t, Duration.ofDays(2))
+        assertNull(t.app.deliveries.get(sent))
+        assertNotNull(t.app.deliveries.get(failed))
+    }
 }

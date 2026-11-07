@@ -119,3 +119,51 @@ test('members see no deliveries', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Account' }).or(page.getByText('sam')).first()).toBeVisible()
   await expect(page.getByTestId('deliveries-card')).toHaveCount(0)
 })
+
+const row = (id: string, person: string, source: string, status: string, tries: number, at: string, event?: unknown): D => ({
+  id, at, source, userId: `u-${person}`, person, title: source, body: 'body', status, tries, sentTo: [], attempts: [], event,
+})
+
+// BDD: Deliveries are searched in the app
+test('admins search deliveries with chips and sortable columns and open one to see its event', async ({ page }) => {
+  const all = [
+    row('a', 'sam', 'Front door opened', 'sent', 1, '2026-11-07T08:00:00Z', { topic: 'z2m/front_door', payload: { contact: false }, at: '2026-11-07T08:00:00Z' }),
+    row('b', 'jane', 'Heating alert', 'retrying', 2, '2026-11-07T09:00:00Z'),
+    row('c', 'ann', 'Area notification', 'sent', 1, '2026-11-07T10:00:00Z'),
+  ]
+  const { calls } = await serve(page, jane, all)
+  await page.goto('/account')
+  await page.getByRole('link', { name: 'Deliveries' }).click()
+  await expect(page.getByRole('heading', { name: 'Deliveries' })).toBeVisible()
+  await expect(page.getByTestId('delivery-row')).toHaveCount(3)
+  await expect(page.getByRole('columnheader')).toHaveText(['Time', 'Rule', 'Person', 'Status', 'Tries'])
+
+  await page.getByLabel('Status').selectOption('retrying')
+  await expect(page.getByTestId('delivery-row')).toHaveCount(1)
+  await expect(page.getByTestId('delivery-row')).toContainText('jane')
+  await page.getByLabel('Status').selectOption('')
+  await page.getByLabel('Person').selectOption('sam')
+  await expect(page.getByTestId('delivery-row')).toHaveCount(1)
+  await page.getByLabel('Person').selectOption('')
+
+  await page.getByRole('button', { name: 'Person' }).click()
+  await expect.poll(() => calls.at(-1)).toContain('sort=person&dir=asc')
+
+  // A delivery from an event shows it; a heating alert shows its source.
+  await page.getByLabel('Rule').selectOption('Front door opened')
+  await page.getByTestId('delivery-row').click()
+  await expect(page.getByTestId('delivery-cause')).toContainText('z2m/front_door')
+  await expect(page.getByTestId('delivery-cause')).toContainText('"contact": false')
+  await page.keyboard.press('Escape')
+  await page.getByLabel('Rule').selectOption('Heating alert')
+  await page.getByTestId('delivery-row').click()
+  await expect(page.getByTestId('delivery-cause')).toContainText('Source')
+  await expect(page.getByTestId('delivery-cause')).toContainText('Heating alert')
+})
+
+// BDD: Deliveries are searched in the app
+test('members cannot open the deliveries page', async ({ page }) => {
+  await serve(page, sam, [])
+  await page.goto('/account/deliveries')
+  await expect(page).toHaveURL(/\/$/)
+})
