@@ -704,4 +704,63 @@ class RulesTest {
             assertEquals("2026-10-05T09:00:00Z", lastSent(id))
         }
     }
+
+    private val bridgeDevices = """[
+        {"friendly_name":"Coordinator","type":"Coordinator","definition":null},
+        {"friendly_name":"front_door","type":"EndDevice","definition":{"exposes":[
+            {"type":"binary","property":"contact","name":"contact"},
+            {"type":"numeric","property":"battery","name":"battery"}]}},
+        {"friendly_name":"hall_leak","type":"EndDevice","definition":{"exposes":[{"type":"binary","property":"water_leak","name":"water_leak"}]}},
+        {"friendly_name":"landing","type":"EndDevice","definition":{"exposes":[
+            {"type":"binary","property":"occupancy"},{"type":"binary","property":"tamper"}]}},
+        {"friendly_name":"hall_button","type":"EndDevice","definition":{"exposes":[
+            {"type":"composite","features":[{"type":"enum","property":"action","values":["single","double"]}]}]}}
+    ]"""
+
+    private suspend fun ApplicationTestBuilder.suggestions(token: String, device: String? = null): List<JsonObject> =
+        heatingJson.parseToJsonElement(send("GET", "/api/rules/suggestions" + (device?.let { "?device=$it" } ?: ""), token).bodyAsText())
+            .jsonArray.map { it.jsonObject }
+
+    // BDD: Rules are suggested for a Zigbee2MQTT device
+    @Test
+    fun `rules are suggested for each zigbee2mqtt device from what it exposes`() {
+        val t = TestHeating(configure = { it.copy(z2mBaseTopic = "z2m") })
+        t.api {
+            val tokens = household()
+            val jane = tokens.getValue("jane")
+            assertEquals(emptyList(), suggestions(jane))
+            t.bus.receive("z2m/bridge/devices", bridgeDevices, retained = true)
+
+            val all = suggestions(jane)
+            assertEquals(
+                listOf(
+                    "front_door opened", "front_door battery low", "hall_leak leak detected",
+                    "landing motion detected", "landing tampered with", "hall_button single", "hall_button double",
+                ),
+                all.map { it["name"]!!.jsonPrimitive.content },
+            )
+            val opened = all.first()
+            assertEquals("z2m/front_door", opened["topic"]!!.jsonPrimitive.content)
+            assertEquals("front_door", opened["device"]!!.jsonPrimitive.content)
+            assertEquals("changes to", opened["trigger"]!!.jsonPrimitive.content)
+            assertEquals("front_door", opened["title"]!!.jsonPrimitive.content)
+            assertEquals("front_door opened", opened["message"]!!.jsonPrimitive.content)
+            assertEquals(heatingJson.parseToJsonElement("""[{"field":"contact","operator":"=","value":false}]"""), opened["conditions"])
+            assertEquals(false, opened["setUp"]!!.jsonPrimitive.boolean)
+            val battery = all[1]
+            assertEquals(heatingJson.parseToJsonElement("""[{"field":"battery","operator":"<","value":15}]"""), battery["conditions"])
+            assertEquals("front_door battery is low ({{payload.battery}}%)", battery["message"]!!.jsonPrimitive.content)
+            assertEquals(heatingJson.parseToJsonElement("""[{"field":"water_leak","operator":"=","value":true}]"""), all[2]["conditions"])
+            assertEquals(heatingJson.parseToJsonElement("""[{"field":"action","operator":"=","value":"double"}]"""), all[6]["conditions"])
+            assertEquals("hall_button: double", all[6]["message"]!!.jsonPrimitive.content)
+
+            // one device's only, and a rule like it shows as set up
+            createRule(jane, rule(name = "Door", topic = "z2m/front_door"))
+            val door = suggestions(jane, "front_door")
+            assertEquals(listOf("front_door opened", "front_door battery low"), door.map { it["name"]!!.jsonPrimitive.content })
+            assertEquals(listOf(true, false), door.map { it["setUp"]!!.jsonPrimitive.boolean })
+            assertEquals(emptyList(), suggestions(jane, "nope"))
+            assertEquals(HttpStatusCode.Forbidden, send("GET", "/api/rules/suggestions", tokens.getValue("sam")).status)
+        }
+    }
 }

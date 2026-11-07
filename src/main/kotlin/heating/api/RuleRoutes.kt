@@ -42,6 +42,11 @@ fun Route.ruleRoutes(heating: HeatingApp) {
         call.respond(HttpStatusCode.Created, rule)
     }
 
+    get("/api/rules/suggestions") {
+        val device = call.request.queryParameters["device"]?.takeIf { it.isNotBlank() }
+        call.respond(heating.ruleSuggestions.list(rules.list(), device))
+    }
+
     post("/api/rules/test") {
         val request = call.request()
         request.validated()

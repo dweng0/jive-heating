@@ -623,6 +623,19 @@
           "lastSentAt": { "type": "string", "format": "date-time", "nullable": true, "description": "When the rule last sent a notification, from its history (kept 30 days); null if it has not" }
         }
       },
+      "RuleSuggestion": {
+        "type": "object", "required": ["name", "topic", "conditions", "trigger", "title", "message", "device", "setUp"],
+        "properties": {
+          "name": { "type": "string" },
+          "topic": { "type": "string" },
+          "conditions": { "type": "array", "items": { "$ref": "#/components/schemas/RuleCondition" } },
+          "trigger": { "type": "string", "enum": ["changes to", "is"] },
+          "title": { "type": "string" },
+          "message": { "type": "string" },
+          "device": { "type": "string", "description": "The device's Zigbee2MQTT friendly name" },
+          "setUp": { "type": "boolean", "description": "A rule already does this: same topic and first condition" }
+        }
+      },
       "RuleHistoryEntry": {
         "type": "object", "required": ["at", "topic", "payload", "outcome", "text"],
         "properties": {
@@ -832,6 +845,9 @@
     "/api/rules": {
       "get": { "summary": "Notification rules. Admins; members get 403.", "responses": { "200": { "description": "The rules", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Rule" } } } } }, "403": { "description": "Not an admin" } } },
       "post": { "summary": "Create a rule, owned by the caller. Admins.", "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RuleRequest" } } } }, "responses": { "201": { "description": "The rule", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Rule" } } } }, "400": { "description": "A field is wrong; the error names it" }, "403": { "description": "Not an admin" } } }
+    },
+    "/api/rules/suggestions": {
+      "get": { "summary": "Rules worth having for Zigbee2MQTT devices, from what each exposes on bridge/devices (contact, battery, water_leak, occupancy, tamper, one per action value). Admins.", "parameters": [{ "name": "device", "in": "query", "required": false, "description": "Only this device's (friendly name)", "schema": { "type": "string" } }], "responses": { "200": { "description": "The suggestions", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/RuleSuggestion" } } } } }, "403": { "description": "Not an admin" } } }
     },
     "/api/rules/test": {
       "post": { "summary": "Run a rule (not saved) over the last 20 events on its topic: which would send, with the notification each would send. Sends nothing. Admins.", "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RuleRequest" } } } }, "responses": { "200": { "description": "The events, newest first", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RuleTestResult" } } } }, "400": { "description": "A field is wrong; the error names it" }, "403": { "description": "Not an admin" } } }
