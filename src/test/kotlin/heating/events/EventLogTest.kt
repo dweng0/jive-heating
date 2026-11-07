@@ -270,4 +270,105 @@ class EventLogTest {
         t.restart()
         t.api { assertEquals(listOf("homeassistant/#"), getJson("/api/events/settings")["excluded"]!!.jsonArray.map { it.jsonObject["topic"]!!.jsonPrimitive.content }) }
     }
+
+    /** Events an hour apart from 10:00Z: door contact, kitchen temperature, a deeper z2m topic and a text one. */
+    private fun TestHeating.seed() {
+        val messages = listOf(
+            "z2m/front_door" to """{"contact":false,"battery":91}""",
+            "z2m/kitchen" to """{"temperature":19.5}""",
+            "z2m/front_door" to """{"contact":true,"battery":90}""",
+            "z2m/bridge/logging" to """{"message":"contact sensor paired"}""",
+            "garage/temp" to "18.5",
+            "z2m/back_door" to """{"contact":true,"battery":80,"nested":{"deep":1}}""",
+        )
+        messages.forEach { (topic, payload) ->
+            clock.advance(Duration.ofHours(1))
+            bus.receive(topic, payload)
+        }
+        app.events.flush()
+    }
+
+    // BDD: Events are searched through the API
+    @Test
+    fun `events are searched by topic wildcard time text and field newest first`() {
+        val t = service()
+        t.seed()
+        t.api {
+            // The wildcard matches one level; newest first by default.
+            val z2m = getJson("/api/events?topic=z2m/%2B")
+            assertEquals(listOf("z2m/back_door", "z2m/front_door", "z2m/kitchen", "z2m/front_door"), z2m.topics())
+            assertEquals(4, z2m["total"]!!.jsonPrimitive.long)
+            assertEquals(5, getJson("/api/events?topic=z2m/%23")["total"]!!.jsonPrimitive.long)
+            assertEquals(listOf("garage/temp"), getJson("/api/events?topic=garage/temp").topics())
+            // Times: the seeded events are at 10:00Z to 15:00Z.
+            val window = getJson("/api/events?topic=z2m/%23&from=2026-10-12T11:00:00Z&to=2026-10-12T12:00:00Z&sort=at%20asc")
+            assertEquals(listOf("z2m/kitchen", "z2m/front_door"), window.topics())
+            assertEquals("2026-10-12T11:00:00Z", window["events"]!!.jsonArray.first().jsonObject["at"]!!.jsonPrimitive.content)
+            // Text matches topic or payload, ignoring case.
+            assertEquals(listOf("z2m/back_door", "z2m/bridge/logging", "z2m/front_door", "z2m/front_door"), getJson("/api/events?text=CONTACT").topics().sorted())
+            assertEquals(listOf("garage/temp"), getJson("/api/events?text=garage").topics())
+            // Field: only JSON events that have it.
+            val contact = getJson("/api/events?field=contact")
+            assertEquals(listOf("z2m/back_door", "z2m/front_door", "z2m/front_door"), contact.topics().sorted())
+            assertEquals(3, contact["total"]!!.jsonPrimitive.long)
+            assertEquals(listOf("z2m/back_door"), getJson("/api/events?field=nested.deep").topics())
+            // The scenario's own combination.
+            val combined = getJson("/api/events?topic=z2m/%2B&from=2026-10-12T09:00:00Z&to=2026-10-12T20:00:00Z&text=contact&field=contact&sort=at%20desc&limit=100")
+            assertEquals(listOf("z2m/back_door", "z2m/front_door", "z2m/front_door"), combined.topics())
+            assertEquals(3, combined["total"]!!.jsonPrimitive.long)
+            assertEquals("null", combined["next"]!!.toString())
+        }
+    }
+
+    // BDD: Events are searched through the API
+    @Test
+    fun `events are paged with a cursor and sorted by topic`() {
+        val t = service()
+        t.seed()
+        t.api {
+            val first = getJson("/api/events?topic=z2m/%23&limit=2")
+            assertEquals(listOf("z2m/back_door", "z2m/bridge/logging"), first.topics())
+            assertEquals(5, first["total"]!!.jsonPrimitive.long)
+            val second = getJson("/api/events?topic=z2m/%23&limit=2&cursor=${first["next"]!!.jsonPrimitive.content}")
+            assertEquals(listOf("z2m/front_door", "z2m/kitchen"), second.topics())
+            val third = getJson("/api/events?topic=z2m/%23&limit=2&cursor=${second["next"]!!.jsonPrimitive.content}")
+            assertEquals(listOf("z2m/front_door"), third.topics())
+            assertEquals("null", third["next"]!!.toString())
+            assertEquals(5, third["total"]!!.jsonPrimitive.long)
+
+            val byTopic = getJson("/api/events?topic=z2m/%23&sort=topic%20asc&limit=2")
+            assertEquals(listOf("z2m/back_door", "z2m/bridge/logging"), byTopic.topics())
+            val more = getJson("/api/events?topic=z2m/%23&sort=topic%20asc&limit=2&cursor=${byTopic["next"]!!.jsonPrimitive.content}")
+            assertEquals(listOf("z2m/front_door", "z2m/front_door"), more.topics())
+            assertEquals(listOf("z2m/kitchen"), getJson("/api/events?topic=z2m/%23&sort=topic%20desc&limit=1").topics())
+
+            listOf("limit=0", "limit=1001", "limit=x", "sort=colour", "sort=at%20sideways", "from=yesterday", "to=1", "field=a%27b", "cursor=%24%24").forEach {
+                assertEquals(HttpStatusCode.BadRequest, get("/api/events?$it").status, it)
+            }
+        }
+    }
+
+    // BDD: Events are searched through the API
+    @Test
+    fun `topics seen are listed with count last seen and last payload and members get 403`() {
+        val t = service()
+        t.seed()
+        t.api {
+            val response = get("/api/events/topics")
+            assertEquals(HttpStatusCode.OK, response.status)
+            val topics = heatingJson.parseToJsonElement(response.bodyAsText()).jsonArray.map { it.jsonObject }.associateBy { it["topic"]!!.jsonPrimitive.content }
+            val door = topics.getValue("z2m/front_door")
+            assertEquals(2, door["count"]!!.jsonPrimitive.long)
+            assertEquals("2026-10-12T12:00:00Z", door["lastSeen"]!!.jsonPrimitive.content)
+            assertEquals(90, door["lastPayload"]!!.jsonObject["battery"]!!.jsonPrimitive.int)
+            assertEquals(true, door["json"]!!.jsonPrimitive.boolean)
+            val garage = topics.getValue("garage/temp")
+            assertEquals(1, garage["count"]!!.jsonPrimitive.long)
+            assertEquals("18.5", garage["lastPayload"]!!.jsonPrimitive.content)
+
+            val member = memberToken()
+            assertEquals(HttpStatusCode.Forbidden, get("/api/events", member).status)
+            assertEquals(HttpStatusCode.Forbidden, get("/api/events/topics", member).status)
+        }
+    }
 }
