@@ -66,7 +66,8 @@ export default function App() {
               <Route path="/account/deliveries" element={auth.me.admin ? <DeliveriesPage /> : <Navigate to="/" replace />} />
               <Route path="/events" element={auth.me.admin ? <EventsPage /> : <Navigate to="/" replace />} />
               <Route path="/rules/new" element={auth.me.admin ? <RuleNewPage /> : <Navigate to="/" replace />} />
-              <Route path="/people" element={auth.me.admin ? <PeoplePage /> : <Navigate to="/" replace />} />
+              <Route path="/rules/:id" element={auth.me.admin ? <RuleNewPage /> : <Navigate to="/" replace />} />
+              <Route path="/people"element={auth.me.admin ? <PeoplePage /> : <Navigate to="/" replace />} />
               <Route path="*" element={<Navigate to="/" replace />} />
               <Route path="/settings/connection" element={auth.me.admin ? <ConnectionSettingsPage /> : <Navigate to="/" replace />} />
             </Routes>
