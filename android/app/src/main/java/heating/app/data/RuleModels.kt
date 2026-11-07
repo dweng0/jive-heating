@@ -159,14 +159,17 @@ fun ruleRows(
     )
 }
 
-/** The rows every chip picks (On and Off, Me and Everyone exclude each other by choosing none of the others), and whose topic holds [topic]. */
+/** The topics the Topic filter offers: each rule's own, once, sorted. */
+fun ruleTopics(rows: List<RuleRow>): List<String> = rows.filter { it.rule != null }.map { it.topic }.distinct().sorted()
+
+/** The rows every chip picks (On and Off, Me and Everyone exclude each other by choosing none of the others), and on [topic] when one is chosen. */
 fun filterRuleRows(rows: List<RuleRow>, chips: Set<RuleChip>, topic: String? = null): List<RuleRow> = rows.filter { r ->
     (RuleChip.ON !in chips || r.enabled != false) &&
         (RuleChip.OFF !in chips || r.enabled == false) &&
         (RuleChip.PAUSED !in chips || r.paused != null) &&
         (RuleChip.ME !in chips || r.notifyMe) &&
         (RuleChip.EVERYONE !in chips || !r.notifyMe) &&
-        (topic.isNullOrBlank() || r.topic.contains(topic.trim(), ignoreCase = true))
+        (topic.isNullOrEmpty() || (r.rule != null && r.topic == topic))
 }
 
 fun deleteRuleQuestion(name: String) = "Delete $name?"

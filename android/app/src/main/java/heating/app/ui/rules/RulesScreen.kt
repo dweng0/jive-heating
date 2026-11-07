@@ -1,6 +1,7 @@
 package heating.app.ui.rules
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -15,7 +16,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -41,6 +43,7 @@ import heating.app.data.deleteRuleQuestion
 import heating.app.data.filterRuleRows
 import heating.app.data.friendlyError
 import heating.app.data.ruleRows
+import heating.app.data.ruleTopics
 import heating.app.data.toRequest
 import kotlinx.coroutines.launch
 
@@ -66,8 +69,8 @@ fun RulesScreen(api: HeatingApi, onEdit: (String) -> Unit, onDraft: (String) -> 
     val scope = rememberCoroutineScope()
     var rows by remember { mutableStateOf<List<RuleRow>?>(null) }
     var chips by remember { mutableStateOf(emptySet<RuleChip>()) }
-    var topicChip by remember { mutableStateOf(false) }
     var topic by remember { mutableStateOf("") }
+    var choosingTopic by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf<Rule?>(null) }
     var history by remember { mutableStateOf<Pair<Rule, List<RuleHistoryEntry>>?>(null) }
     var reload by remember { mutableStateOf(0) }
@@ -86,17 +89,24 @@ fun RulesScreen(api: HeatingApi, onEdit: (String) -> Unit, onDraft: (String) -> 
     }
     fun act(block: suspend () -> Unit) = scope.launch { runCatching { block() }.onFailure { onError(friendlyError(it)) }; reload++ }
 
-    val shown = filterRuleRows(rows.orEmpty(), chips, topic.takeIf { topicChip })
+    val shown = filterRuleRows(rows.orEmpty(), chips, topic)
     LazyColumn(Modifier.padding(contentPadding).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
                 RuleChip.entries.forEach { c ->
                     FilterChip(c in chips, { chips = if (c in chips) chips - c else chips + c }, label = { Text(c.label) })
                 }
-                FilterChip(topicChip, { topicChip = !topicChip }, label = { Text("Topic") })
+                Box {
+                    FilterChip(topic.isNotEmpty(), { choosingTopic = true }, label = { Text(if (topic.isEmpty()) "Topic" else "Topic: $topic") })
+                    DropdownMenu(choosingTopic, { choosingTopic = false }) {
+                        DropdownMenuItem({ Text("Any topic") }, { topic = ""; choosingTopic = false })
+                        ruleTopics(rows.orEmpty()).forEach { t ->
+                            DropdownMenuItem({ Text(t, fontFamily = FontFamily.Monospace) }, { topic = t; choosingTopic = false })
+                        }
+                    }
+                }
                 FilterChip(suggesting, { suggesting = !suggesting }, label = { Text("Suggested") })
             }
-            if (topicChip) OutlinedTextField(topic, { topic = it }, label = { Text("Topic contains") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         }
         if (suggesting) item {
             suggestions?.let { list ->

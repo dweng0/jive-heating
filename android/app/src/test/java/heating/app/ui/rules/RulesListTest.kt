@@ -11,6 +11,7 @@ import heating.app.data.deleteRuleQuestion
 import heating.app.data.filterRuleRows
 import heating.app.data.lastSentText
 import heating.app.data.ruleRows
+import heating.app.data.ruleTopics
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonPrimitive
 import java.time.Instant
@@ -83,8 +84,12 @@ class RulesListTest {
         assertEquals(listOf("Boiler noisy"), names(RuleChip.PAUSED))
         assertEquals(listOf("Boiler noisy", "Front door opened"), names(RuleChip.ME))
         assertEquals(listOf("Garage still using power", "Hall button"), names(RuleChip.EVERYONE))
-        assertEquals(listOf("Hall button"), names(topic = "hall"))
-        assertEquals(listOf("Front door opened"), names(RuleChip.ON, RuleChip.ME, topic = "z2m/front"))
+        // Topic picks one of the rules' own topics, like the web: exact, and area notifications (no topic) drop out
+        assertEquals(listOf("z2m/boiler", "z2m/front_door", "z2m/hall"), ruleTopics(rows))
+        assertEquals(listOf("Hall button"), names(topic = "z2m/hall"))
+        assertEquals(emptyList(), names(topic = "hall"))
+        assertEquals(listOf("Front door opened"), names(RuleChip.ON, RuleChip.ME, topic = "z2m/front_door"))
+        assertEquals(listOf("Front door opened"), names(RuleChip.ON, topic = "z2m/front_door"))
         assertEquals("Paused until 19:10", rows.first { it.name == "Boiler noisy" }.paused)
     }
 
