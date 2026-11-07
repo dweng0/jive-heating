@@ -184,7 +184,8 @@
           "totalCost": { "type": "number" },
           "missingMinutes": { "type": "integer", "description": "Minutes with no record (service down or meter stale)" },
           "incomplete": { "type": "boolean" },
-          "targetDeltaKwh": { "type": "number", "nullable": true, "description": "electricityKwh minus the daily target (today: the share of it gone); null with no target or house meter" }
+          "targetDeltaKwh": { "type": "number", "nullable": true, "description": "electricityKwh minus the daily target (today: the share of it gone); null with no target or house meter" },
+          "gasEstimatedKwh": { "type": "number", "description": "The part of gasKwh estimated from boiler hours: all of it for time the gas meter has not reported" }
         }
       },
       "EnergyTarget": {
@@ -227,7 +228,9 @@
           "rooms": { "type": "array", "items": { "$ref": "#/components/schemas/RoomEnergy" }, "description": "Rooms with plug use in the period, sorted by name: each plug's use counts in the room it was in when it was recorded, so moving a plug never moves its past use. Part of devices, so never added to electricityKwh or totalCost" },
           "everythingElse": { "allOf": [{ "$ref": "#/components/schemas/EverythingElse" }], "nullable": true, "description": "House electricity no monitored plug or energy area accounts for: the house minus each whole-area meter, and minus each plug not behind one. Null without a house meter" },
           "areas": { "type": "array", "items": { "$ref": "#/components/schemas/AreaEnergy" }, "description": "Energy areas, by name. Of which the house's, never added to anything" },
-          "target": { "allOf": [{ "$ref": "#/components/schemas/EnergyTarget" }], "nullable": true, "description": "House electricity against the daily target; null with no target or no house meter" }
+          "target": { "allOf": [{ "$ref": "#/components/schemas/EnergyTarget" }], "nullable": true, "description": "House electricity against the daily target; null with no target or no house meter" },
+          "gasEstimatedKwh": { "type": "number", "description": "The part of gasKwh estimated from boiler hours: all of it for time the gas meter has not reported" },
+          "gasMeteredTo": { "type": "string", "format": "date-time", "nullable": true, "description": "The end of the last half-hour the smart gas meter has reported; null with no meter readings" }
         }
       },
       "EverythingElse": {
@@ -535,6 +538,15 @@
         "type": "object", "required": ["kwh", "cost"],
         "properties": { "kwh": { "type": "number" }, "cost": { "type": "number", "description": "Minor units at today's electricity price" } }
       },
+      "GasDayTotal": {
+        "type": "object", "required": ["date", "kwh", "cost", "previousKwh"],
+        "properties": {
+          "date": { "type": "string", "format": "date" },
+          "kwh": { "type": "number" },
+          "cost": { "type": "number", "description": "kwh at the gas price, in the minor unit; no standing charge" },
+          "previousKwh": { "type": "number", "nullable": true, "description": "The day before's kWh; null with no readings that day" }
+        }
+      },
       "EnergyTotals": {
         "type": "object", "required": ["currency", "pencePerKwh", "today", "week", "month", "year", "yesterdaySoFar"],
         "description": "The house's use for the dashboard's odometer and trip counter. Calendar periods in the household's timezone; a sample at 00:00 counts in the day before",
@@ -545,7 +557,8 @@
           "week": { "$ref": "#/components/schemas/EnergyTotal", "description": "Since Monday 00:00" },
           "month": { "$ref": "#/components/schemas/EnergyTotal", "description": "Since the 1st" },
           "year": { "$ref": "#/components/schemas/EnergyTotal", "description": "Since 1 January" },
-          "yesterdaySoFar": { "allOf": [{ "$ref": "#/components/schemas/EnergyTotal" }], "nullable": true, "description": "Yesterday from 00:00 to this time; null with no samples yesterday" }
+          "yesterdaySoFar": { "allOf": [{ "$ref": "#/components/schemas/EnergyTotal" }], "nullable": true, "description": "Yesterday from 00:00 to this time; null with no samples yesterday" },
+          "gas": { "allOf": [{ "$ref": "#/components/schemas/GasDayTotal" }], "nullable": true, "description": "The smart gas meter's latest whole day; null until it has reported one" }
         }
       },
       "PowerSummary": {

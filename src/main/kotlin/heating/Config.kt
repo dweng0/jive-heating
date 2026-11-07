@@ -29,6 +29,9 @@ data class Config(
     val fcmServiceAccountFile: String? = null,
     /** mailto: or https: address push services can reach the owner at; none means no Web Push to browsers. */
     val webPushContact: String? = null,
+    /** Bright app (Glowmarkt) sign-in for the smart gas meter; none keeps gas an estimate from boiler hours. */
+    val brightUsername: String? = null,
+    val brightPassword: String? = null,
 ) {
     companion object {
         fun fromEnv(env: Map<String, String> = System.getenv()): Config {
@@ -37,6 +40,9 @@ data class Config(
             val mqttUsername = env["MQTT_USERNAME"]?.takeIf { it.isNotBlank() }
             val mqttPassword = env["MQTT_PASSWORD"]?.takeIf { it.isNotEmpty() }
             check(mqttPassword == null || mqttUsername != null) { "MQTT_PASSWORD needs MQTT_USERNAME" }
+            val brightUsername = env["BRIGHT_USERNAME"]?.takeIf { it.isNotBlank() }
+            val brightPassword = env["BRIGHT_PASSWORD"]?.takeIf { it.isNotEmpty() }
+            check((brightUsername == null) == (brightPassword == null)) { "BRIGHT_USERNAME and BRIGHT_PASSWORD go together" }
             return Config(
                 apiToken = token,
                 mqttUrl = env["MQTT_URL"] ?: "tcp://localhost:1883",
@@ -52,6 +58,8 @@ data class Config(
                 boilerMinRun = Duration.ofMinutes(env["BOILER_MIN_RUN_MINUTES"]?.toLong() ?: 4),
                 boilerMinRest = Duration.ofMinutes(env["BOILER_MIN_REST_MINUTES"]?.toLong() ?: 5),
                 fcmServiceAccountFile = env["FCM_SERVICE_ACCOUNT_FILE"]?.takeIf { it.isNotBlank() },
+                brightUsername = brightUsername,
+                brightPassword = brightPassword,
                 webPushContact = env["WEBPUSH_CONTACT"]?.takeIf { it.isNotBlank() }?.also {
                     check(it.startsWith("mailto:") || it.startsWith("https://")) { "WEBPUSH_CONTACT must be a mailto: or https: address" }
                 },

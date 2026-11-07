@@ -70,6 +70,10 @@ class HeatingApp(
     pushExecutor: Executor = Executors.newSingleThreadExecutor { Thread(it, "push").apply { isDaemon = true } },
     /** Browsers' push services (the JDK's HTTP client in production). */
     webPushHttp: heating.notify.WebPushHttp = heating.notify.WebPushHttp.java(),
+    /** The smart gas meter (Glowmarkt in production when Bright credentials are set); none keeps gas an estimate. */
+    private val gasMeter: heating.gas.GasMeter? = null,
+    /** Where gas readings are fetched, off the tick's thread. */
+    private val gasExecutor: Executor = Executors.newSingleThreadExecutor { Thread(it, "gas").apply { isDaemon = true } },
 ) {
     val topics = Z2mTopics(config.z2mBaseTopic)
     val changes = ChangeNotifier()
@@ -113,11 +117,12 @@ class HeatingApp(
         energyHistory, config.timezone, changes, clock, energyAreas,
     )
     val meterRecorder = heating.energy.MeterRecorder(energyHistory, meters, energySettings, monitoredMeters, clock::instant, energyAreas)
-    val energyDashboards = heating.energy.EnergyDashboards(history, energyHistory, energySettings, monitoredMeters, meters, rooms::list, ::now, energyAreas::list)
+    val gasReadings = heating.gas.GasReadings(config.dbPath)
+    val energyDashboards = heating.energy.EnergyDashboards(history, energyHistory, energySettings, monitoredMeters, meters, rooms::list, ::now, energyAreas::list, gasReadings)
     val roomPlugs = heating.energy.RoomPlugsReport(energyHistory, energySettings, monitoredMeters, meters, ::now)
     val roomEnergyHistory = heating.energy.RoomEnergyHistoryReport(energyHistory, config.timezone, clock)
     val houseHistory = heating.energy.HouseHistoryReport(energyHistory, energySettings, config.timezone, clock)
-    val energyTotals = heating.energy.EnergyTotalsReport(energyHistory, energySettings, config.timezone, clock)
+    val energyTotals = heating.energy.EnergyTotalsReport(energyHistory, energySettings, config.timezone, clock, gasReadings)
     val energyUsage = heating.energy.EnergyUsageReport(energyHistory, energySettings, monitoredMeters, config.timezone, clock, energyAreas::list)
     val alerts = HeatingAlerts(
         users, notificationSettings, push, actions, pushExecutor, clock::instant,
@@ -185,6 +190,7 @@ class HeatingApp(
             }
         }
         periodic += meterRecorder.tick
+        gasMeter?.let { periodic += heating.gas.GasSync(it, gasReadings, gasExecutor).tick }
         periodic += livePower.tick
         periodic += Periodic { sensors.markSilent(SENSOR_SILENCE_LIMIT) }
         periodic += roomSensors.resend

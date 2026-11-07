@@ -55,6 +55,8 @@ data class EnergyDay(
     val incomplete: Boolean,
     /** Electricity minus the daily target (for today, the share of it gone so far); null with no target or house meter. */
     val targetDeltaKwh: Double? = null,
+    /** The part of [gasKwh] estimated from boiler hours: all of it for time the gas meter has not reported. */
+    val gasEstimatedKwh: Double = gasKwh,
 )
 
 /**
@@ -164,7 +166,8 @@ data class EverythingElse(
 
 /**
  * Use and cost over a [period], with standing charges on their own lines and a day per entry in [days]
- * for charts. Gas is an estimate: boiler hours (heating or cycling) times the boiler's average kW.
+ * for charts. Gas is the smart meter's half-hours where it has reported, and for later time an estimate: boiler hours
+ * (heating or cycling) times the boiler's average kW.
  *
  * openapi: EnergyDashboard
  */
@@ -198,6 +201,10 @@ data class EnergyDashboard(
     val areas: List<AreaEnergy> = emptyList(),
     /** The house's electricity against the daily target; null with no target or no house meter. */
     val target: EnergyTarget? = null,
+    /** The part of [gasKwh] estimated from boiler hours: all of it for time the gas meter has not reported. */
+    val gasEstimatedKwh: Double = gasKwh,
+    /** The end of the last half-hour the smart gas meter has reported; null with no meter readings. */
+    val gasMeteredTo: String? = null,
 )
 
 /**
@@ -226,6 +233,7 @@ class EnergyDashboards(
     private val rooms: () -> List<Room>,
     private val now: () -> ZonedDateTime,
     private val areas: () -> List<EnergyArea> = { emptyList() },
+    private val gas: heating.gas.GasReadings? = null,
 ) {
     fun of(period: DashboardPeriod): EnergyDashboard {
         val clock = now()
@@ -236,16 +244,19 @@ class EnergyDashboards(
         val from = firstDay.atStartOfDay(now.zone)
         val boiler = history.boilerStates(from.toInstant(), now.toInstant())
         val samples = energy.samples(from.toInstant().minus(GAP), now.toInstant())
+        val gasMeteredTo = gas?.meteredTo()
+        val gasSlots = gas?.between(from.toInstant(), now.toInstant()) ?: emptyMap()
 
         val days = (0 until period.days).map { i ->
             val date = firstDay.plusDays(i)
             val start = date.atStartOfDay(now.zone).toInstant()
             val end = minOf(date.plusDays(1).atStartOfDay(now.zone).toInstant(), now.toInstant())
-            day(date, start, end, now.toInstant(), boiler, samples, prices, date.plusDays(1).atStartOfDay(now.zone).toInstant())
+            day(date, start, end, now.toInstant(), boiler, samples, prices, date.plusDays(1).atStartOfDay(now.zone).toInstant(), gasMeteredTo, gasSlots)
         }
         val boilerHours = days.sumOf { it.hours }
         val electricityKwh = if (prices.electricityMeter == null) null else days.sumOf { it.kwh ?: 0.0 }
-        val gasKwh = boilerHours * prices.boilerAverageKw
+        val gasKwh = days.sumOf { it.gasKwh }
+        val gasEstimatedKwh = days.sumOf { it.gasEstimatedKwh }
         val gasCost = gasKwh * prices.gasPencePerKwh
         val electricityCost = electricityKwh?.let { it * prices.electricityPencePerKwh }
         val gasStanding = period.days * prices.gasStandingPencePerDay
@@ -316,6 +327,8 @@ class EnergyDashboards(
                     .copy(overlaps = overlapNames(area, areaList))
             },
             target = target(days, prices, from.toInstant(), now.toInstant(), period),
+            gasEstimatedKwh = round(gasEstimatedKwh, 2),
+            gasMeteredTo = gasMeteredTo?.atZone(now.zone)?.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
         )
     }
 
@@ -376,7 +389,7 @@ class EnergyDashboards(
     private fun staleMinutes(staleAt: Set<Instant>) = staleAt.size * MeterRecorder.SAMPLE_INTERVAL.toMinutes().toInt()
 
     /** A day's figures, with the unrounded hours and kWh the period totals add up. */
-    private class Day(val view: EnergyDay, val hours: Double, val kwh: Double?, val share: Double)
+    private class Day(val view: EnergyDay, val hours: Double, val kwh: Double?, val share: Double, val gasKwh: Double, val gasEstimatedKwh: Double)
 
     private fun day(
         date: LocalDate,
@@ -388,14 +401,23 @@ class EnergyDashboards(
         prices: EnergySettings,
         /** The midnight the day ends at, even when [end] is now. */
         dayEnd: Instant,
+        /** The end of the last half-hour the gas meter reported; null with none. */
+        gasMeteredTo: Instant?,
+        /** The gas meter's half-hours, by start. */
+        gasSlots: Map<Instant, Double>,
     ): Day {
-        val hours = boiler.filter { it.state in BURNING }.sumOf { period ->
-            overlap(period.from, period.to ?: now, start, end).toMillis()
-        } / 3_600_000.0
+        val burning = boiler.filter { it.state in BURNING }
+        fun hoursIn(a: Instant, b: Instant) = burning.sumOf { period -> overlap(period.from, period.to ?: now, a, b).toMillis() } / 3_600_000.0
+        val hours = hoursIn(start, end)
+        // The meter's half-hours up to where it has reported, then the estimate for the rest of the day.
+        val meteredEnd = gasMeteredTo?.let { maxOf(start, minOf(it, end)) } ?: start
+        val meteredGas = gasSlots.filterKeys { it >= start && it < meteredEnd }.values.sum()
+        val estimatedGas = hoursIn(meteredEnd, end) * prices.boilerAverageKw
+        val gasKwh = meteredGas + estimatedGas
         val kwh = if (prices.electricityMeter == null) null
         else samples.filter { it.at > start && it.at <= end }.sumOf { it.kwh ?: 0.0 }
         val missing = missingMinutes(start, end, now, samples)
-        val gasCost = hours * prices.boilerAverageKw * prices.gasPencePerKwh
+        val gasCost = gasKwh * prices.gasPencePerKwh
         val electricityCost = kwh?.let { it * prices.electricityPencePerKwh }
         // The share of the day gone: 1 for a past day, the hours so far over the day's length (23 or 25 on a clock change) for today.
         val length = Duration.between(start, dayEnd)
@@ -406,7 +428,7 @@ class EnergyDashboards(
             EnergyDay(
                 date = date.toString(),
                 boilerHours = round(hours, 2),
-                gasKwh = round(hours * prices.boilerAverageKw, 2),
+                gasKwh = round(gasKwh, 2),
                 gasCost = round(gasCost, 1),
                 electricityKwh = kwh?.let { round(it, 2) },
                 electricityCost = electricityCost?.let { round(it, 1) },
@@ -415,10 +437,13 @@ class EnergyDashboards(
                 missingMinutes = missing,
                 incomplete = missing > 0,
                 targetDeltaKwh = targetDelta?.let { round(it, 3) },
+                gasEstimatedKwh = round(estimatedGas, 2),
             ),
             hours,
             kwh,
             share,
+            gasKwh,
+            estimatedGas,
         )
     }
 

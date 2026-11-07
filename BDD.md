@@ -2831,6 +2831,46 @@ Engineering rules (apply to every scenario):
             Then it shows its time, kWh, cost and, for a day or month, the target
             And day and week are a line of power, month and year are bars of kWh with a target line, and incomplete points are marked
 
+    Feature: Gas meter
+        As the household admin
+        I want the dashboard's gas to be what the smart meter recorded
+        So that the heating's cost is real, not an estimate from boiler hours
+
+        Gas comes half-hourly from the smart meter through the Bright app's Glowmarkt API, signed in with
+        BRIGHT_USERNAME and BRIGHT_PASSWORD. It arrives about a day late. Without those settings, and for the time
+        the meter has not reported yet, gas stays the estimate: boiler hours times boilerAverageKw.
+
+        Scenario: Gas readings are fetched from the smart meter
+            Given BRIGHT_USERNAME and BRIGHT_PASSWORD are set and the meter has half-hourly gas readings from 31 October to the half-hour starting 23:30 on 5 November
+            When the service starts, and every 30 minutes after
+            Then it keeps each half-hour's gas kWh, from the first reading on, fetching only half-hours it does not have yet
+            And a fetch that fails changes nothing and is tried again 30 minutes later
+            And without BRIGHT_USERNAME and BRIGHT_PASSWORD nothing is fetched
+
+        Scenario: The dashboard's gas is the meter's where it has reported
+            Given the meter recorded 52.4 kWh of gas on 2 November and has reported up to the end of 5 November
+            When an admin sends GET /api/dashboard?period=week on 7 November
+            Then 2 November's gasKwh is 52.4 with gasEstimatedKwh 0, costed at the gas price
+            And 6 and 7 November's gas is boiler hours times boilerAverageKw, all of it gasEstimatedKwh
+            And a day the meter reported only part of is the meter's kWh plus the estimate for the rest of it
+            And gasMeteredTo is the end of the last half-hour reported, and null with no meter readings
+
+        Scenario: The Energy tab says where gas comes from
+            Given the meter has reported gas up to the end of 5 November
+            When admin "jane" opens the Energy tab on the web app or the Android app
+            Then under "Use and cost" it says "Gas is from the smart meter up to 6 Nov 00:00, estimated from the boiler's hours after."
+            And the gas figure says "estimated" when all of it is estimated and "part estimated" when some is
+            And in the bar per day the estimated part of gas is hatched, with "Gas, estimated from boiler hours" in the key
+            And with no meter readings it says "Gas is estimated from the boiler's hours."
+
+        Scenario: The car dashboard shows the gas meter's latest day
+            Given the meter has reported up to the end of 5 November, 68.0 kWh that day and 63.8 kWh on 4 November
+            When someone with energy access sends GET /api/energy/totals
+            Then gas has date "2026-11-05", kwh 68.0, cost at the gas price and previousKwh 63.8
+            And gas is null until the meter has reported a whole day, and previousKwh is null with no readings the day before
+            And next to the odometer on the web app and the Android app a counter labelled "GAS · THU 5 NOV" shows "068.0"
+                kWh on wheels with its cost and "▲ 4.2 kWh vs Wed", or "▼" when less
+
 # Deferred (not to be built yet)
 # - Mirror schedules to the valve weekly_schedule as a fallback when the service is down
 # - Open-window alerts (TRVZB exposes the setting, not a state; needs inference)
@@ -2838,7 +2878,6 @@ Engineering rules (apply to every scenario):
 # - Group schedules
 # - Several sensors averaged in one room
 # - Home-screen widget
-# - Gas from the smart meter (Octopus API or Glow/Hildebrand), to replace the boiler-rate estimate
 # - Prices that change over time (the dashboard uses the current prices for the whole period)
 # - Room electricity beside room heating hours (tag a plug as a heater: portable heaters, towel rails)
 # - Valve not responding: a state on the zone view beside the feed event (needs an openapi change)

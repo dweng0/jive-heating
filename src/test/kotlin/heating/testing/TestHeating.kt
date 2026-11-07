@@ -50,6 +50,8 @@ class TestHeating(
     webDir: String? = null,
     androidApk: String? = null,
     kumaPushUrl: String? = null,
+    /** The smart gas meter; none keeps gas an estimate. Fetching is synchronous in tests. */
+    private val gasMeter: heating.gas.GasMeter? = null,
     configure: (Config) -> Config = { it },
 ) {
     val bus = InMemoryMqttBus()
@@ -109,7 +111,7 @@ class TestHeating(
 
     private fun build() = HeatingApp(
         config, bus, SqliteStore(dbPath), clock, httpGet = { httpSent += it }, push = push, pushExecutor = { it.run() },
-        webPushHttp = WebPushHttp(::webPushPost),
+        webPushHttp = WebPushHttp(::webPushPost), gasMeter = gasMeter, gasExecutor = { it.run() },
     )
 
     /**

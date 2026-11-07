@@ -161,7 +161,16 @@ data class EnergyTotals(
     val month: EnergyTotal,
     val year: EnergyTotal,
     val yesterdaySoFar: EnergyTotal?,
+    /** The smart gas meter's latest whole day; null until it has reported one. */
+    val gas: GasDayTotal? = null,
 )
+
+/**
+ * A whole day of the smart gas meter: [kwh] and its [cost] at the gas price (no standing charge), and the day before's
+ * kWh to compare with, null with no readings that day. openapi: GasDayTotal
+ */
+@Serializable
+data class GasDayTotal(val date: String, val kwh: Double, val cost: Double, val previousKwh: Double?)
 
 /** Works out [EnergyTotals] from the house meter's five-minute samples. */
 class EnergyTotalsReport(
@@ -169,6 +178,7 @@ class EnergyTotalsReport(
     private val settings: EnergySettingsRepository,
     private val zone: ZoneId,
     private val clock: Clock,
+    private val gas: heating.gas.GasReadings? = null,
 ) {
     fun now(): EnergyTotals {
         val now = clock.instant()
@@ -195,7 +205,21 @@ class EnergyTotalsReport(
             month = total(monthStart),
             year = total(yearStart),
             yesterdaySoFar = if (hadYesterday) total(yesterday, sameTimeYesterday) else null,
+            gas = gasDay(prices),
         )
+    }
+
+    /** The last day the gas meter reported all of: the day before the one its readings run into, if it reported that day's first half-hour. */
+    private fun gasDay(prices: EnergySettings): GasDayTotal? {
+        val readings = gas ?: return null
+        val meteredTo = readings.meteredTo() ?: return null
+        val day = meteredTo.atZone(zone).toLocalDate().minusDays(1)
+        val start = day.atStartOfDay(zone).toInstant()
+        val slots = readings.between(day.minusDays(1).atStartOfDay(zone).toInstant(), day.plusDays(1).atStartOfDay(zone).toInstant())
+        if (start !in slots) return null
+        val kwh = slots.filterKeys { it >= start }.values.sum()
+        val previous = slots.filterKeys { it < start }.values.takeIf { it.isNotEmpty() }?.sum()
+        return GasDayTotal(day.toString(), round(kwh, 3), round(kwh * prices.gasPencePerKwh, 2), previous?.let { round(it, 3) })
     }
 
     private fun round(v: Double, places: Int) = BigDecimal.valueOf(v).setScale(places, RoundingMode.HALF_UP).toDouble()
