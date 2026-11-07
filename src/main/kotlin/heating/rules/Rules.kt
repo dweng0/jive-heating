@@ -13,6 +13,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import org.slf4j.LoggerFactory
 import java.time.Duration
 import java.time.Instant
+import java.time.ZoneId
 import java.util.UUID
 
 /**
@@ -27,7 +28,14 @@ class Rules(
     private val everyone: () -> List<String>,
     /** The Zigbee2MQTT base topic, for {{device}}. */
     private val z2mBase: () -> String,
+    /** The house's time zone, for quiet hours. */
+    private val zone: ZoneId,
 ) {
+    /** Matches held for a rule until its quiet hours end: how many, and the last one's topic and payload. */
+    private class Held(var count: Int, var topic: String, var payload: String)
+
+    private val held = mutableMapOf<String, Held>()
+
     /** Whether each rule's conditions matched the last message on each topic: key is rule id and topic. */
     private val matched = mutableMapOf<Pair<String, String>, Boolean>()
 
@@ -60,9 +68,50 @@ class Rules(
             history.add(rule.id, at, topic, payload, Outcome.COOLDOWN)
             return
         }
+        rule.quietHours?.let { q ->
+            if (inQuietHours(q, at)) {
+                if (q.sendSummary) {
+                    held.getOrPut(rule.id) { Held(0, topic, payload) }.also { it.count++; it.topic = topic; it.payload = payload }
+                    history.add(rule.id, at, topic, payload, Outcome.HELD)
+                } else {
+                    history.add(rule.id, at, topic, payload, Outcome.QUIET)
+                }
+                return
+            }
+        }
         val ids = send(rule, topic, payload, at)
         lastSent[key] = at
         history.add(rule.id, at, topic, payload, Outcome.SENT, ids)
+    }
+
+    private fun inQuietHours(q: QuietHours, at: Instant): Boolean {
+        val local = at.atZone(zone)
+        val minute = local.hour * 60 + local.minute
+        val from = minutes(q.from) ?: return false
+        val to = minutes(q.to) ?: return false
+        return if (from < to) minute in from until to else minute >= from || minute < to
+    }
+
+    /** Sends the summary of what quiet hours held back, for each rule whose quiet hours have ended. */
+    val tick = heating.Periodic { checkQuietHours() }
+
+    @Synchronized
+    private fun checkQuietHours() {
+        val at = now()
+        held.entries.toList().forEach { (id, h) ->
+            val rule = rules.firstOrNull { it.id == id }
+            val q = rule?.quietHours
+            if (rule == null || q == null || !q.sendSummary || !rule.enabled) {
+                held.remove(id)
+            } else if (!inQuietHours(q, at)) {
+                held.remove(id)
+                val body = "${rule.name} ${if (h.count == 1) "once" else "${h.count} times"} overnight"
+                val ids = deliveries.enqueue(
+                    recipients(rule), rule.name, body, rule.name, ruleId = rule.id, event = DeliveryEvent(null, h.topic, payloadJson(h.payload), at.toString()),
+                )
+                history.add(rule.id, at, h.topic, h.payload, Outcome.SUMMARY, ids, body)
+            }
+        }
     }
 
     private fun recipients(rule: Rule): List<String> =
@@ -123,6 +172,7 @@ class Rules(
         val old = get(id)
         save(rules - old)
         history.forget(id)
+        held.remove(id)
         matched.keys.removeAll { it.first == id }
         lastSent.keys.removeAll { it.first == id }
         return old

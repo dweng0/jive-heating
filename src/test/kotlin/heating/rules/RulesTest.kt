@@ -25,6 +25,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.time.Duration
+import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -379,6 +380,90 @@ class RulesTest {
             assertEquals(2, t.pushed.size)
             t.bus.receive("dev/a", """{"contact":true,"battery":50}""")
             assertEquals(2, t.pushed.size)
+        }
+    }
+
+    private val quiet = ""","quietHours":{"from":"23:00","to":"07:00"}"""
+    private val quietSummary = ""","quietHours":{"from":"23:00","to":"07:00","sendSummary":true}"""
+
+    /** Opens and closes the front door: a close (contact true) then an open (contact false). */
+    private fun TestHeating.doorOpens() {
+        bus.receive(frontDoor, """{"contact":true}""")
+        bus.receive(frontDoor, """{"contact":false}""")
+    }
+
+    // BDD: Quiet hours hold back a rule
+    @Test
+    fun `quiet hours hold back a rule`() {
+        val t = TestHeating()
+        t.api {
+            val jane = household().getValue("jane")
+            val id = createRule(jane, rule(cooldown = 0, extra = quiet))["id"]!!.jsonPrimitive.content
+            t.clock.set(Instant.parse("2026-10-12T01:00:00Z")) // 02:00 in London
+            t.doorOpens()
+            assertEquals(0, t.pushed.size)
+            assertEquals(listOf("skipped by quiet hours"), history(jane, id).outcomes())
+            t.clock.advance(Duration.ofHours(5)) // 07:00
+            t.app.tick()
+            assertEquals(0, t.pushed.size) // not sent afterwards either
+            t.doorOpens()
+            assertEquals(3, t.pushed.size)
+            // 22:59 is not quiet, 23:00 is
+            t.clock.set(Instant.parse("2026-10-12T21:59:00Z"))
+            t.doorOpens()
+            assertEquals(6, t.pushed.size)
+            t.clock.set(Instant.parse("2026-10-12T22:00:00Z"))
+            t.doorOpens()
+            assertEquals(6, t.pushed.size)
+        }
+    }
+
+    // BDD: Quiet hours hold back a rule
+    @Test
+    fun `a rule can send one summary when quiet hours end`() {
+        val t = TestHeating()
+        t.api {
+            val jane = household().getValue("jane")
+            val id = createRule(jane, rule(cooldown = 0, extra = quietSummary))["id"]!!.jsonPrimitive.content
+            t.clock.set(Instant.parse("2026-10-12T01:00:00Z"))
+            t.doorOpens()
+            t.clock.advance(Duration.ofHours(1))
+            t.doorOpens()
+            t.clock.advance(Duration.ofHours(1))
+            t.doorOpens()
+            t.app.tick()
+            assertEquals(0, t.pushed.size)
+            t.clock.set(Instant.parse("2026-10-12T05:59:00Z")) // 06:59
+            t.app.tick()
+            assertEquals(0, t.pushed.size)
+            t.clock.set(Instant.parse("2026-10-12T06:00:00Z")) // 07:00
+            t.app.tick()
+            assertEquals(3, t.pushed.size)
+            assertEquals(setOf("Front door opened 3 times overnight"), t.pushed.map { it.body }.toSet())
+            t.clock.advance(Duration.ofMinutes(1))
+            t.app.tick()
+            assertEquals(3, t.pushed.size)
+            val entries = history(jane, id)
+            assertEquals(listOf("summary sent", "held until quiet hours end", "held until quiet hours end", "held until quiet hours end"), entries.outcomes())
+            assertEquals("summary sent to 3 people", entries.first().jsonObject["text"]!!.jsonPrimitive.content)
+        }
+    }
+
+    // BDD: Quiet hours hold back a rule
+    @Test
+    fun `quiet hours that do not cross midnight and a bad window`() {
+        val t = TestHeating()
+        t.api {
+            val jane = household().getValue("jane")
+            createRule(jane, rule(cooldown = 0, notify = "me", extra = ""","quietHours":{"from":"13:00","to":"15:00"}"""))
+            t.clock.set(Instant.parse("2026-10-12T12:30:00Z")) // 13:30 in London
+            t.doorOpens()
+            assertEquals(0, t.pushed.size)
+            t.clock.set(Instant.parse("2026-10-12T14:00:00Z")) // 15:00
+            t.doorOpens()
+            assertEquals(1, t.pushed.size)
+            assertRefused(jane, rule(extra = ""","quietHours":{"from":"25:00","to":"07:00"}"""), "quietHours")
+            assertRefused(jane, rule(extra = ""","quietHours":{"from":"07:00","to":"07:00"}"""), "quietHours")
         }
     }
 }
