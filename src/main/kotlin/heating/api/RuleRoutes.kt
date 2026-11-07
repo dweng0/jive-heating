@@ -50,6 +50,11 @@ fun Route.ruleRoutes(heating: HeatingApp) {
         call.respond(call.acting { rules.replace(id, request).also { actionLog.info("rule {} changed{}", untrusted(it.name), Actor.by()) } })
     }
 
+    get("/api/rules/{id}/history") {
+        val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 1000) ?: 100
+        call.respond(rules.historyOf(call.parameters["id"]!!, limit))
+    }
+
     delete("/api/rules/{id}") {
         val id = call.parameters["id"]!!
         call.acting { rules.delete(id).also { actionLog.info("rule {} deleted{}", untrusted(it.name), Actor.by()) } }

@@ -222,4 +222,40 @@ class RulesTest {
             assertEquals(3, t.pushed.size)
         }
     }
+
+    private suspend fun ApplicationTestBuilder.history(token: String, id: String): JsonArray {
+        val response = send("GET", "/api/rules/$id/history", token)
+        assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
+        return heatingJson.parseToJsonElement(response.bodyAsText()).jsonArray
+    }
+
+    private fun JsonArray.outcomes() = map { it.jsonObject["outcome"]!!.jsonPrimitive.content }
+
+    // BDD: An "is" rule fires on every matching message
+    @Test
+    fun `an is rule fires on every matching message`() {
+        val t = TestHeating()
+        t.api {
+            val tokens = household()
+            val jane = tokens.getValue("jane")
+            val id = createRule(
+                jane,
+                rule(name = "Button pressed", topic = "z2m/hall_button", conditions = """[{"field":"action","operator":"=","value":"single"}]""",
+                    trigger = "is", title = "Button", message = "Hall button pressed", cooldown = 60),
+            )["id"]!!.jsonPrimitive.content
+            t.bus.receive("z2m/hall_button", """{"action":"single"}""")
+            t.clock.advance(Duration.ofMinutes(2))
+            t.bus.receive("z2m/hall_button", """{"action":"single"}""")
+            assertEquals(6, t.pushed.size) // two notifications, each to three people
+
+            // a message inside the cooldown does not send, and is counted as skipped by cooldown
+            t.clock.advance(Duration.ofSeconds(10))
+            t.bus.receive("z2m/hall_button", """{"action":"single"}""")
+            assertEquals(6, t.pushed.size)
+            t.bus.receive("z2m/hall_button", """{"action":"double"}""")
+            val entries = history(jane, id)
+            assertEquals(listOf("skipped by cooldown", "sent", "sent"), entries.outcomes())
+            assertEquals(HttpStatusCode.Forbidden, send("GET", "/api/rules/$id/history", tokens.getValue("sam")).status)
+        }
+    }
 }

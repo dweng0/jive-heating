@@ -22,6 +22,7 @@ class Rules(
     private val store: Store,
     private val now: () -> Instant,
     private val deliveries: Deliveries,
+    private val history: RuleHistory,
     /** Everyone a rule's "everyone" reaches. */
     private val everyone: () -> List<String>,
     /** The Zigbee2MQTT base topic, for {{device}}. */
@@ -55,9 +56,13 @@ class Rules(
         val at = now()
         val key = rule.id to topic
         val last = lastSent[key]
-        if (last != null && Duration.between(last, at) < Duration.ofSeconds(rule.cooldownSeconds.toLong())) return
-        send(rule, topic, payload, at)
+        if (last != null && Duration.between(last, at) < Duration.ofSeconds(rule.cooldownSeconds.toLong())) {
+            history.add(rule.id, at, topic, payload, Outcome.COOLDOWN)
+            return
+        }
+        val ids = send(rule, topic, payload, at)
         lastSent[key] = at
+        history.add(rule.id, at, topic, payload, Outcome.SENT, ids)
     }
 
     private fun recipients(rule: Rule): List<String> =
@@ -77,6 +82,12 @@ class Rules(
 
     @Synchronized
     fun list(): List<Rule> = rules
+
+    /** Rule [id]'s history, newest first. */
+    fun historyOf(id: String, limit: Int = 100): List<RuleHistoryEntry> {
+        get(id)
+        return history.of(id, limit)
+    }
 
     @Synchronized
     fun get(id: String): Rule = rules.firstOrNull { it.id == id } ?: throw ApiException.notFound("rule not found")
@@ -111,6 +122,9 @@ class Rules(
     fun delete(id: String): Rule {
         val old = get(id)
         save(rules - old)
+        history.forget(id)
+        matched.keys.removeAll { it.first == id }
+        lastSent.keys.removeAll { it.first == id }
         return old
     }
 

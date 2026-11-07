@@ -140,7 +140,7 @@ class HeatingApp(
         everyone = { users.list().filter { it.admin || it.energy }.map { it.id } },
     )
     val eventLog = heating.events.EventLog(config.dbPath)
-    val rules = heating.rules.Rules(store, clock::instant, deliveries, everyone = { users.list().map { it.id } }, z2mBase = { topics.base })
+    val rules = heating.rules.Rules(store, clock::instant, deliveries, heating.rules.RuleHistory(config.dbPath), everyone = { users.list().map { it.id } }, z2mBase = { topics.base })
     val events = heating.events.EventRecorder(bus, eventLog, store, clock, config.eventFlushMillis, maxBytes = config.eventMaxBytes)
     /** Connection setup (broker and Zigbee2MQTT); null when the bus is not swappable, as in most tests. */
     val setup = (bus as? heating.mqtt.ReconnectingMqttBus)?.let { link ->
