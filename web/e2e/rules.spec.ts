@@ -99,7 +99,7 @@ async function serve(page: Page, all: E[], rules: R[] = [], history: Record<stri
       let rows = [...all]
       if (q.get('topic')) rows = rows.filter((e) => matches(q.get('topic')!, e.topic))
       const device = q.get('device')
-      if (device) rows = rows.filter((e) => e.topic === `zigbee2mqtt/${device}` || e.topic.startsWith(`zigbee2mqtt/${device}/`))
+      if (device) rows = rows.filter((e) => e.topic === `z2m/${device}` || e.topic.startsWith(`z2m/${device}/`))
       rows.sort((a, b) => b.id - a.id)
       const limit = Number(q.get('limit') ?? 100)
       return route.fulfill({ json: { events: rows.slice(0, limit), next: null, total: rows.length } })
@@ -261,8 +261,41 @@ test('"Any device like this" widens the topic to a wildcard, lists what it match
   await expect(page.getByTestId('device-choice').filter({ hasText: 'front_door' }).getByRole('checkbox')).toBeChecked()
   await expect(page.getByTestId('device-choice').filter({ hasText: 'hall_button' }).getByRole('checkbox')).not.toBeChecked()
   await page.getByRole('button', { name: 'Add 2 rules' }).click()
-  await expect(page).toHaveURL(/\/rules$/)
+  await expect.poll(() => mock.calls.filter((c) => c.method === 'POST' && c.path === '/api/rules').length).toBe(2)
   const created = mock.calls.filter((c) => c.method === 'POST' && c.path === '/api/rules').map((c) => c.body)
   expect(created.map((b) => b.topic).sort()).toEqual(['z2m/back_door', 'z2m/front_door'])
   expect(created.find((b) => b.topic === 'z2m/back_door')).toMatchObject({ name: 'Back door contact false', title: 'back_door', message: 'back_door: contact is false' })
+})
+
+/** What Zigbee2MQTT publishes on z2m/bridge/devices for the house. */
+const bridgeDevices = [
+  { friendly_name: 'Coordinator', type: 'Coordinator', definition: null },
+  { friendly_name: 'front_door', type: 'EndDevice', definition: { exposes: [{ type: 'binary', property: 'contact' }, { type: 'numeric', property: 'battery' }, { type: 'numeric', property: 'linkquality' }] } },
+  { friendly_name: 'hall_leak', type: 'EndDevice', definition: { exposes: [{ type: 'binary', property: 'water_leak' }, { type: 'numeric', property: 'battery' }] } },
+  { friendly_name: 'hall_button', type: 'EndDevice', definition: { exposes: [{ type: 'enum', property: 'action', values: ['single', 'double', 'hold'] }] } },
+  { friendly_name: 'landing_motion', type: 'EndDevice', definition: { exposes: [{ type: 'binary', property: 'occupancy' }, { type: 'binary', property: 'tamper' }] } },
+]
+const withBridge = () => [...house(), event(12, 'z2m/bridge/devices', bridgeDevices, 1000, true)]
+
+// BDD: Rules are suggested for a Zigbee2MQTT device
+test('a device under Events is offered rules from what it exposes; one opens the builder filled in, and ones already set up say so', async ({ page }) => {
+  await serve(page, withBridge(), [rule('r1', 'Door', 'z2m/front_door', { conditions: [{ field: 'battery', operator: '<', value: 15 }] })])
+  await page.goto('/events?device=front_door')
+  const suggestions = page.getByTestId('suggestion')
+  await expect(suggestions).toHaveCount(2)
+  await expect(suggestions.nth(0)).toContainText('front_door opened')
+  await expect(suggestions.nth(0)).toContainText('contact changes to false')
+  await expect(suggestions.nth(1)).toContainText('front_door battery low')
+  await expect(suggestions.nth(1)).toContainText('battery < 15')
+  // The battery rule exists already.
+  await expect(suggestions.nth(1)).toContainText('Set up')
+  await expect(suggestions.nth(0)).not.toContainText('Set up')
+
+  await suggestions.nth(0).getByRole('button', { name: 'Add' }).click()
+  await expect(page).toHaveURL(/\/rules\/new/)
+  await expect(page.getByLabel('Topic', { exact: true })).toHaveValue('z2m/front_door')
+  await expect(page.getByTestId('condition').first().getByLabel('Field')).toHaveValue('contact')
+  await expect(page.getByTestId('condition').first().getByLabel('Operator')).toHaveValue('is false')
+  await expect(page.getByLabel('Name')).toHaveValue('front_door opened')
+  await expect(page.getByLabel('Message')).toHaveValue('front_door opened')
 })

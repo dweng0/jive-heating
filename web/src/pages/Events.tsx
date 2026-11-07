@@ -4,6 +4,7 @@ import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Pause, Play, X } from 'l
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { SuggestedRules } from '@/components/heating/SuggestedRules'
 import {
   ago,
   eventQuery,
@@ -275,6 +276,8 @@ export function EventsPage() {
           </Button>
         )}
       </div>
+
+      {filter.device && <SuggestedRules device={filter.device} />}
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
