@@ -2922,6 +2922,325 @@ Engineering rules (apply to every scenario):
             And it shows "Notifies you after 2 h" (or "Notifies everyone after 2 h", or "Notifies jane after 2 h" to others)
             And "Turn off" sends DELETE /api/energy/areas/lights/alert
 
+    Feature: Connection setup
+        As the household admin
+        I want to point the app at my own MQTT broker and Zigbee2MQTT from the app, and test each step
+        So that anyone with a broker and Zigbee2MQTT can run it without editing environment variables
+
+        Connection settings are the broker (host, port, TLS, username, password) and the Zigbee2MQTT base topic. They are
+        kept in the database. Environment variables (MQTT_URL, MQTT_USERNAME, MQTT_PASSWORD, Z2M_BASE_TOPIC) only fill
+        them in the first time the service starts with an empty database, so an existing install carries straight over.
+        Setup follows the first admin (Feature: Users and sign-in) and is for admins only.
+
+        Scenario: A new install with no broker asks for connection setup
+            Given there are no connection settings and MQTT_URL is not set
+            When admin "jane" signs in and sends GET /api/setup/status
+            Then it returns {"broker":"missing","zigbee2mqtt":"missing","complete":false}
+            And the web app and Android app open the setup steps (Broker, Zigbee2MQTT, Test notification) instead of the Rooms screen
+            And heating, energy and rules stay off until the broker is connected, with nothing published
+
+        Scenario: An existing install is filled in from the environment
+            Given an empty database and MQTT_URL "tcp://mosquitto:1883", MQTT_USERNAME "heating", MQTT_PASSWORD "secret" and Z2M_BASE_TOPIC "zigbee2mqtt"
+            When the service starts
+            Then the connection settings are host "mosquitto", port 1883, TLS off, username "heating" and base topic "zigbee2mqtt"
+            And GET /api/setup/status returns complete true, and no setup steps are shown
+            And once settings are saved, a later restart with different environment values keeps the saved settings
+
+        Scenario: An admin tests a broker before saving it
+            Given admin "jane" is on the Broker step
+            When she sends POST /api/setup/broker/test with host "mosquitto", port 1883, TLS off, username "heating" and password "secret"
+            Then the service connects with those details, subscribes, disconnects, and returns {"ok":true}
+            And nothing is saved and the running connection is not changed
+
+        Scenario: A broker test explains why it failed
+            Given admin "jane" is on the Broker step
+            When the broker test cannot complete
+            Then it returns 200 with ok false and one reason:
+                | cause                          | reason            | message                                              |
+                | name does not resolve          | unknown_host      | Can't find "mosquito". Check the host name.          |
+                | nothing listening on the port  | refused           | Nothing answered on mosquitto:1884.                  |
+                | no answer within 5 seconds     | timeout           | mosquitto:1883 didn't answer within 5 seconds.       |
+                | broker rejects the login       | not_authorized    | The broker turned down that username and password.   |
+                | TLS handshake fails            | tls               | Couldn't make a secure connection: <detail>.         |
+            And the step shows that message beside the field it points to, and keeps what was typed
+            And host must be filled and port from 1 to 65535 (else 400, with nothing tried)
+
+        Scenario: Saving a broker reconnects without a restart
+            Given the service is connected to broker "mosquitto"
+            When admin "jane" sends PUT /api/setup/broker with host "mqtt.local", port 8883, TLS on and a login that tests ok
+            Then the service disconnects from "mosquitto", connects to "mqtt.local" and subscribes to every topic it had
+            And valves, meters and rules carry on with no restart, and the change is in the activity log as "jane changed the broker"
+            And a broker that fails its test is not saved (422 with the test's reason) and the old connection keeps running
+
+        Scenario: Broker passwords are never sent back
+            Given a saved broker password "secret"
+            When an admin sends GET /api/setup/broker
+            Then it returns host, port, TLS, username and passwordSet true, and never the password
+            And a PUT with no password keeps the saved one, and password "" clears it
+            And the password is stored encrypted with HEATING_SECRET_KEY, and the service refuses to start if saved secrets exist and the key is missing or wrong
+            And members get 403 on every /api/setup route
+
+        Scenario: Zigbee2MQTT is found on the broker
+            Given the broker is saved and Zigbee2MQTT publishes "z2m/bridge/info" (retained) with version "2.1.0"
+            When admin "jane" sends GET /api/setup/zigbee2mqtt/discover
+            Then within 5 seconds it returns [{"baseTopic":"z2m","version":"2.1.0","devices":14}]
+            And the Zigbee2MQTT step offers "z2m (version 2.1.0, 14 devices)" to choose, or a base topic typed by hand
+            And PUT /api/setup/zigbee2mqtt with baseTopic "z2m" saves it and valves and meters resubscribe under "z2m/"
+
+        Scenario: Zigbee2MQTT is not found on the broker
+            Given the broker is saved and no "+/bridge/info" message arrives within 5 seconds
+            When admin "jane" sends GET /api/setup/zigbee2mqtt/discover
+            Then it returns []
+            And the step says "No Zigbee2MQTT found on this broker. Check it's running and connected to the same broker, or type its base topic."
+            And a typed base topic is saved only once "<base>/bridge/state" reads "online", else 422 with "Zigbee2MQTT at <base> is offline"
+            And two bridges found are both offered, and none is chosen for her
+
+        Scenario: Setup ends with a test notification
+            Given the broker and Zigbee2MQTT are saved
+            When admin "jane" chooses "Send test notification" on the last step
+            Then her phones and browsers get "Test notification" with "Notifications from your home are working"
+            And if she has no phone or browser registered, the step says so and offers to turn on notifications here
+            And "Finish" marks setup complete and opens the Rooms screen, and setup can be done again from Settings > Connection
+
+        Scenario: The broker connection drops after setup
+            Given setup is complete and the broker goes away
+            When the connection is lost
+            Then the service retries with backoff (1, 2, 4 seconds and so on, never more than 60) and logs each try
+            And GET /api/setup/status returns broker "disconnected" with the time it dropped and the last reason
+            And the web and Android apps show a banner "Lost connection to your broker since 18:04" linking to Settings > Connection
+            And when it reconnects it resubscribes, the banner goes, and nothing published while it was down is replayed
+
+    Feature: Event log
+        As the household admin
+        I want every MQTT message the service sees kept in a log for a while
+        So that I can find the events I care about and build notifications from them
+
+        An event is one MQTT message: when it arrived, its topic, its payload and whether it was retained. The service
+        subscribes to "#" and writes each event to the event log in the database, with nothing else to install. Payloads
+        that are JSON are kept as JSON; anything else is kept as text. Events are kept for 7 days by default.
+
+        Scenario: Every message on the broker is logged
+            Given the broker is connected
+            When "z2m/front_door" publishes {"contact":false,"battery":91} and "garage/temp" publishes "18.5"
+            Then the event log has both, each with arrival time, topic, payload and retained flag
+            And "z2m/front_door" is kept as JSON and "garage/temp" as text "18.5"
+            And retained messages delivered on connect are logged once, flagged retained
+
+        Scenario: Event logging keeps up with a busy broker
+            Given the broker publishes 200 messages a second for a minute
+            When the service logs them
+            Then events are written in batches off the MQTT thread, and valves, meters and rules are not slowed
+            And if the write queue goes over 10,000 events the oldest waiting are dropped and the dropped count is shown in the log's status
+            And payloads over 64 KB are kept cut to 64 KB and flagged truncated
+
+        Scenario: Old events are cleared out
+            Given the event log keeps 7 days
+            When an event is older than 7 days, or the log is over its size limit of 500 MB
+            Then the oldest events are deleted, once an hour
+            And an admin can set the days from 1 to 90 with PUT /api/events/settings (else 400), and members get 403
+
+        Scenario: Topics can be left out of the event log
+            Given admin "jane" adds "z2m/bridge/logging" and "homeassistant/#" to the excluded topics
+            When those topics publish
+            Then they are not logged, and rules on those topics still run
+            And the settings show each excluded topic with how many messages a minute it was sending
+
+        Scenario: Events are searched through the API
+            Given the event log has events from the last 7 days
+            When an admin sends GET /api/events with topic "z2m/+", from and to times, text "contact", field "contact", sort "at desc" and limit 100
+            Then it returns matching events newest first, with a cursor for the next page, and the total matched
+            And topic accepts MQTT wildcards, text matches in topic or payload, and field matches events whose JSON has that field
+            And GET /api/events/topics returns each topic seen, with its message count, last seen time and last payload
+            And members get 403
+
+    Feature: Event explorer
+        As the household admin
+        I want a searchable table of events, with chips to filter and sort it
+        So that I can quickly find the messages a device sends and pick the ones I want to be told about
+
+        Scenario: An admin opens the event explorer
+            Given admin "jane" opens Events on the web app, or Settings > Events on the Android app
+            Then she sees a table of the newest events: time, topic, a short view of the payload, and a "retained" tag
+            And new events appear at the top as they arrive, unless she has scrolled down or paused it with "Pause"
+            And members do not see Events
+
+        Scenario: Events are filtered with chips
+            Given admin "jane" is on Events
+            When she adds chips "Topic: z2m/front_door", "Field: contact" and "Last 24 h"
+            Then the table shows only events matching all three, and the count of matches
+            And chips can be Topic (wildcards allowed), Device (a Zigbee2MQTT friendly name), Field, Field value (e.g. "contact = false"), Text, Time range and Retained
+            And each chip can be removed on its own, "Clear" removes them all, and the chips are kept in the page address so a search can be shared or bookmarked
+            And typing in the search box offers matching topics, devices and fields as chips to add
+
+        Scenario: Events are sorted and paged
+            Given admin "jane" is on Events with 3,000 matching events
+            When she sorts by topic, then by time
+            Then the table sorts by that column, up or down, and loads the next 100 as she scrolls
+            And sorting or filtering never loads the whole log at once
+
+        Scenario: An event's payload is shown in full
+            Given admin "jane" opens an event from "z2m/front_door"
+            Then she sees its full payload, laid out as JSON with each field's path (such as "contact" or "update.state")
+            And each field has "Filter by this" (adds a Field value chip) and "Notify me when…" (opens the rule builder, Feature: Rule builder)
+            And "Show this topic" filters to that topic, and "Copy" copies the payload
+
+        Scenario: Topics are browsed as a tree
+            Given admin "jane" chooses the Topics view on Events
+            Then she sees topics as a tree split on "/" (z2m > front_door), each with message count, last seen and last payload
+            And choosing a topic filters the table to it
+            And topics with no message for 7 days are greyed
+
+    Feature: Notification rules
+        As the household admin
+        I want rules that send a notification when an MQTT message matches what I choose
+        So that I am told when the front door opens, a leak is found or a button is pressed
+
+        A rule has a name, a topic (MQTT wildcards allowed), conditions on the payload (all must match), a trigger
+        ("changes to" or "is"), a title and message, who it notifies ("me" or "everyone"), a cooldown, optional quiet hours
+        and an on/off switch. A condition is a field path, an operator (=, ≠, >, <, ≥, ≤, contains, exists) and a value.
+        "Changes to" fires only when the conditions start to match for that topic, so a device that resends its whole
+        state does not notify again. Rules are for admins; members only receive what is sent to "everyone".
+
+        Scenario: An admin creates a rule
+            Given admin "jane"
+            When she sends POST /api/rules with name "Front door opened", topic "z2m/front_door", condition contact = false, trigger "changes to", title "Front door", message "Front door opened", notify "everyone" and cooldown 60 seconds
+            Then it returns 201 with the rule, its id, enabled true and by "jane"
+            And GET /api/rules lists it, PUT /api/rules/{id} replaces it, DELETE removes it, and rules are kept over a restart
+            And name, topic and title must be filled, the topic a valid MQTT filter, cooldown 0 to 86400 seconds and notify "me" or "everyone" (else 400 naming the field)
+            And members get 403 and an unknown rule is 404
+
+        Scenario: A rule fires when a message changes to match
+            Given rule "Front door opened" on "z2m/front_door" when contact changes to false
+            When "z2m/front_door" publishes contact true, then false, then false again with a new battery reading
+            Then one notification is sent, on the first false
+            And publishing true then false again sends another, once the cooldown has passed
+
+        Scenario: An "is" rule fires on every matching message
+            Given rule "Button pressed" on "z2m/hall_button" when action is "single"
+            When "z2m/hall_button" publishes action "single" twice, 2 minutes apart
+            Then two notifications are sent
+            And a message within the cooldown does not send, and is counted as skipped by cooldown
+
+        Scenario: A wildcard rule tracks each topic on its own
+            Given rule "A door opened" on "z2m/+" when contact changes to false
+            When "z2m/front_door" and then "z2m/back_door" both change to contact false
+            Then each sends its own notification, and the cooldown is kept per topic
+            And a topic with no "contact" field never matches
+
+        Scenario: The message fills in from the event
+            Given a rule with title "{{topic.last}}" and message "{{topic.last}} opened, battery {{payload.battery}}%"
+            When "z2m/front_door" publishes {"contact":false,"battery":91}
+            Then the notification reads "front_door" with "front_door opened, battery 91%"
+            And a Zigbee2MQTT topic also offers {{device}} (the friendly name), and a missing field fills in as "?"
+            And the API refuses a template with an unknown placeholder (400)
+
+        Scenario: Quiet hours hold back a rule
+            Given rule "Front door opened" has quiet hours 23:00 to 07:00
+            When the front door opens at 02:00
+            Then no notification is sent, and the event is noted as skipped by quiet hours in the rule's history
+            And the rule can be set to "send when quiet hours end" instead, which sends one summary at 07:00 ("Front door opened 3 times overnight")
+
+        Scenario: A noisy rule is held back
+            Given rule "Motion" fires 30 times in 10 minutes
+            When it would fire again
+            Then the service stops sending it for an hour, sends the rule's owner "Motion paused" with "It fired 30 times in 10 minutes", and notes it in the rule's history
+            And the rule shows "Paused until 19:10" with "Resume now"
+
+        Scenario: A payload that is not JSON can still match
+            Given rule "Garage cold" on "garage/temp" with condition value < 5
+            When "garage/temp" publishes "4.5"
+            Then the rule matches, with "value" meaning the whole payload, as a number when it reads as one
+            And a JSON rule on a text payload never matches and logs no error
+
+        Scenario: An admin tests a rule against recent events
+            Given rule "Front door opened" and 7 days of events on "z2m/front_door"
+            When "jane" sends POST /api/rules/test with the rule
+            Then it returns the last 20 events on that topic, each marked "would send", "conditions not met: contact is true" or "no change"
+            And the notification each would send, with its title and message filled in
+            And "Send me a test" sends the filled-in notification to "jane" only
+
+        Scenario: A rule's history shows what it did
+            Given rule "Front door opened" has run for a week
+            When an admin sends GET /api/rules/{id}/history
+            Then it lists each match, newest first: time, topic, payload, and what happened (sent to 3 people, skipped by cooldown, skipped by quiet hours, paused)
+            And each sent notification links to its delivery (Feature: Notification deliveries)
+
+    Feature: Rule builder
+        As the household admin
+        I want to make a rule by picking an event and the fields I care about
+        So that I never have to type a topic or a field path
+
+        Scenario: A rule is built from an event
+            Given admin "jane" opens an event from "z2m/front_door" with {"contact":false,"battery":91} and chooses "Notify me when…" on "contact"
+            Then the rule builder opens with topic "z2m/front_door", condition contact = false and trigger "changes to"
+            And name "Front door contact false", title "front_door" and message "front_door: contact is false", all editable
+            And it shows the last 5 events on that topic, each marked whether it would have sent
+
+        Scenario: Conditions are mapped from the payload's fields
+            Given admin "jane" is in the rule builder for "z2m/front_door"
+            When she adds a condition
+            Then she picks a field from those seen on that topic (contact, battery, linkquality…), each showing its recent values
+            And the operators offered fit the field: true/false fields get "is true"/"is false", numbers get = ≠ > < ≥ ≤, text gets = ≠ contains, and every field gets "exists"
+            And the value offers the values seen (such as "single", "double", "hold" for action), or can be typed
+
+        Scenario: The topic is widened to similar devices
+            Given admin "jane" is in the rule builder for "z2m/front_door"
+            When she chooses "Any device like this"
+            Then the topic becomes "z2m/+", and it lists which topics that matches and which of them have a "contact" field
+            And she can instead pick devices from a list, which makes one rule per device
+
+        Scenario: Rules are suggested for a Zigbee2MQTT device
+            Given "z2m/bridge/devices" lists "front_door" exposing contact and battery, and "hall_leak" exposing water_leak
+            When admin "jane" opens a device under Events, or chooses "Suggested" in Notifications
+            Then she is offered "front_door opened" (contact changes to false), "front_door battery low" (battery < 15) and "hall_leak leak detected" (water_leak changes to true)
+            And occupancy, action (one per action value) and tamper are suggested the same way
+            And choosing one opens the rule builder filled in, and devices that already have that rule show "Set up"
+
+        Scenario: Rules are managed in the app
+            Given admin "jane" opens Notifications on the web app, or Settings > Notifications on the Android app
+            Then she sees each rule with its name, topic, who it notifies, when it last sent, and an on/off switch
+            And area notifications (Feature: Area notifications) are listed with them
+            And she can filter rules with chips (On, Off, Paused, Notifies me, Notifies everyone, Topic) and open one to edit, test, see its history or delete it
+            And deleting asks "Delete Front door opened?" first
+
+    Feature: Notification deliveries
+        As the household admin
+        I want every notification kept in a queue until it is delivered, with failures retried and kept aside
+        So that a push service outage never loses a notification, and I can see what went wrong
+
+        A delivery is one notification for one person. It is queued in the database, then sent to each of their phones
+        and browsers. A delivery that fails is retried up to 3 times with backoff (30 seconds, 2 minutes, 10 minutes),
+        then it goes to failed deliveries, where it stays until an admin retries or clears it. This applies to rule
+        notifications, area notifications and heating alerts alike.
+
+        Scenario: A notification is queued then delivered
+            Given rule "Front door opened" notifies "everyone", and "jane" and "sam" each have a phone
+            When it fires
+            Then two deliveries are queued, one each, and sent within 5 seconds
+            And each is marked sent with the time, and which phones and browsers took it
+            And deliveries queued before a restart are sent after it
+
+        Scenario: A failed delivery is retried with backoff
+            Given the push service fails for "jane"'s phone
+            When her delivery is sent
+            Then it is tried again after 30 seconds, 2 minutes and 10 minutes
+            And if a try succeeds it is marked sent with the number of tries
+            And a phone the push service says is no longer registered is removed and not retried, and her other devices still get it
+
+        Scenario: A delivery that keeps failing goes to failed deliveries
+            Given "jane"'s delivery has failed 4 times
+            Then it is moved to failed deliveries with each try's time and error
+            And admins see "1 failed notification" on Settings > Notifications, with a list showing who, what, when and why
+            And "Retry" queues it again, "Retry all" queues every failed one, and "Clear" removes it
+            And a notification older than 24 hours is retried with "(sent late)" after its title
+
+        Scenario: Deliveries are searched in the app
+            Given admin "jane" opens Settings > Notifications > Deliveries
+            Then she sees a table of deliveries newest first: time, rule, person, status (queued, sent, retrying, failed) and tries
+            And she can filter with chips (Status, Rule, Person, Time range) and sort by any column, the same as Events
+            And opening one shows the event that caused it
+            And deliveries are kept 30 days, and members get 403 on GET /api/deliveries
+
 # Deferred (not to be built yet)
 # - Mirror schedules to the valve weekly_schedule as a fallback when the service is down
 # - Open-window alerts (TRVZB exposes the setting, not a state; needs inference)
@@ -2929,6 +3248,8 @@ Engineering rules (apply to every scenario):
 # - Group schedules
 # - Several sensors averaged in one room
 # - Home-screen widget
+# - Frigate cameras: camera tab, snapshot notifications, presets (separate piece of work)
+# - Live camera video, with its own setup
 # - Prices that change over time (the dashboard uses the current prices for the whole period)
 # - Room electricity beside room heating hours (tag a plug as a heater: portable heaters, towel rails)
 # - Valve not responding: a state on the zone view beside the feed event (needs an openapi change)
