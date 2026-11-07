@@ -107,4 +107,55 @@ class EventLogTest {
         t.app.events.flush()
         assertEquals(listOf(false, true), t.app.eventLog.search(EventQuery(topic = "home/mode")).events.map { it.retained })
     }
+
+    // BDD: Event logging keeps up with a busy broker
+    @Test
+    fun `messages are queued off the mqtt thread and written in batches`() {
+        val t = service()
+        t.app.events.flush() // what the service itself published while starting
+        val before = t.app.eventLog.count()
+        repeat(200) { t.bus.receive("busy/$it", """{"n":$it}""") }
+        // Nothing has been written by the MQTT handler itself: it only queued the events.
+        assertEquals(200, t.app.events.status().queued)
+        assertEquals(before, t.app.eventLog.count())
+        t.app.events.flush()
+        assertEquals(0, t.app.events.status().queued)
+        assertEquals(before + 200, t.app.eventLog.count())
+    }
+
+    // BDD: Event logging keeps up with a busy broker
+    @Test
+    fun `over 10000 waiting events the oldest are dropped and counted in the status`() {
+        val t = service()
+        t.app.events.flush()
+        repeat(12_000) { t.bus.receive("busy/$it", "x") }
+        t.api {
+            val settings = getJson("/api/events/settings")["status"]!!.jsonObject
+            assertEquals(2_000, settings["dropped"]!!.jsonPrimitive.long)
+            assertEquals(10_000, settings["queued"]!!.jsonPrimitive.int)
+            val oldest = getJson("/api/events?topic=busy/%23&sort=at%20asc&limit=1")
+            assertEquals(listOf("busy/2000"), oldest.topics())
+            assertEquals(10_000, oldest["total"]!!.jsonPrimitive.long)
+        }
+    }
+
+    // BDD: Event logging keeps up with a busy broker
+    @Test
+    fun `payloads over 64 KB are cut to 64 KB and flagged truncated`() {
+        val t = service()
+        t.bus.receive("big/json", """{"data":"${"a".repeat(100_000)}"}""")
+        t.bus.receive("big/text", "é".repeat(50_000))
+        t.bus.receive("small/text", "fits")
+        t.api {
+            val events = getJson("/api/events")["events"]!!.jsonArray.map { it.jsonObject }.associateBy { it["topic"]!!.jsonPrimitive.content }
+            val json = events.getValue("big/json")
+            assertEquals(true, json["truncated"]!!.jsonPrimitive.boolean)
+            assertEquals(false, json["json"]!!.jsonPrimitive.boolean)
+            assertEquals(65_536, json["payload"]!!.jsonPrimitive.content.toByteArray().size)
+            val text = events.getValue("big/text")
+            assertEquals(true, text["truncated"]!!.jsonPrimitive.boolean)
+            assertTrue(text["payload"]!!.jsonPrimitive.content.toByteArray().size <= 65_536)
+            assertEquals(false, events.getValue("small/text")["truncated"]!!.jsonPrimitive.boolean)
+        }
+    }
 }
