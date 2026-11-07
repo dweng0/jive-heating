@@ -1,7 +1,8 @@
 package heating
 
 import heating.api.heatingModule
-import heating.mqtt.PahoMqttBus
+import heating.mqtt.ReconnectingMqttBus
+import heating.setup.PahoBrokerFactory
 import heating.notify.FcmPushSender
 import heating.notify.PushSender
 import heating.store.SqliteStore
@@ -22,7 +23,7 @@ fun main() {
     val http = HttpClient.newHttpClient()
     val heating = HeatingApp(
         config = config,
-        bus = PahoMqttBus(config.mqttUrl, username = config.mqttUsername, password = config.mqttPassword),
+        bus = ReconnectingMqttBus(PahoBrokerFactory(), Clock.systemUTC()::instant),
         store = SqliteStore(config.dbPath),
         clock = Clock.systemUTC(),
         httpGet = { url ->

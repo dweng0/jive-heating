@@ -29,6 +29,10 @@ export function activityLine(e: ActivityEvent): ActivityLine {
       return e.reason
         ? { wide: `${e.reason} signed ${who} out`, narrow: `${e.reason} · signed ${who} out` }
         : { wide: `${who} signed out`, narrow: `${who} · signed out` }
+    case 'setup': {
+      const what = e.value === 'zigbee2mqtt' ? 'the Zigbee2MQTT base topic' : 'the broker'
+      return { wide: `${who} changed ${what}`, narrow: `${who} · ${e.value === 'zigbee2mqtt' ? 'Zigbee2MQTT' : 'broker'} changed` }
+    }
     case 'setpoint':
       return house
         ? { wide: `${who} set the whole house to ${target}`, narrow: `${who} · House ${target}` }

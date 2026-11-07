@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
-import { ChartLine, CircleUser, Flame, LogOut, Palmtree, Smartphone, Users, Zap } from 'lucide-react'
+import { ChartLine, CircleUser, Flame, LogOut, Palmtree, Smartphone, Unplug, Users, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -92,6 +92,13 @@ export function Shell({ children, onSignOut }: { children: ReactNode; onSignOut:
                   <DropdownMenuItem asChild className="sm:hidden">
                     <NavLink to="/people">
                       <Users /> People
+                    </NavLink>
+                  </DropdownMenuItem>
+                )}
+                {me.admin && (
+                  <DropdownMenuItem asChild>
+                    <NavLink to="/settings/connection">
+                      <Unplug /> Connection
                     </NavLink>
                   </DropdownMenuItem>
                 )}

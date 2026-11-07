@@ -93,6 +93,11 @@ import heating.app.ui.room.RoomScreen
 import heating.app.ui.rooms.RoomsScreen
 import heating.app.ui.schedule.ScheduleScreen
 import heating.app.ui.settings.RoomSettingsScreen
+import heating.app.ui.setup.BrokerBanner
+import heating.app.ui.setup.ConnectionCard
+import heating.app.ui.setup.ConnectionSetupScreen
+import heating.app.data.SetupStatus
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
@@ -135,6 +140,20 @@ private fun Connected(connection: Connection, onSignOut: () -> Unit, onPasswordC
         state.message?.let { snackbar.showSnackbar(it); store.clearMessage() }
     }
 
+    // Connection setup (admins): a new install opens the setup steps instead of Rooms, and a lost broker shows a banner.
+    var setupStatus by remember(connection) { mutableStateOf<SetupStatus?>(null) }
+    LaunchedEffect(connection, state.admin) {
+        if (!state.admin) return@LaunchedEffect
+        while (true) {
+            runCatching { connection.api.setupStatus() }
+                .onSuccess { setupStatus = it }
+                // If it can't be read, carry on as if set up rather than hide the app.
+                .onFailure { if (setupStatus == null) setupStatus = SetupStatus("connected", "configured", complete = true) }
+            delay(15_000)
+        }
+    }
+    val needsSetup = state.admin && setupStatus?.complete == false && route != "connection"
+
     // Energy prices, meters and the dashboard: admins only.
     val energy = remember(connection) { EnergyStore(connection.api, scope) }
     val energyState by energy.state.collectAsStateWithLifecycle()
@@ -161,6 +180,7 @@ private fun Connected(connection: Connection, onSignOut: () -> Unit, onPasswordC
         "settings/{id}" -> "${room?.name ?: ""} settings"
         "account" -> "Account"
         "users" -> "People"
+        "connection" -> "Connection"
         else -> null
     }
 
@@ -168,6 +188,10 @@ private fun Connected(connection: Connection, onSignOut: () -> Unit, onPasswordC
         snackbarHost = { SnackbarHost(snackbar) },
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
+            Column {
+            if (state.admin && setupStatus?.broker == "disconnected" && !needsSetup) {
+                BrokerBanner(setupStatus?.since, onOpen = { nav.navigate("connection") })
+            }
             if (title != null) {
                 TopAppBar(
                     title = { Text(title) },
@@ -182,9 +206,10 @@ private fun Connected(connection: Connection, onSignOut: () -> Unit, onPasswordC
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 )
             }
+            }
         },
         bottomBar = {
-            if (route == null || route in TAB_SCREENS) {
+            if (!needsSetup && (route == null || route in TAB_SCREENS)) {
                 val current = route ?: "rooms"
                 NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                     bottomTabs(state.admin, state.energy).forEach { tab ->
@@ -215,6 +240,10 @@ private fun Connected(connection: Connection, onSignOut: () -> Unit, onPasswordC
             }
         },
     ) { padding ->
+        if (needsSetup) {
+            ConnectionSetupScreen(connection.api, onFinish = { scope.launch { setupStatus = runCatching { connection.api.setupStatus() }.getOrNull() ?: setupStatus } }, contentPadding = padding)
+            return@Scaffold
+        }
         NavHost(nav, startDestination = "rooms") {
             composable("rooms") {
                 // A plug may have been taken out of a room in its settings: list it here again.
@@ -314,8 +343,12 @@ private fun Connected(connection: Connection, onSignOut: () -> Unit, onPasswordC
                         BoostSettingsCard(state.boostTarget, store::saveBoostTarget)
                         EnergyPricesCard(energyState.settings, energy::savePrices)
                         IgnoredDevicesCard(energyState.ignored, energy::showAgain)
+                        ConnectionCard(onOpen = { nav.navigate("connection") })
                     }) else null,
                 )
+            }
+            composable("connection") {
+                if (state.admin) ConnectionSetupScreen(connection.api, onFinish = { nav.popBackStack() }, contentPadding = padding)
             }
             composable("users") {
                 UsersScreen(connection.account, state.rooms, onError = showError, contentPadding = padding)

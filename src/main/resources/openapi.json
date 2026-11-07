@@ -538,6 +538,32 @@
         "type": "object", "required": ["kwh", "cost"],
         "properties": { "kwh": { "type": "number" }, "cost": { "type": "number", "description": "Minor units at today's electricity price" } }
       },
+      "SetupStatus": {
+        "type": "object",
+        "properties": {
+          "broker": { "type": "string", "enum": ["missing", "connected", "disconnected"] },
+          "zigbee2mqtt": { "type": "string", "enum": ["missing", "configured"] },
+          "complete": { "type": "boolean" },
+          "since": { "type": "string", "format": "date-time", "description": "When the broker connection dropped; only when disconnected" },
+          "reason": { "type": "string", "description": "Why it dropped or the last retry failed; only when disconnected" }
+        },
+        "required": ["broker", "zigbee2mqtt", "complete"]
+      },
+      "BrokerView": {
+        "type": "object",
+        "properties": { "host": { "type": "string" }, "port": { "type": "integer" }, "tls": { "type": "boolean" }, "username": { "type": ["string", "null"] }, "passwordSet": { "type": "boolean" } },
+        "required": ["host", "port", "tls", "passwordSet"]
+      },
+      "BrokerRequest": {
+        "type": "object",
+        "properties": { "host": { "type": "string" }, "port": { "type": "integer" }, "tls": { "type": "boolean" }, "username": { "type": "string" }, "password": { "type": "string" } },
+        "required": ["host", "port"]
+      },
+      "BridgeFound": {
+        "type": "object",
+        "properties": { "baseTopic": { "type": "string" }, "version": { "type": ["string", "null"] }, "devices": { "type": "integer" } },
+        "required": ["baseTopic", "devices"]
+      },
       "AreaAlertRequest": {
         "type": "object", "required": ["hours", "notify"],
         "properties": {
@@ -1129,6 +1155,55 @@
       "delete": {
         "summary": "Turn the area's notification off. Admins.",
         "responses": { "204": { "description": "Off" }, "404": { "description": "No such area" } }
+      }
+    },
+    "/api/setup/status": {
+      "get": {
+        "summary": "Connection setup progress and whether the broker is up. Admins.",
+        "responses": { "200": { "description": "broker is missing, connected or disconnected (then with since and reason); zigbee2mqtt is missing or configured", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SetupStatus" } } } }, "403": { "description": "Not an admin" } }
+      }
+    },
+    "/api/setup/broker": {
+      "get": {
+        "summary": "The saved broker, never its password. Admins.",
+        "responses": { "200": { "description": "The broker", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BrokerView" } } } }, "404": { "description": "None saved" } }
+      },
+      "put": {
+        "summary": "Test, save and reconnect to a broker without a restart. A password left out keeps the saved one; \"\" clears it. Admins.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BrokerRequest" } } } },
+        "responses": { "200": { "description": "Saved", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BrokerView" } } } }, "400": { "description": "Host empty or port outside 1 to 65535" }, "422": { "description": "{\"error\":message,\"reason\":reason} of the failed test; nothing saved" } }
+      }
+    },
+    "/api/setup/broker/test": {
+      "post": {
+        "summary": "Connect, subscribe and disconnect, saving and changing nothing. Admins.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BrokerRequest" } } } },
+        "responses": { "200": { "description": "{\"ok\":true} or {\"ok\":false,\"reason\":unknown_host|refused|timeout|not_authorized|tls,\"message\":...}" }, "400": { "description": "Host empty or port outside 1 to 65535" } }
+      }
+    },
+    "/api/setup/zigbee2mqtt/discover": {
+      "get": {
+        "summary": "Zigbee2MQTT bridges announcing themselves on the broker (+/bridge/info); empty after 5 seconds of none. Admins.",
+        "responses": { "200": { "description": "Bridges found", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/BridgeFound" } } } } } }
+      }
+    },
+    "/api/setup/zigbee2mqtt": {
+      "put": {
+        "summary": "Save the base topic once <base>/bridge/state reads online; valves and meters resubscribe under it. Admins.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "baseTopic": { "type": "string" } }, "required": ["baseTopic"] } } } },
+        "responses": { "200": { "description": "{\"baseTopic\":...}" }, "400": { "description": "Base topic empty" }, "422": { "description": "Zigbee2MQTT at <base> is offline" } }
+      }
+    },
+    "/api/setup/test-notification": {
+      "post": {
+        "summary": "Send the caller's phones and browsers \"Test notification\". Admins.",
+        "responses": { "200": { "description": "sent, and whether the caller has a phone or browser registered", "content": { "application/json": { "schema": { "type": "object", "properties": { "sent": { "type": "boolean" }, "registered": { "type": "boolean" } } } } } } }
+      }
+    },
+    "/api/setup/complete": {
+      "post": {
+        "summary": "Mark connection setup complete. Admins.",
+        "responses": { "204": { "description": "Complete" } }
       }
     },
     "/api/energy/gas": {

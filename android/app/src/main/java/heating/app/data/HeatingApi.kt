@@ -126,6 +126,16 @@ interface HeatingApi {
     suspend fun clearAreaAlert(id: String)
     suspend fun deleteEnergyArea(id: String)
 
+    /** Connection setup (admins): broker and Zigbee2MQTT. */
+    suspend fun setupStatus(): SetupStatus
+    suspend fun savedBroker(): BrokerView?
+    suspend fun testBroker(request: BrokerRequest): BrokerTestResult
+    suspend fun saveBroker(request: BrokerRequest): BrokerView
+    suspend fun discoverZigbee2mqtt(): List<BridgeFound>
+    suspend fun saveBaseTopic(baseTopic: String): String
+    suspend fun sendTestNotification(): TestNotificationResult
+    suspend fun completeSetup()
+
     /** Colour bands and the last 30 minutes of house readings for the live power dial. */
     suspend fun stopUsingMeterForHouse(meter: String): EnergySettings
     suspend fun labelMeter(meter: String, label: String): Meter
@@ -401,6 +411,40 @@ class KtorHeatingApi(
 
     override suspend fun clearAreaAlert(id: String) {
         client.delete("api/energy/areas/${id.encodeURLPathPart()}/alert")
+    }
+
+    override suspend fun setupStatus(): SetupStatus = client.get("api/setup/status").body()
+
+    override suspend fun savedBroker(): BrokerView? = try {
+        client.get("api/setup/broker").body<BrokerView>()
+    } catch (e: HeatingApiException) {
+        if (e.status == 404) null else throw e
+    }
+
+    override suspend fun testBroker(request: BrokerRequest): BrokerTestResult =
+        client.post("api/setup/broker/test") {
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }.body()
+
+    override suspend fun saveBroker(request: BrokerRequest): BrokerView =
+        client.put("api/setup/broker") {
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }.body()
+
+    override suspend fun discoverZigbee2mqtt(): List<BridgeFound> = client.get("api/setup/zigbee2mqtt/discover").body()
+
+    override suspend fun saveBaseTopic(baseTopic: String): String =
+        client.put("api/setup/zigbee2mqtt") {
+            contentType(ContentType.Application.Json)
+            setBody(BaseTopicRequest(baseTopic))
+        }.body<BaseTopicSaved>().baseTopic
+
+    override suspend fun sendTestNotification(): TestNotificationResult = client.post("api/setup/test-notification").body()
+
+    override suspend fun completeSetup() {
+        client.post("api/setup/complete")
     }
 
     override suspend fun deleteEnergyArea(id: String) {

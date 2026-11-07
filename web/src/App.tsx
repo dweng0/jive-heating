@@ -16,6 +16,8 @@ import { PeoplePage } from '@/pages/People'
 import { RoomPage } from '@/pages/RoomPage'
 import { RoomsPage } from '@/pages/Rooms'
 import { SignInPage } from '@/pages/SignIn'
+import { SetupGate } from '@/components/heating/SetupGate'
+import { ConnectionSettingsPage } from '@/pages/ConnectionSettings'
 
 type Auth = { state: 'loading' } | { state: 'signedOut'; notice?: string } | { state: 'signedIn'; me: User }
 
@@ -46,6 +48,7 @@ export default function App() {
       {auth.state === 'signedIn' && (
         <HomeProvider me={auth.me} onMe={signedIn}>
           <Shell onSignOut={signOut}>
+            <SetupGate>
             <Routes>
               <Route path="/" element={<RoomsPage />} />
               <Route path="/dashboard" element={auth.me.admin ? <DashboardPage /> : <Navigate to="/" replace />} />
@@ -59,7 +62,9 @@ export default function App() {
               <Route path="/account" element={<AccountPage onSignOut={signOut} onSignedOutEverywhere={() => setAuth({ state: 'signedOut' })} />} />
               <Route path="/people" element={auth.me.admin ? <PeoplePage /> : <Navigate to="/" replace />} />
               <Route path="*" element={<Navigate to="/" replace />} />
+              <Route path="/settings/connection" element={auth.me.admin ? <ConnectionSettingsPage /> : <Navigate to="/" replace />} />
             </Routes>
+            </SetupGate>
           </Shell>
         </HomeProvider>
       )}

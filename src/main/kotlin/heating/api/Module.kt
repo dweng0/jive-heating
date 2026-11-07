@@ -81,6 +81,7 @@ fun Application.heatingModule(heating: HeatingApp) {
                 boostSettingsAdminRoutes(heating)
                 deviceRoutes(heating)
                 boilerAdminRoutes(heating)
+                setupRoutes(heating)
             }
             energyReaders {
                 dashboardRoutes(heating)

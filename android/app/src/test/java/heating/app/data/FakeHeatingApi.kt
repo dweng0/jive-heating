@@ -76,6 +76,22 @@ class FakeHeatingApi : HeatingApi {
     }
     override suspend fun clearAreaAlert(id: String) { call("clearAreaAlert $id"); areaAlerts.remove(id) }
     override suspend fun deleteEnergyArea(id: String) {}
+    var setupStatus = SetupStatus()
+    var broker: BrokerView? = null
+    var brokerTest = BrokerTestResult(ok = true)
+    var bridges = emptyList<BridgeFound>()
+    var notificationRegistered = true
+    override suspend fun setupStatus(): SetupStatus { call("setupStatus"); return setupStatus }
+    override suspend fun savedBroker(): BrokerView? { call("savedBroker"); return broker }
+    override suspend fun testBroker(request: BrokerRequest): BrokerTestResult { call("testBroker ${request.host}:${request.port} tls=${request.tls} user=${request.username} pw=${request.password}"); return brokerTest }
+    override suspend fun saveBroker(request: BrokerRequest): BrokerView {
+        call("saveBroker ${request.host}:${request.port} tls=${request.tls} user=${request.username} pw=${request.password}")
+        return BrokerView(request.host, request.port, request.tls, request.username, passwordSet = !request.password.isNullOrEmpty() || broker?.passwordSet == true && request.password == null).also { broker = it }
+    }
+    override suspend fun discoverZigbee2mqtt(): List<BridgeFound> { call("discoverZigbee2mqtt"); return bridges }
+    override suspend fun saveBaseTopic(baseTopic: String): String { call("saveBaseTopic $baseTopic"); return baseTopic }
+    override suspend fun sendTestNotification(): TestNotificationResult { call("sendTestNotification"); return TestNotificationResult(notificationRegistered, notificationRegistered) }
+    override suspend fun completeSetup() { call("completeSetup"); setupStatus = setupStatus.copy(complete = true) }
     override suspend fun stopUsingMeterForHouse(meter: String): EnergySettings { call("stopUsingMeterForHouse $meter"); return EnergySettings() }
     override suspend fun labelMeter(meter: String, label: String): Meter { call("labelMeter $meter $label"); return Meter(meter, label = label) }
     override suspend fun setMeterJob(meter: String, job: MeterJob): Meter { call("setMeterJob $meter $job"); return Meter(meter) }
