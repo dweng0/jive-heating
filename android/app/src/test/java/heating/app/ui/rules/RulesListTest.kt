@@ -32,6 +32,7 @@ class RulesListTest {
         createRule(request("Hall button", topic = "z2m/hall", notify = "everyone", enabled = false))
         createRule(request("Boiler noisy", topic = "z2m/boiler"))
         ruleList.replaceAll { if (it.name == "Boiler noisy") it.copy(pausedUntil = "2026-11-07T19:10:00Z", pausedUntilLocal = "19:10") else it }
+        ruleList.replaceAll { if (it.name == "Front door opened") it.copy(lastSentAt = "2026-11-07T11:00:00Z") else it }
         areaList += EnergyArea("garage", "Garage")
         areaAlerts["garage"] = AreaAlert(3.0, "everyone", "jane", mine = true)
         historyFor["rule-1"] = listOf(
@@ -43,7 +44,6 @@ class RulesListTest {
     private suspend fun FakeHeatingApi.rows() = ruleRows(
         rules(),
         energyAreas().map { it to areaAlert(it.id) },
-        rules().associate { it.id to ruleHistory(it.id, 50) },
         now,
     )
 

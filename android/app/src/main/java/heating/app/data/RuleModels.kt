@@ -32,6 +32,8 @@ data class Rule(
     val createdAt: String = "",
     val pausedUntil: String? = null,
     val pausedUntilLocal: String? = null,
+    /** When the rule last sent a notification (from its 30-day history), or null. */
+    val lastSentAt: String? = null,
 )
 
 /** openapi: RuleRequest. POST /api/rules, PUT /api/rules/{id} and POST /api/rules/test. */
@@ -119,19 +121,17 @@ fun lastSentText(at: String?, now: Instant = Instant.now()): String {
     return "Last sent $ago"
 }
 
-/** Rules with who they notify and when they last sent ([history] newest first, by rule id), then area notifications. */
+/** Rules with who they notify and when they last sent, then area notifications. */
 fun ruleRows(
     rules: List<Rule>,
     areas: List<Pair<EnergyArea, AreaAlert>>,
-    history: Map<String, List<RuleHistoryEntry>>,
     now: Instant = Instant.now(),
 ): List<RuleRow> = rules.map { r ->
-    val sent = history[r.id].orEmpty().firstOrNull { it.outcome == "sent" || it.outcome == "summary sent" }?.at
     RuleRow(
         name = r.name,
         topic = r.topic,
         notifies = if (r.notify == NOTIFY_ME) "Me" else "Everyone",
-        lastSent = lastSentText(sent, now),
+        lastSent = lastSentText(r.lastSentAt, now),
         enabled = r.enabled,
         paused = r.pausedUntilLocal?.let { "Paused until $it" } ?: if (r.pausedUntil != null) "Paused" else null,
         notifyMe = r.notify == NOTIFY_ME,

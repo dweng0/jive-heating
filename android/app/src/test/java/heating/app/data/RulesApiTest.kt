@@ -25,7 +25,7 @@ class RulesApiTest {
         },
     )
 
-    private val ruleJson = """{"id":"r1","name":"Front door contact false","topic":"z2m/front_door","conditions":[{"field":"contact","operator":"=","value":false},{"field":"battery","operator":"exists"}],"trigger":"changes to","title":"front_door","message":"m","notify":"me","cooldownSeconds":60,"quietHours":{"from":"22:00","to":"07:00","sendSummary":true},"enabled":true,"by":"jane","byUserId":"u1","createdAt":"2026-11-07T10:00:00Z","pausedUntil":"2026-11-07T19:10:00Z","pausedUntilLocal":"19:10"}"""
+    private val ruleJson = """{"id":"r1","name":"Front door contact false","topic":"z2m/front_door","conditions":[{"field":"contact","operator":"=","value":false},{"field":"battery","operator":"exists"}],"trigger":"changes to","title":"front_door","message":"m","notify":"me","cooldownSeconds":60,"quietHours":{"from":"22:00","to":"07:00","sendSummary":true},"enabled":true,"by":"jane","byUserId":"u1","createdAt":"2026-11-07T10:00:00Z","pausedUntil":"2026-11-07T19:10:00Z","pausedUntilLocal":"19:10","lastSentAt":"2026-11-07T11:00:00Z"}"""
 
     private fun path(r: HttpRequestData) = r.url.toString().removePrefix("https://heating.example/")
 
@@ -37,6 +37,7 @@ class RulesApiTest {
         assertEquals(null, rule.conditions[1].value)
         assertEquals(QuietHours("22:00", "07:00", true), rule.quietHours)
         assertEquals("19:10", rule.pausedUntilLocal)
+        assertEquals("2026-11-07T11:00:00Z", rule.lastSentAt)
         val one = api(ruleJson)
         one.createRule(rule.toRequest())
         one.updateRule("r1", rule.toRequest())

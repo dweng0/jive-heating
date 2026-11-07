@@ -74,7 +74,7 @@ fun RulesScreen(api: HeatingApi, onEdit: (String) -> Unit, onError: (String) -> 
         runCatching {
             val rules = api.rules()
             val areas = runCatching { api.energyAreas().map { it to api.areaAlert(it.id) } }.getOrDefault(emptyList())
-            ruleRows(rules, areas, rules.associate { it.id to runCatching { api.ruleHistory(it.id, 50) }.getOrDefault(emptyList()) })
+            ruleRows(rules, areas)
         }.onSuccess { rows = it }.onFailure { onError(friendlyError(it)) }
     }
     fun act(block: suspend () -> Unit) = scope.launch { runCatching { block() }.onFailure { onError(friendlyError(it)) }; reload++ }
