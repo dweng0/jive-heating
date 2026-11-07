@@ -8,6 +8,8 @@ import heating.testing.TEST_TOKEN
 import heating.testing.TestHeating
 import heating.testing.anonymous
 import io.ktor.client.request.bearerAuth
+import io.ktor.client.request.get
+import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
@@ -128,5 +130,24 @@ class ActionLogTest {
         assertTrue("heating.actions INFO sign in failed for nobody" in lines, lines.toString())
         assertTrue(lines.any { it.startsWith("heating.actions INFO sign in locked for sam") }, lines.toString())
         assertFalse(lines.any { password in it || "correct horse" in it || TEST_TOKEN in it }, lines.toString())
+    }
+
+    // BDD: Web sign-in sets an HttpOnly session cookie and returns no token
+    @Test
+    fun `a refused request logs what credentials arrived, never their values`() {
+        val t = TestHeating()
+        val lines = captured {
+            t.api {
+                anonymous.get("/api/rooms") {
+                    header("Cookie", "__Host-heat=secret-token-value; other=1")
+                    header("User-Agent", "Mozilla/5.0 (Linux; Android 11) Jelly/1.0")
+                }
+                anonymous.get("/api/auth/me") { header("User-Agent", "Plain/1.0") }
+            }
+        }.filter { "refused" in it }
+        assertEquals(2, lines.size, lines.joinToString("\n"))
+        assertTrue(lines[0].contains("GET /api/rooms") && lines[0].contains("cookies __Host-heat, other") && lines[0].contains("Jelly/1.0"), lines[0])
+        assertTrue(lines[1].contains("GET /api/auth/me") && lines[1].contains("no cookies") && lines[1].contains("no Authorization"), lines[1])
+        assertFalse(lines.any { "secret-token-value" in it })
     }
 }

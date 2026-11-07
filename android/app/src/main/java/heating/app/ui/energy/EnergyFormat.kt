@@ -218,7 +218,8 @@ const val NO_ROOM = "No room"
 const val DISCONNECT = "Disconnect"
 
 /** The monitored plugs the Rooms screen lists: those in no room. One in a room lives in that room's settings. */
-fun plugsWithNoRoom(monitored: List<Meter>): List<Meter> = monitored.filter { it.room == null }
+/** Monitored plugs and clamps placed nowhere: in no room and no energy area (one in an area lives on its dashboard). */
+fun plugsWithNoRoom(monitored: List<Meter>): List<Meter> = monitored.filter { it.room == null && it.area == null }
 
 /** The name of the room a monitored plug is in, or "No room"; [roomNames] maps room id to name. */
 fun plugRoomName(room: String?, roomNames: Map<String, String>): String = room?.let(roomNames::get) ?: NO_ROOM

@@ -53,7 +53,7 @@ private fun MonitoredDevice(meter: Meter, rooms: List<Room>, onChooseRoom: (mete
     var menu by remember { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text(meter.name, style = MaterialTheme.typography.bodyLarge)
+            Text(meter.shownAs, style = MaterialTheme.typography.bodyLarge)
             Text(
                 if (meter.stale || !meter.online) "not reporting" else "${formatPower(meter.power)} now",
                 style = MaterialTheme.typography.bodySmall,

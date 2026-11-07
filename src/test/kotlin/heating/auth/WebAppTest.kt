@@ -137,4 +137,19 @@ class WebAppTest {
             assertEquals(HttpStatusCode.NotFound, anonymous.get("/api/nope") { header(HttpHeaders.Authorization, "Bearer $TEST_TOKEN") }.status)
         }
     }
+
+    // BDD: Web sign-in sets an HttpOnly session cookie and returns no token
+    @Test
+    fun `a page asked for over plain http through the tunnel is sent to https, where the secure cookie works`() = TestHeating().api {
+        val noRedirects = createClient { followRedirects = false }
+        val viaHttp = noRedirects.get("/rooms?x=1") {
+            header("X-Forwarded-Proto", "http")
+            header(HttpHeaders.Host, "heating.example.org")
+        }
+        assertEquals(HttpStatusCode.PermanentRedirect, viaHttp.status)
+        assertEquals("https://heating.example.org/rooms?x=1", viaHttp.headers[HttpHeaders.Location])
+        // Over https, or straight to the service with no proxy in front, nothing changes.
+        assertEquals(HttpStatusCode.OK, noRedirects.get("/health") { header("X-Forwarded-Proto", "https") }.status)
+        assertEquals(HttpStatusCode.OK, noRedirects.get("/health").status)
+    }
 }

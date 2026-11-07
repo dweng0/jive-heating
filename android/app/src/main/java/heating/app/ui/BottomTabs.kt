@@ -14,3 +14,6 @@ fun bottomTabs(admin: Boolean, energy: Boolean = admin): List<BottomTab> = build
     if (admin) add(BottomTab("Holiday", null))
     add(BottomTab("Account", "account"))
 }
+
+/** A wide, short screen (an Echo Show 8 is about 960×600 dp) keeps the tabs in a tray behind an up arrow, to leave room for the page. */
+fun tabsInTray(widthDp: Int, heightDp: Int): Boolean = widthDp >= 900 && heightDp in 500 until 700

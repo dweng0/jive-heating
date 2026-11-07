@@ -337,7 +337,7 @@ test("the trip counter ticks up with the house's use", async ({ page }) => {
   const trip = page.getByTestId('trip-kwh')
   const counter = page.getByTestId('usage-today')
   await expect(counter).toContainText('Usage today')
-  await expect(trip).toHaveAttribute('data-value', '8.200')
+  await expect(trip).toHaveAttribute('data-value', '8.2000')
   await expect(page.getByTestId('trip-cost')).toHaveText('£2.21')
   // A minute at 1200 W is 0.02 kWh.
   for (let i = 0; i < 6; i++) {
@@ -351,12 +351,12 @@ test("the trip counter ticks up with the house's use", async ({ page }) => {
   recorded = 9.5
   await page.clock.fastForward(5 * 60_000)
   await expect.poll(async () => Number(await trip.getAttribute('data-value'))).toBeGreaterThanOrEqual(9.5)
-  // Tapped, it shows the cost in pounds to five decimals, and tapped again the usage; remembered.
+  // Tapped, it shows the cost in pounds to four decimals, and tapped again the usage; remembered.
   await counter.click()
   await expect(counter).toContainText('Cost today')
   const pounds = page.getByTestId('trip-pounds')
-  await expect(pounds).toHaveAttribute('data-value', /^2\.\d{5}$/)
-  await expect(pounds).toHaveAttribute('aria-label', /^£2\.\d{5}$/)
+  await expect(pounds).toHaveAttribute('data-value', /^2\.\d{4}$/)
+  await expect(pounds).toHaveAttribute('aria-label', /^£2\.\d{4}$/)
   await page.reload()
   await expect(page.getByTestId('usage-today')).toContainText('Cost today')
   await page.getByTestId('usage-today').click()

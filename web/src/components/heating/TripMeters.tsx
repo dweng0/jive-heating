@@ -97,9 +97,9 @@ export function TripMeters({ totals, readings }: { totals: EnergyTotals | null; 
       >
         <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{shows === 'kwh' ? 'Usage today' : 'Cost today'}</div>
         {shows === 'kwh' ? (
-          <Rolling testId="trip-kwh" value={todayKwh} digits={3} decimals={3} roll={TICK_MS * 2} />
+          <Rolling testId="trip-kwh" value={todayKwh} digits={3} decimals={4} roll={TICK_MS * 2} />
         ) : (
-          <Rolling testId="trip-pounds" value={(todayKwh * price) / 100} digits={2} decimals={5} prefix={symbol(currency)} roll={TICK_MS * 2} />
+          <Rolling testId="trip-pounds" value={(todayKwh * price) / 100} digits={2} decimals={4} prefix={symbol(currency)} roll={TICK_MS * 2} />
         )}
         <div className="text-sm tabular-nums">
           {shows === 'kwh' ? (

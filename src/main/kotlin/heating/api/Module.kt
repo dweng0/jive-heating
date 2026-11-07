@@ -43,6 +43,8 @@ fun Application.heatingModule(heating: HeatingApp) {
         }
     }
     install(WebSockets)
+    install(RefusedLog)
+    install(HttpsRedirect)
     install(Authentication) {
         bearer(AUTH) {
             authHeader(WebSession::authHeader)

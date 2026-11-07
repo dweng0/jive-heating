@@ -24,4 +24,15 @@ class AreaLabelsTest {
         assertEquals("Office lights", plugName(RoomPlug("Garage mains A", label = "Office lights")))
         assertEquals("Fridge Plug", plugName(RoomPlug("Fridge Plug")))
     }
+
+    // BDD: A plug is put in an energy area
+    @Test
+    fun `a clamp or plug in an energy area is not listed under monitored devices`() {
+        val monitored = listOf(
+            Meter("Garage mains A", monitored = true, area = "garage", label = "Office lights"),
+            Meter("Kettle Plug", monitored = true),
+            Meter("Fridge Plug", monitored = true, room = "kitchen"),
+        )
+        assertEquals(listOf("Kettle Plug"), plugsWithNoRoom(monitored).map { it.name })
+    }
 }

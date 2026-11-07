@@ -20,4 +20,12 @@ class BottomTabsTest {
     fun aMemberWithEnergyAccessHasTheEnergyTabOnly() {
         assertEquals(listOf("Rooms", "Energy", "Account"), bottomTabs(admin = false, energy = true).map { it.label })
     }
+
+    @Test
+    fun `the Echo Show keeps its tabs in a tray, phones and tablets do not`() {
+        kotlin.test.assertTrue(tabsInTray(961, 601)) // Echo Show 8, landscape
+        kotlin.test.assertFalse(tabsInTray(411, 915)) // phone, portrait
+        kotlin.test.assertFalse(tabsInTray(915, 411)) // phone, landscape
+        kotlin.test.assertFalse(tabsInTray(1280, 800)) // tablet
+    }
 }

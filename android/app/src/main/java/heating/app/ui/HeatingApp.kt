@@ -21,6 +21,8 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.BeachAccess
 import androidx.compose.material.icons.rounded.ElectricBolt
 import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.ShowChart
 import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.MoreVert
@@ -192,6 +194,7 @@ private fun Connected(connection: Connection, onSignOut: () -> Unit, onPasswordC
         else -> null
     }
 
+    var trayOpen by rememberSaveable { mutableStateOf(false) }
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         containerColor = MaterialTheme.colorScheme.background,
@@ -219,31 +222,51 @@ private fun Connected(connection: Connection, onSignOut: () -> Unit, onPasswordC
         bottomBar = {
             if (!needsSetup && (route == null || route in TAB_SCREENS)) {
                 val current = route ?: "rooms"
-                NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
-                    bottomTabs(state.admin, state.energy).forEach { tab ->
-                        val icon = when (tab.route) {
-                            "rooms" -> Icons.Rounded.Home
-                            "dashboard" -> Icons.Rounded.ShowChart
-                            "energy" -> Icons.Rounded.ElectricBolt
-                            "account" -> Icons.Rounded.AccountCircle
-                            else -> Icons.Rounded.BeachAccess
+                val config = androidx.compose.ui.platform.LocalConfiguration.current
+                val tray = tabsInTray(config.screenWidthDp, config.screenHeightDp)
+                val tabs: @Composable () -> Unit = {
+                    NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+                        bottomTabs(state.admin, state.energy).forEach { tab ->
+                            val icon = when (tab.route) {
+                                "rooms" -> Icons.Rounded.Home
+                                "dashboard" -> Icons.Rounded.ShowChart
+                                "energy" -> Icons.Rounded.ElectricBolt
+                                "account" -> Icons.Rounded.AccountCircle
+                                else -> Icons.Rounded.BeachAccess
+                            }
+                            NavigationBarItem(
+                                selected = tab.route == current,
+                                onClick = {
+                                    trayOpen = false
+                                    when (tab.route) {
+                                        null -> holidaySheet = true
+                                        current -> {}
+                                        "rooms" -> nav.popBackStack("rooms", inclusive = false)
+                                        "account" -> nav.navigate("account")
+                                        // Tab to tab: back goes to Rooms, not through every tab visited.
+                                        else -> nav.navigate(tab.route) { popUpTo("rooms"); launchSingleTop = true }
+                                    }
+                                },
+                                icon = { Icon(icon, null) },
+                                label = { Text(tab.label) },
+                            )
                         }
-                        NavigationBarItem(
-                            selected = tab.route == current,
-                            onClick = {
-                                when (tab.route) {
-                                    null -> holidaySheet = true
-                                    current -> {}
-                                    "rooms" -> nav.popBackStack("rooms", inclusive = false)
-                                    "account" -> nav.navigate("account")
-                                    // Tab to tab: back goes to Rooms, not through every tab visited.
-                                    else -> nav.navigate(tab.route) { popUpTo("rooms"); launchSingleTop = true }
-                                }
-                            },
-                            icon = { Icon(icon, null) },
-                            label = { Text(tab.label) },
+                    }
+                }
+                if (!tray) tabs()
+                else Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    // On the Echo Show the tabs wait behind an up arrow, and tuck away again once one is chosen.
+                    IconButton(onClick = { trayOpen = !trayOpen }) {
+                        Icon(
+                            if (trayOpen) Icons.Rounded.KeyboardArrowDown else Icons.Rounded.KeyboardArrowUp,
+                            if (trayOpen) "Hide tabs" else "Show tabs",
                         )
                     }
+                    androidx.compose.animation.AnimatedVisibility(
+                        trayOpen,
+                        enter = androidx.compose.animation.expandVertically(expandFrom = Alignment.Top),
+                        exit = androidx.compose.animation.shrinkVertically(shrinkTowards = Alignment.Top),
+                    ) { tabs() }
                 }
             }
         },

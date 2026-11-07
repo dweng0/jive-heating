@@ -130,10 +130,10 @@ fun TripMeters(totals: EnergyTotals?, readings: List<Pair<Long, Double?>>, dark:
         ) {
             Text(if (showsCost) "COST TODAY" else "USAGE TODAY", style = MaterialTheme.typography.labelSmall, color = muted)
             if (showsCost) {
-                Rolling(todayKwh * price / 100, digits = 2, decimals = 5, description = "Cost today", prefix = symbol(currency), roll = (TICK_MS * 2).toInt())
+                Rolling(todayKwh * price / 100, digits = 2, decimals = 4, description = "Cost today", prefix = symbol(currency), roll = (TICK_MS * 2).toInt())
                 Text(String.format(Locale.UK, "%.1f kWh", todayKwh), style = MaterialTheme.typography.labelMedium, color = muted)
             } else {
-                Rolling(todayKwh, digits = 3, decimals = 3, description = "Usage today kWh", roll = (TICK_MS * 2).toInt())
+                Rolling(todayKwh, digits = 3, decimals = 4, description = "Usage today kWh", roll = (TICK_MS * 2).toInt())
                 Text("kWh · ${formatCost(todayKwh * price, currency)}", style = MaterialTheme.typography.labelMedium)
             }
         }
