@@ -5,30 +5,26 @@ import heating.rooms.Zone
 import java.time.Duration
 import java.time.Instant
 import java.util.Locale
-import java.util.concurrent.Executor
 import org.slf4j.LoggerFactory
 
 /**
  * Phone (Firebase) and browser (Web Push) notifications: "John turned the heating on" when a person's (or a knob's) change makes zones
  * start calling for heat, and "Heating finished" when every zone started that way has reached its target.
  * Starts are gathered for [GATHER] so one action that starts several rooms sends one notification;
- * register [tick] on `heating.periodic`. Sending runs on [executor] and never affects the heating.
+ * register [tick] on `heating.periodic`. Notifications are queued in [deliveries], which sends them and never affects the heating.
  * Each person hears only about the rooms they can see: a member's notification names (or counts) just
  * those, and they get none when they can see none of them.
  */
 class HeatingAlerts(
     private val users: UserService,
     private val settings: NotificationSettings,
-    private val sender: PushSender,
+    private val deliveries: Deliveries,
     private val actions: ActionTracker,
-    private val executor: Executor,
     private val now: () -> Instant,
     /** "Utility Room", or "Room/Valve" for a zone of an independent room. */
     private val zoneName: (Zone) -> String,
     private val target: (Zone) -> Double?,
     private val temperature: (Zone) -> Double?,
-    /** Browsers (Web Push) get each person's notifications too, when it is on. */
-    private val webPush: WebPush? = null,
 ) {
     /** A zone in a notification: its room (for who may hear of it), its name, and a target or temperature. */
     private class Mention(val roomId: String, val name: String, val degrees: Double?)
@@ -122,47 +118,25 @@ class HeatingAlerts(
         wants: (NotificationPrefs) -> Boolean,
         message: (List<Mention>) -> Pair<String, String>,
     ) {
-        val phones = mutableListOf<Pair<String, WebPushMessage>>()
-        val browsers = mutableListOf<Pair<WebPushSubscription, WebPushMessage>>()
         users.list()
             .filter { it.username != exclude && wants(settings.prefs(it.id)) }
             .forEach { user ->
                 val seen = zones.filter { user.admin || user.rooms == null || it.roomId in user.rooms }
-                if (seen.isEmpty()) return@forEach
+                if (seen.isEmpty() || !deliveries.hasDevices(user.id)) return@forEach
                 val (title, body) = message(seen)
                 // A tap opens the room when the notification is about one room, else the Rooms screen.
-                val text = WebPushMessage(title, body, seen.map { it.roomId }.distinct().singleOrNull())
-                if (sender !== PushSender.None) settings.devicesOf(user.id).forEach { phones += it to text }
-                webPush?.subscriptionsFor(user.id)?.forEach { browsers += it to text }
+                deliveries.enqueue(listOf(user.id), title, body, SOURCE, roomId = seen.map { it.roomId }.distinct().singleOrNull())
             }
-        deliver(phones, browsers)
     }
 
-    /** Sends [title] and [body] to each of [userIds]' phones and browsers, whatever their heating notification switches. */
+    /** Queues [title] and [body] for each of [userIds] (as area notifications), whatever their heating notification switches. */
     fun toPeople(userIds: List<String>, title: String, body: String) {
-        val text = WebPushMessage(title, body)
-        val phones = if (sender === PushSender.None) emptyList() else userIds.flatMap { id -> settings.devicesOf(id).map { it to text } }
-        val browsers = userIds.flatMap { id -> webPush?.subscriptionsFor(id).orEmpty().map { it to text } }
-        deliver(phones, browsers)
-    }
-
-    private fun deliver(phones: List<Pair<String, WebPushMessage>>, browsers: List<Pair<WebPushSubscription, WebPushMessage>>) {
-        if (phones.isEmpty() && browsers.isEmpty()) return
-        executor.execute {
-            phones.forEach { (token, text) ->
-                val result = runCatching { sender.send(token, text.title, text.body) }.getOrDefault(PushResult.FAILED)
-                when (result) {
-                    PushResult.UNREGISTERED -> settings.forget(token)
-                    PushResult.FAILED -> log.warn("notification \"{}\" not sent to a phone", text.title)
-                    PushResult.SENT -> Unit
-                }
-            }
-            browsers.forEach { (subscription, text) -> runCatching { webPush?.deliver(subscription, text) } }
-        }
+        deliveries.enqueue(userIds.filter(deliveries::hasDevices), title, body, "Area notification")
     }
 
     companion object {
         val GATHER: Duration = Duration.ofSeconds(10)
+        const val SOURCE = "Heating alert"
         private val log = LoggerFactory.getLogger(HeatingAlerts::class.java)
 
         fun degrees(t: Double): String = if (t % 1.0 == 0.0) "${t.toInt()}°" else "${String.format(Locale.ROOT, "%.1f", t)}°"
