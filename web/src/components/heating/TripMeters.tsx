@@ -9,13 +9,13 @@ const SHOWS_KEY = 'energy.usageShows'
 const TICK_MS = 250
 
 /**
- * A car's mechanical counter in a dot-matrix face: each digit a wheel that rolls to its place. The last [decimals] wheels
+ * A car's mechanical counter, square-cornered: each digit a wheel that rolls to its place. The last [decimals] wheels
  * are the fractions; [prefix], such as "£", stands before them.
  */
 function Rolling({ value, digits, decimals, testId, prefix, roll = 700 }: { value: number; digits: number; decimals: number; testId: string; prefix?: string; roll?: number }) {
   const text = value.toFixed(decimals).padStart(digits + (decimals > 0 ? 1 : 0), '0')
   return (
-    <div data-testid={testId} data-value={value.toFixed(decimals)} aria-label={`${prefix ?? ''}${value.toFixed(decimals)}`} className="inline-flex items-stretch overflow-hidden rounded-md bg-foreground font-dot text-xl leading-none font-extrabold text-background tabular-nums shadow-inner sm:text-2xl">
+    <div data-testid={testId} data-value={value.toFixed(decimals)} aria-label={`${prefix ?? ''}${value.toFixed(decimals)}`} className="inline-flex items-stretch overflow-hidden rounded-[3px] bg-foreground font-mono text-2xl leading-none font-bold text-background tabular-nums shadow-inner sm:text-[1.75rem]">
       {prefix && <span className="flex items-center px-1">{prefix}</span>}
       {[...text].map((ch, i) =>
         ch === '.' ? (
@@ -23,7 +23,7 @@ function Rolling({ value, digits, decimals, testId, prefix, roll = 700 }: { valu
         ) : (
           <span
             key={i}
-            className={cn('relative h-[1.4em] w-[0.8em] overflow-hidden border-r border-background/15 last:border-r-0', i >= text.length - decimals && 'bg-[var(--power-high)]/80')}
+            className={cn('relative h-[1.4em] w-[0.85em] overflow-hidden border-r border-background/15 last:border-r-0', i >= text.length - decimals && 'bg-[var(--power-high)]/80')}
           >
             <span className="absolute inset-x-0 top-0 flex flex-col items-center transition-transform ease-out" style={{ transform: `translateY(-${Number(ch) * 1.4}em)`, transitionDuration: `${roll}ms` }}>
               {Array.from({ length: 10 }, (_, d) => (

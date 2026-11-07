@@ -2786,7 +2786,7 @@ Engineering rules (apply to every scenario):
                 three decimals so it is seen to move, with today's cost under it
             And tapping it swaps it to "Cost today" in pounds to five decimals, such as "£2.21400", rolling up at the price
                 per kWh, and tapping again swaps back; the choice is remembered
-            And its digits are in a dot-matrix face, like an arrivals board
+            And its wheels are near square-cornered, in a plain monospaced face
             And it never rolls back: when today's recorded figure arrives it carries on from whichever is higher
             And it starts again from 0 at midnight
 

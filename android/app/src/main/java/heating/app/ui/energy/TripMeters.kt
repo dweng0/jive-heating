@@ -32,39 +32,33 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import heating.app.R
 import heating.app.data.EnergyTotals
 import kotlinx.coroutines.delay
 import java.time.LocalDate
 import java.util.Locale
 
-private val WHEEL = 26.dp
+private val WHEEL = 30.dp
+private val WHEEL_WIDTH = 21.dp
 
 /** How often the usage counter moves on: often enough that its last wheel is seen to turn. */
 private const val TICK_MS = 250L
-
-/** A dot-matrix face, like an arrivals board: Doto, OFL. */
-@OptIn(androidx.compose.ui.text.ExperimentalTextApi::class)
-private val DotMatrix = FontFamily(Font(R.font.doto, FontWeight.ExtraBold, variationSettings = FontVariation.Settings(FontVariation.weight(800))))
 
 /** One wheel of a mechanical counter, rolling to [digit] over [roll] ms. */
 @Composable
 private fun Wheel(digit: Int, tenths: Boolean, roll: Int) {
     val pos by animateFloatAsState(digit.toFloat(), tween(roll), label = "wheel")
     Box(
-        Modifier.width(18.dp).height(WHEEL).clipToBounds()
+        Modifier.width(WHEEL_WIDTH).height(WHEEL).clipToBounds()
             .background(if (tenths) zoneColor(PowerZone.HIGH, false).copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurface),
     ) {
         Column(Modifier.offset(y = -WHEEL * pos)) {
             (0..9).forEach { d ->
-                Box(Modifier.height(WHEEL).width(18.dp), contentAlignment = Alignment.Center) {
-                    Text("$d", color = MaterialTheme.colorScheme.surface, fontFamily = DotMatrix, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp)
+                Box(Modifier.height(WHEEL).width(WHEEL_WIDTH), contentAlignment = Alignment.Center) {
+                    Text("$d", color = MaterialTheme.colorScheme.surface, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 22.sp)
                 }
             }
         }
@@ -76,12 +70,12 @@ private fun Wheel(digit: Int, tenths: Boolean, roll: Int) {
 private fun Rolling(value: Double, digits: Int, decimals: Int, description: String, prefix: String? = null, roll: Int = 700) {
     val text = String.format(Locale.UK, "%.${decimals}f", value).padStart(digits + if (decimals > 0) 1 else 0, '0')
     Row(
-        Modifier.background(MaterialTheme.colorScheme.onSurface, RoundedCornerShape(6.dp)).padding(2.dp).semantics { contentDescription = "$description ${String.format(Locale.UK, "%.${decimals}f", value)}" },
+        Modifier.background(MaterialTheme.colorScheme.onSurface, RoundedCornerShape(2.dp)).padding(2.dp).semantics { contentDescription = "$description ${String.format(Locale.UK, "%.${decimals}f", value)}" },
         verticalAlignment = Alignment.Bottom,
     ) {
         prefix?.let {
             Box(Modifier.height(WHEEL).padding(horizontal = 3.dp), contentAlignment = Alignment.Center) {
-                Text(it, color = MaterialTheme.colorScheme.surface, fontFamily = DotMatrix, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp)
+                Text(it, color = MaterialTheme.colorScheme.surface, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 22.sp)
             }
         }
         text.forEachIndexed { i, ch ->
