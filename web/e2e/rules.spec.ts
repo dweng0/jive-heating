@@ -236,3 +236,33 @@ test('a condition picks a field seen on the topic and gets operators and values 
   await action.getByLabel('Value').fill('triple')
   await expect(page.getByTestId('test-event').first()).toContainText('Conditions not met')
 })
+
+// BDD: The topic is widened to similar devices
+test('"Any device like this" widens the topic to a wildcard, lists what it matches, and devices can be picked for one rule each', async ({ page }) => {
+  const mock = await serve(page, house())
+  await page.goto('/rules/new?topic=z2m/front_door&field=contact&value=false')
+  await expect(page.getByTestId('test-event').first()).toBeVisible()
+
+  await expect(page.getByRole('button', { name: /Any device like this/ })).toContainText('4 topics')
+  await page.getByRole('button', { name: /Any device like this/ }).click()
+  await expect(page.getByLabel('Topic', { exact: true })).toHaveValue('z2m/+')
+  await expect(page.getByLabel('Title')).toHaveValue('{{device}}')
+
+  // Which topics it matches, and which have a "contact" field.
+  const matched = page.getByTestId('matched-topic')
+  await expect(matched).toHaveCount(4)
+  await expect(matched.filter({ hasText: 'z2m/front_door' })).toContainText('has contact')
+  await expect(matched.filter({ hasText: 'z2m/back_door' })).toContainText('has contact')
+  await expect(matched.filter({ hasText: 'z2m/hall_button' })).not.toContainText('has contact')
+
+  // Picking devices from a list makes one rule per device.
+  await page.getByRole('button', { name: 'Pick devices from a list' }).click()
+  await expect(page.getByTestId('device-choice')).toHaveCount(4)
+  await expect(page.getByTestId('device-choice').filter({ hasText: 'front_door' }).getByRole('checkbox')).toBeChecked()
+  await expect(page.getByTestId('device-choice').filter({ hasText: 'hall_button' }).getByRole('checkbox')).not.toBeChecked()
+  await page.getByRole('button', { name: 'Add 2 rules' }).click()
+  await expect(page).toHaveURL(/\/rules$/)
+  const created = mock.calls.filter((c) => c.method === 'POST' && c.path === '/api/rules').map((c) => c.body)
+  expect(created.map((b) => b.topic).sort()).toEqual(['z2m/back_door', 'z2m/front_door'])
+  expect(created.find((b) => b.topic === 'z2m/back_door')).toMatchObject({ name: 'Back door contact false', title: 'back_door', message: 'back_door: contact is false' })
+})

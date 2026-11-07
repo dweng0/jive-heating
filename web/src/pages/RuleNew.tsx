@@ -5,12 +5,17 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { eventsApi, valueText, type LoggedEvent } from '@/lib/events'
+import { eventsApi, valueText, type EventTopic, type LoggedEvent } from '@/lib/events'
 import {
   asRequest,
   conditionFromValue,
   conditionFromAddress,
   defaultTexts,
+  deviceOf,
+  hasField,
+  matchingTopics,
+  swapDevice,
+  widenedTopic,
   emptyRequest,
   kindOf,
   OPERATORS,
@@ -43,6 +48,11 @@ export function RuleNewPage() {
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [allTopics, setAllTopics] = useState<EventTopic[]>([])
+  /** The topic the rule started from, before any widening. */
+  const [started, setStarted] = useState('')
+  /** The devices ticked in "Pick devices from a list"; null while that list is closed. */
+  const [chosen, setChosen] = useState<Set<string> | null>(null)
   /** The texts the admin has not touched follow the topic and conditions. */
   const touched = useRef({ name: false, title: false, message: false })
 
@@ -59,6 +69,7 @@ export function RuleNewPage() {
       return
     }
     const topic = params.get('topic') ?? ''
+    setStarted(topic)
     const field = params.get('field')
     const value = params.get('value')
     const conditions = field ? [conditionFromAddress(field, params.get('op'), value)] : []
@@ -76,6 +87,10 @@ export function RuleNewPage() {
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
+
+  useEffect(() => {
+    eventsApi.topics().then(setAllTopics, () => undefined)
+  }, [])
 
   // The events seen on the topic, for the fields it offers.
   const topic = req?.topic ?? ''
@@ -138,14 +153,29 @@ export function RuleNewPage() {
     })
   }
 
+  /** One rule per ticked device: its own topic, with the texts that follow the device filled in for it. */
+  function perDevice(topic: string): RuleRequest {
+    if (!req) throw new Error('no rule')
+    const texts = defaultTexts(topic, req.conditions)
+    const swap = (text: string) => swapDevice(swapDevice(text, '{{device}}', deviceOf(topic)), deviceOf(started), deviceOf(topic))
+    return {
+      ...req,
+      topic,
+      name: touched.current.name ? swap(req.name) : texts.name,
+      title: touched.current.title ? swap(req.title) : texts.title,
+      message: touched.current.message ? swap(req.message) : texts.message,
+    }
+  }
+
   async function save() {
     if (!req) return
     setSaving(true)
     setError(null)
     try {
       if (id) await rulesApi.replace(id, req)
+      else if (chosen) for (const topic of chosen) await rulesApi.create(perDevice(topic))
       else await rulesApi.create(req)
-      toast.success(id ? 'Rule saved' : 'Rule added')
+      toast.success(id ? 'Rule saved' : chosen ? `${chosen.size} rules added` : 'Rule added')
       navigate('/rules')
     } catch (e) {
       setError((e as Error).message)
@@ -165,6 +195,12 @@ export function RuleNewPage() {
   }
 
   const fields = seenFields(seen)
+  const wildcard = req.topic.split('/').some((p) => p === '+') || req.topic.endsWith('#')
+  const widened = widenedTopic(req.topic)
+  const matches = wildcard ? matchingTopics(req.topic.trim(), allTopics) : []
+  const conditionFields = req.conditions.map((c) => c.field).filter(Boolean)
+  const withFields = (t: EventTopic) => conditionFields.length > 0 && conditionFields.every((f) => hasField(t, f))
+  const fieldNote = conditionFields.join(', ')
 
   return (
     <div className="flex flex-col gap-4">
@@ -178,8 +214,74 @@ export function RuleNewPage() {
       <Card>
         <CardContent className="flex flex-col gap-4 pt-6">
           <Labelled label="Topic">
-            <Input aria-label="Topic" className="font-mono" value={req.topic} onChange={(e) => change({ topic: e.target.value })} />
+            <Input aria-label="Topic" className="font-mono" value={req.topic} onChange={(e) => (setChosen(null), change({ topic: e.target.value }))} />
           </Labelled>
+
+          {!id && (widened || wildcard) && (
+            <div className="flex flex-col gap-2 rounded-lg bg-secondary p-3 text-sm">
+              {!wildcard && widened && (
+                <div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setStarted((s) => s || req.topic)
+                      change({ topic: widened })
+                    }}
+                  >
+                    Any device like this
+                    <span className="font-normal text-muted-foreground">
+                      {' '}
+                      {widened}, {matchingTopics(widened, allTopics).length} topics
+                    </span>
+                  </Button>
+                </div>
+              )}
+              {wildcard && (
+                <>
+                  <div className="font-medium">
+                    {req.topic} matches {matches.length} {matches.length === 1 ? 'topic' : 'topics'}
+                  </div>
+                  <ul className="flex flex-col gap-0.5">
+                    {matches.map((t) => (
+                      <li key={t.topic} data-testid="matched-topic" className="flex flex-wrap gap-x-3">
+                        <span className="font-mono text-xs">{t.topic}</span>
+                        {withFields(t) && <span className="text-xs text-muted-foreground">has {fieldNote}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                  {!chosen && !id && (
+                    <div>
+                      <Button variant="outline" size="sm" onClick={() => setChosen(new Set(matches.filter(withFields).map((t) => t.topic)))}>
+                        Pick devices from a list
+                      </Button>
+                    </div>
+                  )}
+                  {chosen && (
+                    <ul className="flex flex-col gap-1">
+                      {matches.map((t) => (
+                        <li key={t.topic} data-testid="device-choice">
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={chosen.has(t.topic)}
+                              onChange={(e) => {
+                                const next = new Set(chosen)
+                                if (e.target.checked) next.add(t.topic)
+                                else next.delete(t.topic)
+                                setChosen(next)
+                              }}
+                            />
+                            <span className="font-mono text-xs">{deviceOf(t.topic)}</span>
+                          </label>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
+            </div>
+          )}
 
           <div className="flex flex-col gap-2">
             <span className="text-sm font-medium">Conditions</span>
@@ -225,8 +327,8 @@ export function RuleNewPage() {
 
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex flex-wrap gap-2">
-            <Button onClick={save} disabled={saving}>
-              {id ? 'Save' : 'Add rule'}
+            <Button onClick={save} disabled={saving || (chosen !== null && chosen.size === 0)}>
+              {id ? 'Save' : chosen ? `Add ${chosen.size} ${chosen.size === 1 ? 'rule' : 'rules'}` : 'Add rule'}
             </Button>
             <Button variant="outline" onClick={sendTest}>
               Send me a test

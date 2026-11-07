@@ -169,10 +169,14 @@ function conditionWords(c: Condition): string {
 
 /** A rule's name, title and message from its topic and conditions: "Front door contact false", "front_door", "front_door: contact is false". */
 export function defaultTexts(topic: string, conditions: Condition[]): { name: string; title: string; message: string } {
-  const device = deviceOf(topic)
+  const last = deviceOf(topic)
+  // A wildcard stands for whichever device sent the message.
+  const any = last === '+'
+  const device = any ? '{{device}}' : last
+  const who = any ? 'Any device' : humanize(last)
   const first = conditions[0]
-  if (!first) return { name: humanize(device), title: device, message: `${device}: {{payload}}` }
-  const name = [humanize(device), first.field, first.operator === 'exists' ? 'exists' : typeof first.value === 'boolean' || first.operator === '=' ? String(first.value) : `${first.operator} ${first.value}`].join(' ')
+  if (!first) return { name: who, title: device, message: `${device}: {{payload}}` }
+  const name = [who, first.field, first.operator === 'exists' ? 'exists' : typeof first.value === 'boolean' || first.operator === '=' ? String(first.value) : `${first.operator} ${first.value}`].join(' ')
   return { name, title: device, message: `${device}: ${conditions.map(conditionWords).join(' and ')}` }
 }
 
