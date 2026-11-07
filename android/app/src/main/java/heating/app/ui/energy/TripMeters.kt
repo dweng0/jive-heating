@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -55,7 +56,8 @@ private fun Wheel(digit: Int, tenths: Boolean, roll: Int, fraction: Color? = nul
         Modifier.width(WHEEL_WIDTH).height(WHEEL).clipToBounds()
             .background(if (tenths) (fraction ?: zoneColor(PowerZone.HIGH, false).copy(alpha = 0.85f)) else MaterialTheme.colorScheme.onSurface),
     ) {
-        Column(Modifier.offset(y = -WHEEL * pos)) {
+        // The strip of ten digits is taller than the wheel's window: let it keep its own height, or only the 0 is laid out.
+        Column(Modifier.wrapContentHeight(Alignment.Top, unbounded = true).offset(y = -WHEEL * pos)) {
             (0..9).forEach { d ->
                 Box(Modifier.height(WHEEL).width(WHEEL_WIDTH), contentAlignment = Alignment.Center) {
                     Text("$d", color = MaterialTheme.colorScheme.surface, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 22.sp)
