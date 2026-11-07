@@ -37,7 +37,9 @@ import heating.app.data.RuleRequest
 import heating.app.data.RuleTestEvent
 import heating.app.data.TRIGGER_CHANGES_TO
 import heating.app.data.TRIGGER_IS
+import heating.app.data.SeenField
 import heating.app.data.conditionText
+import heating.app.data.seenFields
 import heating.app.data.draftFromEvent
 import heating.app.data.friendlyError
 import heating.app.data.previewLabel
@@ -79,6 +81,11 @@ fun RuleFormScreen(
         }.onSuccess { request = it }.onFailure { onError(friendlyError(it)) }
     }
     val r = request ?: return
+    var seen by remember { mutableStateOf<List<SeenField>>(emptyList()) }
+    LaunchedEffect(r.topic) {
+        delay(400)
+        seen = if (r.topic.isBlank()) emptyList() else runCatching { seenFields(api.events(listOf("topic" to r.topic, "limit" to "50")).events) }.getOrDefault(emptyList())
+    }
     LaunchedEffect(r.topic, r.conditions, r.trigger, r.title, r.message) {
         delay(400)
         preview = if (r.topic.isBlank()) emptyList() else runCatching { api.testRule(r).events.take(PREVIEW_EVENTS) }.getOrDefault(emptyList())
@@ -96,6 +103,7 @@ fun RuleFormScreen(
                 TextButton({ request = r.copy(conditions = r.conditions.filterIndexed { j, _ -> j != i }) }) { Text("Remove") }
             }
         }
+        ConditionAdder(seen) { request = r.copy(conditions = r.conditions + it) }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(r.trigger == TRIGGER_CHANGES_TO, { request = r.copy(trigger = TRIGGER_CHANGES_TO) }, label = { Text("changes to") })
             FilterChip(r.trigger == TRIGGER_IS, { request = r.copy(trigger = TRIGGER_IS) }, label = { Text("is") })
