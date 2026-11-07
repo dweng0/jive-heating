@@ -31,6 +31,9 @@ data class Rule(
     val by: String,
     val byUserId: String? = null,
     val createdAt: String,
+    /** While the rule is paused for being noisy: until when (ISO time) and as the house reads it ("19:10"). Filled in when shown, never stored. */
+    val pausedUntil: String? = null,
+    val pausedUntilLocal: String? = null,
 )
 
 /** POST /api/rules, PUT /api/rules/{id} and POST /api/rules/test: everything a rule is except what the service fills in. */

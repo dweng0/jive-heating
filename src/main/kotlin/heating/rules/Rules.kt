@@ -36,6 +36,12 @@ class Rules(
 
     private val held = mutableMapOf<String, Held>()
 
+    /** Rules stopped for being noisy, until when. */
+    private val pausedUntil = mutableMapOf<String, Instant>()
+
+    /** When each rule recently sent, to tell when it is noisy. */
+    private val recentSends = mutableMapOf<String, ArrayDeque<Instant>>()
+
     /** Whether each rule's conditions matched the last message on each topic: key is rule id and topic. */
     private val matched = mutableMapOf<Pair<String, String>, Boolean>()
 
@@ -63,6 +69,13 @@ class Rules(
     private fun fire(rule: Rule, topic: String, payload: String) {
         val at = now()
         val key = rule.id to topic
+        pausedUntil[rule.id]?.let { until ->
+            if (at < until) {
+                history.add(rule.id, at, topic, payload, Outcome.PAUSED)
+                return
+            }
+            pausedUntil.remove(rule.id)
+        }
         val last = lastSent[key]
         if (last != null && Duration.between(last, at) < Duration.ofSeconds(rule.cooldownSeconds.toLong())) {
             history.add(rule.id, at, topic, payload, Outcome.COOLDOWN)
@@ -79,9 +92,40 @@ class Rules(
                 return
             }
         }
+        val sends = recentSends.getOrPut(rule.id) { ArrayDeque() }
+        while (sends.isNotEmpty() && Duration.between(sends.first(), at) > NOISY_WINDOW) sends.removeFirst()
+        if (sends.size >= NOISY_LIMIT) {
+            pause(rule, at)
+            history.add(rule.id, at, topic, payload, Outcome.PAUSED, detail = NOISY_TEXT)
+            return
+        }
+        sends += at
         val ids = send(rule, topic, payload, at)
         lastSent[key] = at
         history.add(rule.id, at, topic, payload, Outcome.SENT, ids)
+    }
+
+    private fun pause(rule: Rule, at: Instant) {
+        pausedUntil[rule.id] = at.plus(PAUSE)
+        recentSends.remove(rule.id)
+        deliveries.enqueue(
+            listOfNotNull(rule.byUserId).filter(deliveries::hasDevices), "${rule.name} paused", NOISY_TEXT, rule.name, ruleId = rule.id,
+        )
+        log.info("rule {} paused for an hour: {}", heating.untrusted(rule.name), NOISY_TEXT)
+    }
+
+    /** Lets a paused rule send again now. */
+    @Synchronized
+    fun resume(id: String): Rule {
+        get(id)
+        pausedUntil.remove(id)
+        recentSends.remove(id)
+        return get(id)
+    }
+
+    private fun shown(rule: Rule): Rule {
+        val until = pausedUntil[rule.id]?.takeIf { it > now() } ?: return rule
+        return rule.copy(pausedUntil = until.toString(), pausedUntilLocal = until.atZone(zone).toLocalTime().withSecond(0).withNano(0).toString())
     }
 
     private fun inQuietHours(q: QuietHours, at: Instant): Boolean {
@@ -130,7 +174,7 @@ class Rules(
     private var rules: List<Rule> = store.get(KEY)?.let { heatingJson.decodeFromString(SERIALIZER, it) } ?: emptyList()
 
     @Synchronized
-    fun list(): List<Rule> = rules
+    fun list(): List<Rule> = rules.map(::shown)
 
     /** Rule [id]'s history, newest first. */
     fun historyOf(id: String, limit: Int = 100): List<RuleHistoryEntry> {
@@ -139,7 +183,9 @@ class Rules(
     }
 
     @Synchronized
-    fun get(id: String): Rule = rules.firstOrNull { it.id == id } ?: throw ApiException.notFound("rule not found")
+    fun get(id: String): Rule = find(id).let(::shown)
+
+    private fun find(id: String): Rule = rules.firstOrNull { it.id == id } ?: throw ApiException.notFound("rule not found")
 
     /** Adds a rule from [request] owned by [byUserId] ([by] is their username). */
     @Synchronized
@@ -156,21 +202,23 @@ class Rules(
     /** Replaces rule [id] with [request]; who made it and when stay. */
     @Synchronized
     fun replace(id: String, request: RuleRequest): Rule {
-        val old = get(id)
+        val old = find(id)
         val r = request.validated()
         val rule = old.copy(
             name = r.name, topic = r.topic, conditions = r.conditions, trigger = r.trigger, title = r.title, message = r.message,
             notify = r.notify, cooldownSeconds = r.cooldownSeconds, quietHours = r.quietHours, enabled = r.enabled,
         )
         save(rules.map { if (it.id == id) rule else it })
-        return rule
+        return shown(rule)
     }
 
     /** Removes rule [id]. */
     @Synchronized
     fun delete(id: String): Rule {
-        val old = get(id)
+        val old = find(id)
         save(rules - old)
+        pausedUntil.remove(id)
+        recentSends.remove(id)
         history.forget(id)
         held.remove(id)
         matched.keys.removeAll { it.first == id }
@@ -187,6 +235,12 @@ class Rules(
         private val log = LoggerFactory.getLogger(Rules::class.java)
         private const val KEY = "rules"
         private val SERIALIZER = ListSerializer(Rule.serializer())
+
+        /** A rule that would send a 31st time in 10 minutes is stopped for an hour. */
+        const val NOISY_LIMIT = 30
+        val NOISY_WINDOW: Duration = Duration.ofMinutes(10)
+        val PAUSE: Duration = Duration.ofHours(1)
+        const val NOISY_TEXT = "It fired 30 times in 10 minutes"
 
         const val CHANGES_TO = "changes to"
         const val IS = "is"

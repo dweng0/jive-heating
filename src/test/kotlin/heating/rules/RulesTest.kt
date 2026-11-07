@@ -466,4 +466,89 @@ class RulesTest {
             assertRefused(jane, rule(extra = ""","quietHours":{"from":"07:00","to":"07:00"}"""), "quietHours")
         }
     }
+
+    private fun JsonObject.text(key: String) = this[key]?.takeIf { it !is kotlinx.serialization.json.JsonNull }?.jsonPrimitive?.content
+
+    private suspend fun ApplicationTestBuilder.getRule(token: String, id: String): JsonObject {
+        val response = send("GET", "/api/rules/$id", token)
+        assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
+        return heatingJson.parseToJsonElement(response.bodyAsText()).jsonObject
+    }
+
+    // BDD: A noisy rule is held back
+    @Test
+    fun `a noisy rule is held back`() {
+        val t = TestHeating()
+        t.api {
+            val tokens = household()
+            val jane = tokens.getValue("jane")
+            val id = createRule(
+                jane,
+                rule(name = "Motion", topic = "z2m/hall_motion", conditions = """[{"field":"occupancy","operator":"=","value":true}]""", trigger = "is",
+                    title = "Motion", message = "Movement in the hall", cooldown = 0),
+            )["id"]!!.jsonPrimitive.content
+            repeat(30) {
+                t.bus.receive("z2m/hall_motion", """{"occupancy":true}""")
+                t.clock.advance(Duration.ofSeconds(10))
+            }
+            assertEquals(90, t.pushed.size) // 30 notifications to three people
+            assertEquals(null, getRule(jane, id).text("pausedUntil"))
+
+            // the 31st would be the next: it is stopped, and only the rule's owner hears of it
+            t.bus.receive("z2m/hall_motion", """{"occupancy":true}""")
+            assertEquals(91, t.pushed.size)
+            assertEquals("Motion paused", t.pushed.last().title)
+            assertEquals("It fired 30 times in 10 minutes", t.pushed.last().body)
+            assertEquals("jane-phone", t.pushed.last().token)
+            assertEquals("paused", history(jane, id).first().jsonObject["outcome"]!!.jsonPrimitive.content)
+
+            // paused for an hour from 10:05 London time
+            val shown = getRule(jane, id)
+            assertEquals("2026-10-12T10:05:00Z", shown.text("pausedUntil"))
+            assertEquals("11:05", shown.text("pausedUntilLocal"))
+            t.clock.advance(Duration.ofMinutes(30))
+            t.bus.receive("z2m/hall_motion", """{"occupancy":true}""")
+            assertEquals(91, t.pushed.size)
+            assertEquals(listOf("paused", "paused"), history(jane, id).outcomes().take(2))
+
+            // "Resume now"
+            val resumed = send("POST", "/api/rules/$id/resume", jane)
+            assertEquals(HttpStatusCode.OK, resumed.status, resumed.bodyAsText())
+            assertEquals(null, getRule(jane, id).text("pausedUntil"))
+            t.bus.receive("z2m/hall_motion", """{"occupancy":true}""")
+            assertEquals(94, t.pushed.size)
+            assertEquals(HttpStatusCode.Forbidden, send("POST", "/api/rules/$id/resume", tokens.getValue("sam")).status)
+            assertEquals(HttpStatusCode.NotFound, send("POST", "/api/rules/nope/resume", jane).status)
+        }
+    }
+
+    // BDD: A noisy rule is held back
+    @Test
+    fun `the pause ends by itself after an hour and a slower rule is never paused`() {
+        val t = TestHeating()
+        t.api {
+            val jane = household().getValue("jane")
+            val motion = rule(name = "Motion", topic = "z2m/hall_motion", conditions = "[]", trigger = "is", title = "Motion", notify = "me", cooldown = 0)
+            val id = createRule(jane, motion)["id"]!!.jsonPrimitive.content
+            repeat(31) { t.bus.receive("z2m/hall_motion", "{}") }
+            assertEquals(31, t.pushed.size) // 30 sent and the pause notice
+            assertEquals("Motion paused", t.pushed.last().title)
+            t.clock.advance(Duration.ofMinutes(59))
+            t.bus.receive("z2m/hall_motion", "{}")
+            assertEquals(31, t.pushed.size)
+            t.clock.advance(Duration.ofMinutes(2))
+            assertEquals(null, getRule(jane, id).text("pausedUntil"))
+            t.bus.receive("z2m/hall_motion", "{}")
+            assertEquals(32, t.pushed.size)
+
+            // 30 in 10 minutes is the limit: one every 21 seconds is not it
+            val slow = createRule(jane, motion.replace("hall_motion", "kitchen_motion"))["id"]!!.jsonPrimitive.content
+            repeat(60) {
+                t.bus.receive("z2m/kitchen_motion", "{}")
+                t.clock.advance(Duration.ofSeconds(21))
+            }
+            assertEquals(null, getRule(jane, slow).text("pausedUntil"))
+            assertEquals(92, t.pushed.size)
+        }
+    }
 }
