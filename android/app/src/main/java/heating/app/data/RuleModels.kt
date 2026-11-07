@@ -108,9 +108,18 @@ data class RuleRow(
     val areaId: String? = null,
 )
 
-/** "Never sent", or how long ago a rule last sent as a notification. */
-fun lastSentText(at: String?, now: Instant = Instant.now()): String {
-    if (at == null) return "Never sent"
+/** How long the service keeps a rule's history, and so how far back lastSentAt can see. */
+const val HISTORY_DAYS = 30L
+
+/**
+ * How long ago a rule last sent a notification. With no send in its history: "Never sent" only for a rule made within
+ * the days the history is kept ([createdAt]); an older one may have sent before that.
+ */
+fun lastSentText(at: String?, now: Instant = Instant.now(), createdAt: String = ""): String {
+    if (at == null) {
+        val made = runCatching { Instant.parse(createdAt) }.getOrNull()
+        return if (made != null && Duration.between(made, now) < Duration.ofDays(HISTORY_DAYS)) "Never sent" else "Not sent in the last $HISTORY_DAYS days"
+    }
     val seconds = Duration.between(Instant.parse(at), now).seconds.coerceAtLeast(0)
     val ago = when {
         seconds < 60 -> "$seconds s ago"
@@ -131,7 +140,7 @@ fun ruleRows(
         name = r.name,
         topic = r.topic,
         notifies = if (r.notify == NOTIFY_ME) "Me" else "Everyone",
-        lastSent = lastSentText(r.lastSentAt, now),
+        lastSent = lastSentText(r.lastSentAt, now, r.createdAt),
         enabled = r.enabled,
         paused = r.pausedUntilLocal?.let { "Paused until $it" } ?: if (r.pausedUntil != null) "Paused" else null,
         notifyMe = r.notify == NOTIFY_ME,

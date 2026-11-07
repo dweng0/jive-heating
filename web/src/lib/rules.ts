@@ -83,6 +83,15 @@ export const rulesApi = {
 
 export const TEST_SHOWN = 5
 
+/** How long the service keeps a rule's history, and so how far back lastSentAt can see. */
+export const HISTORY_DAYS = 30
+
+/** What a rule with no send in its history says: "Never sent" only when it is younger than the history kept. */
+export function notSentText(createdAt: string, now = Date.now()): string {
+  const made = Date.parse(createdAt)
+  return Number.isFinite(made) && now - made < HISTORY_DAYS * 86_400_000 ? 'Never sent' : `Not sent in the last ${HISTORY_DAYS} days`
+}
+
 export const emptyRequest = (): RuleRequest => ({
   name: '',
   topic: '',

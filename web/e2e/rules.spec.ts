@@ -319,7 +319,8 @@ const skippedEntry = { at: ago(4), topic: 'z2m/front_door', payload: '{"contact"
 
 const managed = () => [
   rule('r1', 'Front door opened', 'z2m/front_door', { notify: 'everyone', lastSentAt: ago(5) }),
-  rule('r2', 'Hall leak', 'z2m/hall_leak', { notify: 'me', enabled: false }),
+  // Made 40 days ago and nothing in its 30 days of history: it may have sent before that.
+  rule('r2', 'Hall leak', 'z2m/hall_leak', { notify: 'me', enabled: false, createdAt: ago(60 * 24 * 40) }),
   rule('r3', 'Noisy button', 'z2m/hall_button', { notify: 'me', lastSentAt: ago(60 * 30), pausedUntil: ago(-30), pausedUntilLocal: '19:10' }),
 ]
 const garage = { id: 'a1', name: 'Garage', alert: { hours: 2, notify: 'everyone', by: 'jane', mine: true } }
@@ -337,7 +338,8 @@ test('Notifications lists each rule and area notification with a switch, filters
   await expect(front).toContainText('z2m/front_door')
   await expect(front).toContainText('Everyone')
   await expect(front).toContainText('5 min ago')
-  await expect(rows.filter({ hasText: 'Hall leak' })).toContainText('Never sent')
+  await expect(rows.filter({ hasText: 'Hall leak' })).toContainText('Not sent in the last 30 days')
+  await expect(rows.filter({ hasText: 'Hall leak' })).not.toContainText('Never sent')
   await expect(rows.filter({ hasText: 'Hall leak' })).toContainText('Me')
   await expect(rows.filter({ hasText: 'Noisy button' })).toContainText('Paused until 19:10')
   // Area notifications are listed with the rules.
@@ -401,6 +403,8 @@ test('Notifications lists each rule and area notification with a switch, filters
 test('"Suggested" in Notifications offers rules for every device, with action values, occupancy and tamper', async ({ page }) => {
   await serve(page, house(), [rule('r1', 'Front door opened', 'z2m/front_door', { conditions: [{ field: 'contact', operator: '=', value: false }] })])
   await page.goto('/rules')
+  // Made within the 30 days history is kept and nothing in it: it has never sent.
+  await expect(page.getByTestId('rule-row').filter({ hasText: 'Front door opened' })).toContainText('Never sent')
   await page.getByRole('button', { name: 'Suggested' }).click()
   const names = page.getByTestId('suggestion').locator('span.font-medium')
   await expect(names).toHaveText([

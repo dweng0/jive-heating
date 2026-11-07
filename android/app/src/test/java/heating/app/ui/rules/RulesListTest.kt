@@ -66,8 +66,11 @@ class RulesListTest {
         assertEquals("Everyone", area.notifies)
         assertNull(area.rule)
         assertEquals(4, rows.size)
-        assertEquals("Never sent", lastSentText(null, now))
-        assertEquals("Last sent 3 days ago", lastSentText("2026-11-04T11:00:00Z", now))
+        // Rules made within the 30 days of history kept have never sent; older ones may have before that
+        assertEquals("Never sent", lastSentText(null, now, createdAt = "2026-11-01T00:00:00Z"))
+        assertEquals("Not sent in the last 30 days", lastSentText(null, now, createdAt = "2026-09-01T00:00:00Z"))
+        assertEquals("Not sent in the last 30 days", lastSentText(null, now, createdAt = ""))
+        assertEquals("Last sent 3 days ago", lastSentText("2026-11-04T11:00:00Z", now, createdAt = "2026-09-01T00:00:00Z"))
     }
 
     // BDD: Rules are managed in the app

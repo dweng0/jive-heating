@@ -11,7 +11,7 @@ import { areaAlertApi, hoursText, type AreaAlert } from '@/lib/areaAlerts'
 import { energyApi } from '@/lib/energy'
 import { ago } from '@/lib/events'
 import { useHome } from '@/lib/home'
-import { asRequest, rulesApi, type Rule } from '@/lib/rules'
+import { asRequest, notSentText, rulesApi, type Rule } from '@/lib/rules'
 
 interface AreaRow {
   id: string
@@ -185,7 +185,7 @@ export function RulesPage() {
                 </div>
                 <div className="text-xs text-muted-foreground">
                   <div>{who(r)}</div>
-                  <div>{r.lastSentAt ? ago(r.lastSentAt) : 'Never sent'}</div>
+                  <div>{r.lastSentAt ? ago(r.lastSentAt) : notSentText(r.createdAt)}</div>
                 </div>
                 {isPaused(r) && (
                   <div className="flex items-center gap-2 text-xs">
