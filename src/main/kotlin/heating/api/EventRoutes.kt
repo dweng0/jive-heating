@@ -78,6 +78,12 @@ fun Route.eventRoutes(heating: HeatingApp) {
             to = time("to"),
             text = p["text"]?.takeIf { it.isNotEmpty() },
             field = field,
+            value = p["value"]?.takeIf { it.isNotEmpty() && field != null },
+            valueNot = p["op"] == "ne",
+            device = p["device"]?.takeIf { it.isNotEmpty() }?.let { "${heating.topics.base}/$it" },
+            retained = p["retained"]?.let {
+                it.toBooleanStrictOrNull() ?: throw ApiException.badRequest("retained must be true or false")
+            },
             sortBy = sort[0],
             descending = sort.getOrNull(1) != "asc",
             limit = limit,

@@ -25,7 +25,13 @@ data class EventQuery(
     val to: Instant? = null,
     val text: String? = null,
     val field: String? = null,
-    /** "at" or "topic". */
+    /** With [field]: only events whose field equals ([valueNot] false) or differs from ([valueNot] true) this value. */
+    val value: String? = null,
+    val valueNot: Boolean = false,
+    /** A Zigbee2MQTT device's full topic ("zigbee2mqtt/Front Door"): its state and the topics under it. */
+    val device: String? = null,
+    val retained: Boolean? = null,
+    /** "at"or "topic". */
     val sortBy: String = "at",
     val descending: Boolean = true,
     val limit: Int = 100,
@@ -145,6 +151,31 @@ class EventLog(path: String) {
             where += "CASE WHEN json = 1 THEN json_type(payload, ?) END IS NOT NULL"
             args += "$.$it"
         }
+        q.device?.let {
+            where += "(topic = ? OR substr(topic, 1, length(?) + 1) = ? || '/')"
+            args += it
+            args += it
+            args += it
+        }
+        q.retained?.let { where += "retained = ${if (it) 1 else 0}" }
+        if (q.field != null && q.value != null) {
+            val path = "$.${q.field}"
+            val number = q.value.toDoubleOrNull()
+            // json_extract gives 1/0 for true/false, so booleans are compared by json_type
+            val same = "(CASE json_type(payload, ?) WHEN 'true' THEN 'true' WHEN 'false' THEN 'false' WHEN 'integer' THEN NULL WHEN 'real' THEN NULL " +
+                "ELSE CAST(json_extract(payload, ?) AS TEXT) END = ?" +
+                (if (number != null) " OR (json_type(payload, ?) IN ('integer','real') AND json_extract(payload, ?) = ?)" else "") + ")"
+            where += "CASE WHEN json = 1 AND json_type(payload, ?) IS NOT NULL THEN ${if (q.valueNot) "NOT COALESCE($same, 0)" else "COALESCE($same, 0)"} ELSE 0 END"
+            args += path
+            args += path
+            args += path
+            args += q.value
+            if (number != null) {
+                args += path
+                args += path
+                args += number
+            }
+        }
         val filterSql = if (where.isEmpty()) "" else " WHERE " + where.joinToString(" AND ")
         val total = connection.prepareStatement("SELECT COUNT(*) FROM events$filterSql").use { s ->
             args.forEachIndexed { i, a -> s.set(i + 1, a) }
@@ -191,6 +222,7 @@ class EventLog(path: String) {
 
     private fun java.sql.PreparedStatement.set(i: Int, value: Any) = when (value) {
         is Long -> setLong(i, value)
+        is Double -> setDouble(i, value)
         else -> setString(i, value.toString())
     }
 
