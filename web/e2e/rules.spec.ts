@@ -177,7 +177,7 @@ test('"Notify me when…" on an event field opens the builder with the condition
   await page.getByTestId('payload-field').filter({ hasText: 'contact' }).getByRole('button', { name: 'Notify me when…' }).click()
 
   await expect(page).toHaveURL(/\/rules\/new/)
-  await expect(page.getByLabel('Topic')).toHaveValue('z2m/front_door')
+  await expect(page.getByLabel('Topic', { exact: true })).toHaveValue('z2m/front_door')
   const condition = page.getByTestId('condition').first()
   await expect(condition.getByLabel('Field')).toHaveValue('contact')
   await expect(condition.getByLabel('Operator')).toHaveValue('is false')
@@ -198,4 +198,41 @@ test('"Notify me when…" on an event field opens the builder with the condition
   await expect(rows.nth(2)).toContainText('No change')
   await expect(rows.nth(3)).toContainText('Would send')
   await expect(rows.nth(4)).toContainText('Conditions not met')
+})
+
+// BDD: Conditions are mapped from the payload's fields
+test('a condition picks a field seen on the topic and gets operators and values that fit it', async ({ page }) => {
+  const all = [...house(), event(12, 'z2m/hall_button', { action: 'double' }, 19), event(13, 'z2m/hall_button', { action: 'hold' }, 18), event(14, 'z2m/hall_button', { action: 'single' }, 17)]
+  await serve(page, all)
+  await page.goto('/rules/new?topic=z2m/front_door')
+  await page.getByRole('button', { name: 'Add a condition' }).click()
+  const condition = page.getByTestId('condition').first()
+
+  // The fields seen on the topic, each showing its recent values.
+  const field = condition.getByLabel('Field')
+  await expect(field.locator('option')).toHaveText([/^contact/, /^battery/, /^linkquality/])
+  await expect(field.locator('option', { hasText: 'contact' })).toHaveText(/false, true|true, false/)
+  await expect(field.locator('option', { hasText: 'battery' })).toContainText('91')
+
+  // True/false fields offer "is true"/"is false"; numbers get the comparisons; every field gets "exists".
+  await field.selectOption('contact')
+  await expect(condition.getByLabel('Operator').locator('option')).toHaveText(['is true', 'is false', 'exists'])
+  await field.selectOption('battery')
+  await expect(condition.getByLabel('Operator').locator('option')).toHaveText(['=', '≠', '>', '<', '≥', '≤', 'exists'])
+  await condition.getByLabel('Operator').selectOption('<')
+  await condition.getByLabel('Value').fill('15')
+  await expect(page.getByLabel('Message')).toHaveValue('front_door: battery < 15')
+
+  // Text fields get = ≠ contains, and the value offers the values seen or can be typed.
+  await page.goto('/rules/new?topic=z2m/hall_button')
+  await page.getByRole('button', { name: 'Add a condition' }).click()
+  const action = page.getByTestId('condition').first()
+  await action.getByLabel('Field').selectOption('action')
+  await expect(action.getByLabel('Operator').locator('option')).toHaveText(['=', '≠', 'contains', 'exists'])
+  expect(await page.locator('datalist option').evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value))).toEqual(['single', 'hold', 'double'])
+  await action.getByLabel('Operator').selectOption('=')
+  await action.getByLabel('Value').fill('hold')
+  await expect(action.getByLabel('Value')).toHaveValue('hold')
+  await action.getByLabel('Value').fill('triple')
+  await expect(page.getByTestId('test-event').first()).toContainText('Conditions not met')
 })

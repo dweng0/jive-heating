@@ -5,9 +5,10 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { eventsApi, type LoggedEvent } from '@/lib/events'
+import { eventsApi, valueText, type LoggedEvent } from '@/lib/events'
 import {
   asRequest,
+  conditionFromValue,
   conditionFromAddress,
   defaultTexts,
   emptyRequest,
@@ -17,6 +18,7 @@ import {
   parseValue,
   rulesApi,
   seenFields,
+  type SeenField,
   TEST_SHOWN,
   type Condition,
   type FieldKind,
@@ -82,7 +84,13 @@ export function RuleNewPage() {
     let cancelled = false
     const t = setTimeout(() => {
       eventsApi.list(new URLSearchParams({ topic: topic.trim(), sort: 'at desc', limit: '50' }).toString()).then(
-        (p) => !cancelled && setSeen(p.events),
+        (p) => {
+          if (cancelled) return
+          setSeen(p.events)
+          // A condition added before the fields arrived takes the first one.
+          const first = seenFields(p.events)[0]
+          if (first) setReq((r) => (r && r.conditions.some((c) => !c.field) ? { ...r, conditions: r.conditions.map((c) => (c.field ? c : conditionFromValue(first.path, first.values[0]))) } : r))
+        },
         () => undefined,
       )
     }, 250)
@@ -179,13 +187,14 @@ export function RuleNewPage() {
               <ConditionRow
                 key={i}
                 condition={c}
-                fieldKind={fields.find((f) => f.path === c.field)?.kind}
+                fields={fields}
+                listId={`values-${i}`}
                 onChange={(next) => change({ conditions: req.conditions.map((x, j) => (j === i ? next : x)) })}
                 onRemove={() => change({ conditions: req.conditions.filter((_, j) => j !== i) })}
               />
             ))}
             <div>
-              <Button variant="outline" size="sm" onClick={() => change({ conditions: [...req.conditions, { field: fields[0]?.path ?? '', operator: 'exists' }] })}>
+              <Button variant="outline" size="sm" onClick={() => change({ conditions: [...req.conditions, fields[0] ? conditionFromValue(fields[0].path, fields[0].values[0]) : { field: '', operator: 'exists' }] })}>
                 <Plus /> Add a condition
               </Button>
             </div>
@@ -262,22 +271,40 @@ function operatorChoice(kind: FieldKind, c: Condition): string {
   return c.operator === 'exists' ? 'exists' : operatorLabel(kind, c.operator, c.value)
 }
 
-function ConditionRow({ condition: c, fieldKind, onChange, onRemove }: {
+function ConditionRow({ condition: c, fields, listId, onChange, onRemove }: {
   condition: Condition
-  fieldKind?: FieldKind
+  fields: SeenField[]
+  listId: string
   onChange: (c: Condition) => void
   onRemove: () => void
 }) {
-  const kind = fieldKind ?? (c.value === undefined ? 'text' : kindOf(c.value))
+  const seenField = fields.find((f) => f.path === c.field)
+  const kind = seenField?.kind ?? (c.value === undefined ? 'text' : kindOf(c.value))
   const choices: string[] = kind === 'boolean' ? ['is true', 'is false', 'exists'] : OPERATORS[kind]
   function pick(choice: string) {
     if (choice === 'is true' || choice === 'is false') onChange({ field: c.field, operator: '=', value: choice === 'is true' })
     else if (choice === 'exists') onChange({ field: c.field, operator: 'exists' })
     else onChange({ field: c.field, operator: choice as Operator, value: c.value ?? '' })
   }
+  const known = fields.some((f) => f.path === c.field)
   return (
     <div data-testid="condition" className="flex flex-wrap items-center gap-2">
-      <Input aria-label="Field" className="w-40 font-mono" value={c.field} onChange={(e) => onChange({ ...c, field: e.target.value })} />
+      <select
+        aria-label="Field"
+        className={`${selectCls} max-w-64`}
+        value={c.field}
+        onChange={(e) => {
+          const next = fields.find((f) => f.path === e.target.value)
+          onChange(next ? conditionFromValue(next.path, next.values[0]) : { field: e.target.value, operator: 'exists' })
+        }}
+      >
+        {!known && c.field && <option value={c.field}>{c.field}</option>}
+        {fields.map((f) => (
+          <option key={f.path} value={f.path}>
+            {f.path} ({f.values.slice(0, 5).map((v) => shortValue(v)).join(', ')})
+          </option>
+        ))}
+      </select>
       <select aria-label="Operator" className={selectCls} value={operatorChoice(kind, c)} onChange={(e) => pick(e.target.value)}>
         {choices.map((o) => (
           <option key={o} value={o}>
@@ -286,11 +313,23 @@ function ConditionRow({ condition: c, fieldKind, onChange, onRemove }: {
         ))}
       </select>
       {c.operator !== 'exists' && kind !== 'boolean' && (
-        <Input aria-label="Value" className="w-40" value={c.value === undefined ? '' : String(c.value)} onChange={(e) => onChange({ ...c, value: parseValue(kind, e.target.value) })} />
+        <>
+          <Input aria-label="Value" className="w-40" list={listId} value={c.value === undefined ? '' : String(c.value)} onChange={(e) => onChange({ ...c, value: parseValue(kind, e.target.value) })} />
+          <datalist id={listId}>
+            {(seenField?.values ?? []).slice(0, 10).map((v) => (
+              <option key={valueText(v)} value={valueText(v)} />
+            ))}
+          </datalist>
+        </>
       )}
       <Button variant="ghost" size="icon-sm" aria-label="Remove condition" onClick={onRemove}>
         <X />
       </Button>
     </div>
   )
+}
+
+const shortValue = (v: unknown) => {
+  const t = valueText(v)
+  return t.length > 20 ? `${t.slice(0, 20)}…` : t
 }
