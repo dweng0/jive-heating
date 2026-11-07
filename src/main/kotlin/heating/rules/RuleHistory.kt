@@ -68,6 +68,17 @@ class RuleHistory(path: String) {
             }
         }
 
+    /** When each rule last sent (or sent a summary), for the rules that did within the kept history. */
+    @Synchronized
+    fun lastSent(): Map<String, Instant> =
+        connection.prepareStatement("SELECT rule_id, MAX(at) FROM rule_history WHERE json LIKE ? OR json LIKE ? GROUP BY rule_id").use { s ->
+            s.setString(1, "%\"outcome\":\"${Outcome.SENT}\"%")
+            s.setString(2, "%\"outcome\":\"${Outcome.SUMMARY}\"%")
+            s.executeQuery().use { rs ->
+                buildMap { while (rs.next()) put(rs.getString(1), Instant.ofEpochMilli(rs.getLong(2))) }
+            }
+        }
+
     @Synchronized
     fun forget(ruleId: String) {
         connection.prepareStatement("DELETE FROM rule_history WHERE rule_id = ?").use { s ->

@@ -170,9 +170,10 @@ class Rules(
         return get(id)
     }
 
-    private fun shown(rule: Rule): Rule {
-        val until = pausedUntil[rule.id]?.takeIf { it > now() } ?: return rule
-        return rule.copy(pausedUntil = until.toString(), pausedUntilLocal = until.atZone(zone).toLocalTime().withSecond(0).withNano(0).toString())
+    private fun shown(rule: Rule, lastSent: Map<String, Instant> = history.lastSent()): Rule {
+        val withSent = rule.copy(lastSentAt = lastSent[rule.id]?.toString())
+        val until = pausedUntil[rule.id]?.takeIf { it > now() } ?: return withSent
+        return withSent.copy(pausedUntil = until.toString(), pausedUntilLocal = until.atZone(zone).toLocalTime().withSecond(0).withNano(0).toString())
     }
 
     private fun inQuietHours(q: QuietHours, at: Instant): Boolean {
@@ -235,7 +236,7 @@ class Rules(
     private var rules: List<Rule> = store.get(KEY)?.let { heatingJson.decodeFromString(SERIALIZER, it) } ?: emptyList()
 
     @Synchronized
-    fun list(): List<Rule> = rules.map(::shown)
+    fun list(): List<Rule> = history.lastSent().let { sent -> rules.map { shown(it, sent) } }
 
     /** Rule [id]'s history, newest first. */
     fun historyOf(id: String, limit: Int = 100): List<RuleHistoryEntry> {

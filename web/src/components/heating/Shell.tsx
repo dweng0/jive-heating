@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
-import { ChartLine, CircleUser, Flame, ListFilter, LogOut, Palmtree, Smartphone, Unplug, Users, Zap } from 'lucide-react'
+import { Bell, ChartLine, CircleUser, Flame, ListFilter, LogOut, Palmtree, Smartphone, Unplug, Users, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -39,6 +39,7 @@ export function Shell({ children, onSignOut }: { children: ReactNode; onSignOut:
             {(me.admin || me.energy) && <TopLink to="/energy">Energy</TopLink>}
             {me.admin && <TopLink to="/people">People</TopLink>}
             {me.admin && <TopLink to="/events">Events</TopLink>}
+            {me.admin && <TopLink to="/rules">Notifications</TopLink>}
           </nav>
 
           <div className="ml-auto flex items-center gap-2">
@@ -100,6 +101,13 @@ export function Shell({ children, onSignOut }: { children: ReactNode; onSignOut:
                   <DropdownMenuItem asChild className="sm:hidden">
                     <NavLink to="/events">
                       <ListFilter /> Events
+                    </NavLink>
+                  </DropdownMenuItem>
+                )}
+                {me.admin && (
+                  <DropdownMenuItem asChild className="sm:hidden">
+                    <NavLink to="/rules">
+                      <Bell /> Notifications
                     </NavLink>
                   </DropdownMenuItem>
                 )}

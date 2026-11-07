@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { ArrowDown, ArrowUp, ChevronLeft } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Card, CardContent } from '@/components/ui/card'
@@ -33,6 +33,12 @@ export function DeliveriesPage() {
   const [sort, setSort] = useState<DeliverySort>('time')
   const [dir, setDir] = useState<'asc' | 'desc'>('desc')
   const [open, setOpen] = useState<Delivery | null>(null)
+  // A link from a rule's history (?delivery=<id>) opens that delivery.
+  const [params] = useSearchParams()
+  const linked = params.get('delivery')
+  useEffect(() => {
+    if (linked) deliveriesApi.get(linked).then(setOpen, () => undefined)
+  }, [linked])
 
   useEffect(() => {
     let cancelled = false

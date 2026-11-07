@@ -264,7 +264,8 @@ test('opening an event shows its whole payload with field paths and actions', as
   // Notify me when… opens the rule builder with the topic and field.
   await dialog.getByTestId('payload-field').nth(2).getByRole('button', { name: 'Notify me when…' }).click()
   await expect(page).toHaveURL(/\/rules\/new\?topic=zigbee2mqtt%2FFront\+Door&field=update\.state&value=idle/)
-  await expect(page.getByText('Rule builder coming soon')).toBeVisible()
+  await expect(page.getByLabel('Topic', { exact: true })).toHaveValue('zigbee2mqtt/Front Door')
+  await expect(page.getByTestId('condition').first().getByLabel('Field')).toHaveValue('update.state')
 
   // Filter by this adds a Field value chip; Show this topic filters to the topic.
   await page.goto('/events')

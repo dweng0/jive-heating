@@ -619,7 +619,8 @@
           "byUserId": { "type": "string", "nullable": true },
           "createdAt": { "type": "string", "format": "date-time" },
           "pausedUntil": { "type": "string", "format": "date-time", "nullable": true, "description": "Set while the rule is paused for firing 30 times in 10 minutes" },
-          "pausedUntilLocal": { "type": "string", "nullable": true, "description": "pausedUntil as HH:mm in the house's time zone (\"Paused until 19:10\")" }
+          "pausedUntilLocal": { "type": "string", "nullable": true, "description": "pausedUntil as HH:mm in the house's time zone (\"Paused until 19:10\")" },
+          "lastSentAt": { "type": "string", "format": "date-time", "nullable": true, "description": "When the rule last sent a notification, from its history (kept 30 days); null if it has not" }
         }
       },
       "RuleHistoryEntry": {

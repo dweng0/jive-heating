@@ -10,6 +10,7 @@ import { DashboardPage } from '@/pages/Dashboard'
 import { DeliveriesPage } from '@/pages/Deliveries'
 import { EventsPage } from '@/pages/Events'
 import { RuleNewPage } from '@/pages/RuleNew'
+import { RulesPage } from '@/pages/Rules'
 import { EnergyManagePage } from '@/pages/EnergyManage'
 import { EnergyPage } from '@/pages/Energy'
 import { EverythingElseEnergyPage, RoomEnergyPage } from '@/pages/RoomEnergy'
@@ -65,8 +66,10 @@ export default function App() {
               <Route path="/account" element={<AccountPage onSignOut={signOut} onSignedOutEverywhere={() => setAuth({ state: 'signedOut' })} />} />
               <Route path="/account/deliveries" element={auth.me.admin ? <DeliveriesPage /> : <Navigate to="/" replace />} />
               <Route path="/events" element={auth.me.admin ? <EventsPage /> : <Navigate to="/" replace />} />
+              <Route path="/rules" element={auth.me.admin ? <RulesPage /> : <Navigate to="/" replace />} />
               <Route path="/rules/new" element={auth.me.admin ? <RuleNewPage /> : <Navigate to="/" replace />} />
-              <Route path="/people" element={auth.me.admin ? <PeoplePage /> : <Navigate to="/" replace />} />
+              <Route path="/rules/:id" element={auth.me.admin ? <RuleNewPage /> : <Navigate to="/" replace />} />
+              <Route path="/people"element={auth.me.admin ? <PeoplePage /> : <Navigate to="/" replace />} />
               <Route path="*" element={<Navigate to="/" replace />} />
               <Route path="/settings/connection" element={auth.me.admin ? <ConnectionSettingsPage /> : <Navigate to="/" replace />} />
             </Routes>
