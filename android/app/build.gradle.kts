@@ -23,10 +23,10 @@ android {
 
     defaultConfig {
         applicationId = "heating.app"
-        minSdk = 33 // Android 13 and newer
+        minSdk = 30 // Android 11 and newer (LineageOS 18.1 on the Echo Show 8)
         targetSdk = 35
-        versionCode = 37
-        versionName = "0.22.0"
+        versionCode = 38
+        versionName = "0.23.0"
     }
 
     buildTypes {

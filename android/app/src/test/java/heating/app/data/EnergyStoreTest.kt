@@ -304,7 +304,7 @@ class EnergyStoreTest {
         val today = energyLines(store.state.value.dashboard!!)
         assertEquals(listOf("Gas", "Electricity", "Standing charges", "Total"), today.map { it.label })
         assertEquals(listOf("£3.96", "£2.16", "£0.80", "£6.92"), today.map { it.cost })
-        assertEquals("36.0 kWh · 3.0 h boiler · estimated", today[0].detail)
+        assertEquals("36.0 kWh · 3.0 h boiler", today[0].detail)
         assertEquals("8.0 kWh", today[1].detail)
         assertNull(noMeterNote(store.state.value.dashboard!!))
         assertEquals(emptyList(), dayBars(store.state.value.dashboard!!))

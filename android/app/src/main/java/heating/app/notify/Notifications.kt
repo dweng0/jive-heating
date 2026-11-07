@@ -23,8 +23,10 @@ private const val ASKED = "asked"
 /** Ask for permission once, and only while the app may not notify yet. */
 fun shouldAskToNotify(granted: Boolean, askedBefore: Boolean): Boolean = !granted && !askedBefore
 
+/** Before Android 13 there is no permission to ask for: notifications are on unless turned off in settings. */
 fun canNotify(context: Context): Boolean =
-    ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+    if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled()
+    else ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
 fun askedToNotify(context: Context): Boolean = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(ASKED, false)
 

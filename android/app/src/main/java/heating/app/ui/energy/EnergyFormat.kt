@@ -90,7 +90,7 @@ fun formatPower(watts: Double?): String = when {
 const val NO_METER = "Choose an electricity meter to see electricity use"
 
 /** One figure on the dashboard: "Gas", "£3.96", "36.0 kWh · 3.0 h boiler". */
-data class EnergyLine(val label: String, val cost: String, val detail: String)
+data class EnergyLine(val label: String, val cost: String, val detail: String, val chip: String? = null)
 
 /** Where the dashboard's gas comes from: the smart meter up to when it has reported ([meteredTo]), else boiler hours. */
 fun gasSource(meteredTo: String?, zone: java.time.ZoneId = java.time.ZoneId.systemDefault()): String {
@@ -108,7 +108,10 @@ fun gasEstimate(kwh: Double, estimatedKwh: Double?): String? {
 }
 
 fun energyLines(d: EnergyDashboard): List<EnergyLine> = listOf(
-    EnergyLine("Gas", formatCost(d.gasCost, d.currency), listOfNotNull(formatKwh(d.gasKwh), "${oneDecimal(d.boilerHours)} h boiler", gasEstimate(d.gasKwh, d.gasEstimatedKwh)).joinToString(" · ")),
+    EnergyLine(
+        "Gas", formatCost(d.gasCost, d.currency), "${formatKwh(d.gasKwh)} · ${oneDecimal(d.boilerHours)} h boiler",
+        gasEstimate(d.gasKwh, d.gasEstimatedKwh)?.replaceFirstChar { it.uppercase() },
+    ),
     EnergyLine("Electricity", formatCost(d.electricityCost, d.currency), d.electricityKwh?.let(::formatKwh) ?: "No meter chosen"),
     EnergyLine("Standing charges", formatCost(d.standingCost, d.currency), "Charged per day"),
     EnergyLine("Total", formatCost(d.totalCost, d.currency), if (d.incomplete) "Some time missing" else ""),
@@ -165,6 +168,10 @@ data class DayBar(
     val overTarget: Boolean = false,
     /** The part of gas estimated from boiler hours, drawn hatched on top of [gas] (the meter's). */
     val gasEstimated: Float = 0f,
+    /** "Sun 1", "meter" or "estimate", and the day's total, shown under and over the bar in a week. */
+    val label: String = "",
+    val source: String = "",
+    val totalText: String = "",
 ) {
     val total: Float get() = gas + gasEstimated + electricity + standing
 }
@@ -182,6 +189,9 @@ fun dayBars(d: EnergyDashboard): List<DayBar> {
         DayBar(
             it.date, ((it.gasCost - estimated) / max).toFloat(), ((it.electricityCost ?: 0.0) / max).toFloat(), (it.standingCost / max).toFloat(), it.incomplete,
             atTarget(it)?.let { t -> (t / max).toFloat() }, (it.targetDeltaKwh ?: 0.0) > 0, (estimated / max).toFloat(),
+            java.time.LocalDate.parse(it.date).format(java.time.format.DateTimeFormatter.ofPattern("EEE d", Locale.UK)),
+            if (estimated > 0) "estimate" else "meter",
+            formatCost(it.totalCost, d.currency),
         )
     }
 }

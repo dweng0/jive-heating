@@ -147,6 +147,7 @@ fun LivePowerSection(
         EnergyDials(live?.watts, connected = live != null, bands = bands, busiest = onDial, peak = peak, today = today, dark = dark, onSetTarget = if (admin) onAddArea else null) {
             TripMeters(totals, readings, dark)
         }
+        GasCard(api, admin)
         HouseHistoryChart(api, dark)
         live?.let { p ->
             val cards = liveCards(p, today)

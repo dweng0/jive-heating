@@ -90,11 +90,24 @@ fun EnergyDials(
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), modifier = Modifier.fillMaxWidth()) {
         BoxWithConstraints {
             val phone = maxWidth < PHONE_WIDTH
+            val wide = maxWidth >= WIDE_WIDTH
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (phone) {
                     // On a phone only the whole-house dial: four gauges bunch up on a small screen.
                     Box(Modifier.widthIn(max = 300.dp).fillMaxWidth().align(Alignment.CenterHorizontally)) {
                         SpeedDial("Whole house", watts, bands, max, if (connected) "No reading" else "Connecting…", dark)
+                    }
+                } else if (wide) {
+                    // Wide, like the browser: peak, the two dials and the fuel gauge in one row.
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Bottom) {
+                        Box(Modifier.weight(1f)) { PeakGauge(peak, max, dark) }
+                        Box(Modifier.weight(1.5f)) {
+                            SpeedDial("Whole house", watts, bands, max, if (connected) "No reading" else "Connecting…", dark)
+                        }
+                        Box(Modifier.weight(1.5f)) {
+                            SpeedDial(busiest?.name ?: "Busiest room", busiest?.watts, null, max, if (connected) NO_PLACES else "Connecting…", dark)
+                        }
+                        Box(Modifier.weight(1f)) { FuelGauge(today, dark, onSetTarget) }
                     }
                 } else {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

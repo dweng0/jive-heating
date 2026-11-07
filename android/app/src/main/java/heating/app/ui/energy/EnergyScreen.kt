@@ -43,6 +43,5 @@ fun EnergyScreen(
         }
         LivePowerSection(api, onOpenRoom, onOpenEverythingElse, onOpenArea = onOpenArea, onAddArea = onManage, admin = admin)
         EnergySection(state, onPeriod, onSetTarget = if (admin) onManage else null)
-        GasCard(api, admin)
     }
 }

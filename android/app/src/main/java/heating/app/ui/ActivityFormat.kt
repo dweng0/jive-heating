@@ -107,7 +107,7 @@ fun agoText(at: String, now: Instant, zone: ZoneId = ZoneId.systemDefault()): St
     if (minutes < 1) return "now"
     if (minutes < 60) return "${minutes}m ago"
     if (minutes < 24 * 60) return "${minutes / 60}h ago"
-    val days = LocalDate.ofInstant(now, zone).toEpochDay() - LocalDate.ofInstant(then, zone).toEpochDay()
+    val days = now.atZone(zone).toLocalDate().toEpochDay() - then.atZone(zone).toLocalDate().toEpochDay()
     if (days <= 1) return "yesterday"
     return DateTimeFormatter.ofPattern("d MMM", Locale.UK).withZone(zone).format(then)
 }

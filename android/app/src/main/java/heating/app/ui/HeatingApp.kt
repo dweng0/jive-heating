@@ -124,7 +124,7 @@ private fun Connected(connection: Connection, onSignOut: () -> Unit, onPasswordC
     val context = LocalContext.current
     val askToNotify = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     LaunchedEffect(connection) {
-        if (shouldAskToNotify(canNotify(context), askedToNotify(context))) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU && shouldAskToNotify(canNotify(context), askedToNotify(context))) {
             markAskedToNotify(context)
             askToNotify.launch(Manifest.permission.POST_NOTIFICATIONS)
         }

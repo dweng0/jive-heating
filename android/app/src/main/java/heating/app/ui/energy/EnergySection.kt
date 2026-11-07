@@ -44,6 +44,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.semantics.contentDescription
@@ -89,6 +90,15 @@ fun EnergySection(state: EnergyState, onPeriod: (String) -> Unit, onSetTarget: (
                             Text(line.label, fontWeight = if (line.label == "Total") FontWeight.Bold else FontWeight.Normal)
                             if (line.detail.isNotEmpty()) {
                                 Text(line.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            line.chip?.let { chip ->
+                                Text(
+                                    chip,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = HeatingTheme.colors.heat,
+                                    modifier = Modifier.padding(top = 2.dp).background(HeatingTheme.colors.heat.copy(alpha = 0.15f), RoundedCornerShape(50)).padding(horizontal = 8.dp, vertical = 2.dp),
+                                )
                             }
                         }
                         Text(line.cost, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -196,7 +206,15 @@ private fun DayBars(bars: List<DayBar>) {
     val standing = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(Modifier.fillMaxWidth().height(140.dp), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.Bottom) {
+            Text("Each day", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            // A week has room for each day's name and total; a month's 30 bars do not.
+            val week = bars.size <= 7
+            if (week) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    bars.forEach { Text(it.totalText, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.weight(1f)) }
+                }
+            }
+            Row(Modifier.fillMaxWidth().height(140.dp), horizontalArrangement = Arrangement.spacedBy(if (week) 8.dp else 2.dp), verticalAlignment = Alignment.Bottom) {
                 bars.forEach { bar ->
                     Box(Modifier.weight(1f).fillMaxHeight()) {
                     Column(
@@ -223,6 +241,16 @@ private fun DayBars(bars: List<DayBar>) {
                         }
                     }
                     if (bar.overTarget) Box(Modifier.align(Alignment.TopCenter).size(5.dp).background(amberDot, CircleShape))
+                    }
+                }
+            }
+            if (week) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    bars.forEach { bar ->
+                        Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(bar.label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                            Text(bar.source, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                        }
                     }
                 }
             }

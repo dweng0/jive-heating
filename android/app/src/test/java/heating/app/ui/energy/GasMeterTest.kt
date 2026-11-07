@@ -23,15 +23,21 @@ class GasMeterTest {
             period = "week", gasKwh = 378.0, gasCost = 2610.0, gasEstimatedKwh = 90.0, boilerHours = 13.5,
             days = listOf(day("2026-11-05", 68.0, 0.0), day("2026-11-06", 66.0, 66.0), day("2026-11-07", 24.0, 12.0)),
         )
-        assertEquals("378.0 kWh · 13.5 h boiler · part estimated", energyLines(week).first().detail)
-        assertEquals("24.0 kWh · 2.0 h boiler · estimated", energyLines(EnergyDashboard(period = "today", gasKwh = 24.0, gasEstimatedKwh = 24.0, boilerHours = 2.0)).first().detail)
-        assertEquals("68.0 kWh · 5.0 h boiler", energyLines(EnergyDashboard(period = "today", gasKwh = 68.0, gasEstimatedKwh = 0.0, boilerHours = 5.0)).first().detail)
+        assertEquals("378.0 kWh · 13.5 h boiler", energyLines(week).first().detail)
+        assertEquals("Part estimated", energyLines(week).first().chip)
+        assertEquals("Estimated", energyLines(EnergyDashboard(period = "today", gasKwh = 24.0, gasEstimatedKwh = 24.0, boilerHours = 2.0)).first().chip)
+        assertNull(energyLines(EnergyDashboard(period = "today", gasKwh = 68.0, gasEstimatedKwh = 0.0, boilerHours = 5.0)).first().chip)
 
         // The estimated part of each day's gas is its own, hatched part of the bar.
         val bars = dayBars(week)
         assertEquals(0f, bars[0].gasEstimated)
         assertEquals(bars[1].gas + bars[1].gasEstimated, bars[1].gasEstimated, 1e-6f)
         assertEquals(bars[2].gas, bars[2].gasEstimated, 1e-6f)
+        // Each day of a week named, with where its gas came from and its total.
+        assertEquals("Thu 5", bars[0].label)
+        assertEquals("meter", bars[0].source)
+        assertEquals("estimate", bars[1].source)
+        assertEquals("£5.47", bars[0].totalText)
     }
 
     // BDD: The car dashboard shows the gas meter's latest day
