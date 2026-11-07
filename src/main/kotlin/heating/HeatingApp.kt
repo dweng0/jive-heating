@@ -133,6 +133,10 @@ class HeatingApp(
         webPush = webPush,
     )
 
+    val areaAlerts = heating.energy.AreaAlerts(
+        store, { livePower.now().areas }, alerts::toPeople,
+        everyone = { users.list().filter { it.admin || it.energy }.map { it.id } },
+    )
     val boiler = heating.boiler.BoilerControl(boilerOverride, rooms, zones, boosts, demand, changes, ::now, activity, alerts)
 
     private val offlineActivity = heating.activity.OfflineActivity(activity, rooms, valves, sensors, meters, monitoredMeters)
@@ -193,6 +197,7 @@ class HeatingApp(
         periodic += meterRecorder.tick
         gasMeter?.let { periodic += heating.gas.GasSync(it, gasReadings, gasExecutor).tick }
         periodic += livePower.tick
+        periodic += areaAlerts.tick
         periodic += Periodic { sensors.markSilent(SENSOR_SILENCE_LIMIT) }
         periodic += roomSensors.resend
         config.kumaPushUrl?.let { periodic += KumaReporter(it, valves, httpGet, ::offlineRoomSensors).heartbeat }

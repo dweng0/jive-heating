@@ -2889,6 +2889,39 @@ Engineering rules (apply to every scenario):
             And on the Gas card admins see "Boiler average from the meter: 12.1 kW" and, when it is 0.1 kW or more from
                 boilerAverageKw, a "Use 12.1 kW" button that sends PUT /api/settings/energy with boilerAverageKw 12.1
 
+    Feature: Area notifications
+        As the household admin
+        I want to be told when an energy area such as "Lights" is still using power after a few hours
+        So that someone can turn off what was left on
+
+        An area is using power while its live reading (its clamp, else the sum of its plugs) is over 5 W. Each area has
+        at most one notification, which goes either to the admin who set it up or to everyone with energy access, on
+        their phones and browsers.
+
+        Scenario: An admin sets up a notification for an area
+            Given admins "jane" and "john" and energy area "Lights"
+            When "jane" sends PUT /api/energy/areas/lights/alert with hours 1.5 and notify "me"
+            Then GET /api/energy/areas/lights/alert returns hours 1.5, notify "me" and by "jane", for "jane" and for "john"
+            And notify "everyone" sends it to everyone with energy access instead, and a later PUT replaces it
+            And DELETE /api/energy/areas/lights/alert turns it off (hours, notify and by null), and it is kept over a restart
+            And hours must be from 0.5 to 24 in steps of 0.5 and notify "me" or "everyone" (else 400), an unknown area is 404 and members get 403
+            And deleting the area forgets its notification
+
+        Scenario: An area still using power after the hours notifies
+            Given "jane" set "Lights" to notify "me" after 1 hour
+            When "Lights" uses over 5 W from 18:00 without a break
+            Then at 19:00 "jane" gets "Lights still on" with "Lights has been using power for 1 h, now 85 W", and nobody else
+            And with notify "everyone", "jane", "john" and member "sam" with energy access get it, and a member without energy access does not
+            And no more is sent until "Lights" has dropped to 5 W or under and come back on
+            And a reading that is missing does not count as a break, but dropping to 5 W or under starts the time again
+
+        Scenario: An admin sets up an area notification in the app
+            Given admin "jane" opens the "Lights" area on the web app, or its row under Areas on the Android app
+            When she chooses "Set up notification", enters 2 hours, chooses "Just me" or "Everyone" and saves
+            Then PUT /api/energy/areas/lights/alert is sent with hours 2 and notify "me" or "everyone"
+            And it shows "Notifies you after 2 h" (or "Notifies everyone after 2 h", or "Notifies jane after 2 h" to others)
+            And "Turn off" sends DELETE /api/energy/areas/lights/alert
+
 # Deferred (not to be built yet)
 # - Mirror schedules to the valve weekly_schedule as a fallback when the service is down
 # - Open-window alerts (TRVZB exposes the setting, not a state; needs inference)

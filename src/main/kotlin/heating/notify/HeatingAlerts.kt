@@ -135,6 +135,18 @@ class HeatingAlerts(
                 if (sender !== PushSender.None) settings.devicesOf(user.id).forEach { phones += it to text }
                 webPush?.subscriptionsFor(user.id)?.forEach { browsers += it to text }
             }
+        deliver(phones, browsers)
+    }
+
+    /** Sends [title] and [body] to each of [userIds]' phones and browsers, whatever their heating notification switches. */
+    fun toPeople(userIds: List<String>, title: String, body: String) {
+        val text = WebPushMessage(title, body)
+        val phones = if (sender === PushSender.None) emptyList() else userIds.flatMap { id -> settings.devicesOf(id).map { it to text } }
+        val browsers = userIds.flatMap { id -> webPush?.subscriptionsFor(id).orEmpty().map { it to text } }
+        deliver(phones, browsers)
+    }
+
+    private fun deliver(phones: List<Pair<String, WebPushMessage>>, browsers: List<Pair<WebPushSubscription, WebPushMessage>>) {
         if (phones.isEmpty() && browsers.isEmpty()) return
         executor.execute {
             phones.forEach { (token, text) ->

@@ -1,6 +1,6 @@
 # BDD Status
 
-Checked 418 scenario(s) across 121 test file(s).
+Checked 421 scenario(s) across 124 test file(s).
 
 
 ## Feature: Service foundation
@@ -559,5 +559,11 @@ Checked 418 scenario(s) across 121 test file(s).
 - [x] A day of gas, half-hour by half-hour
 - [x] The boiler's average burn rate from the meter
 
+## Feature: Area notifications
+
+- [x] An admin sets up a notification for an area
+- [x] An area still using power after the hours notifies
+- [x] An admin sets up an area notification in the app
+
 ---
-**418/418 scenarios covered.**
+**421/421 scenarios covered.**

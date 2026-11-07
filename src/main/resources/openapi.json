@@ -538,6 +538,23 @@
         "type": "object", "required": ["kwh", "cost"],
         "properties": { "kwh": { "type": "number" }, "cost": { "type": "number", "description": "Minor units at today's electricity price" } }
       },
+      "AreaAlertRequest": {
+        "type": "object", "required": ["hours", "notify"],
+        "properties": {
+          "hours": { "type": "number", "description": "0.5 to 24 in steps of 0.5" },
+          "notify": { "type": "string", "enum": ["me", "everyone"], "description": "me: the admin setting it up; everyone: everyone with energy access" }
+        }
+      },
+      "AreaAlertView": {
+        "type": "object", "required": ["hours", "notify", "by"],
+        "description": "An area's notification; all null with none",
+        "properties": {
+          "hours": { "type": "number", "nullable": true },
+          "notify": { "type": "string", "enum": ["me", "everyone"], "nullable": true },
+          "by": { "type": "string", "nullable": true, "description": "Username of the admin who set it up" },
+          "mine": { "type": "boolean", "description": "Whether the caller set it up" }
+        }
+      },
       "GasDay": {
         "type": "object", "required": ["date", "kwh", "cost", "currency", "halfHours", "previous", "next", "measuredBoilerKw", "boilerAverageKw"],
         "description": "A day of the smart gas meter, half-hour by half-hour",
@@ -1096,6 +1113,22 @@
           { "name": "to", "in": "query", "schema": { "type": "string", "format": "date-time" }, "description": "End of the range; left out, or in the future, it is now" }
         ],
         "responses": { "200": { "description": "history", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HouseHistory" } } } }, "400": { "description": "unknown range or unreadable to" }, "403": { "description": "no energy access" } }
+      }
+    },
+    "/api/energy/areas/{id}/alert": {
+      "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+      "get": {
+        "summary": "The area's notification when it is still using power after some hours. Admins.",
+        "responses": { "200": { "description": "The notification", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AreaAlertView" } } } }, "404": { "description": "No such area" } }
+      },
+      "put": {
+        "summary": "Set the area's notification, replacing any. Admins.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AreaAlertRequest" } } } },
+        "responses": { "200": { "description": "Set", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AreaAlertView" } } } }, "400": { "description": "Bad hours or notify" }, "404": { "description": "No such area" } }
+      },
+      "delete": {
+        "summary": "Turn the area's notification off. Admins.",
+        "responses": { "204": { "description": "Off" }, "404": { "description": "No such area" } }
       }
     },
     "/api/energy/gas": {

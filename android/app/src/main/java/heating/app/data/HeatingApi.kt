@@ -119,6 +119,11 @@ interface HeatingApi {
     suspend fun energyAreas(): List<EnergyArea>
     suspend fun addEnergyArea(name: String): EnergyArea
     suspend fun renameEnergyArea(id: String, name: String): EnergyArea
+
+    /** Area [id]'s "still using power" notification. */
+    suspend fun areaAlert(id: String): AreaAlert
+    suspend fun setAreaAlert(id: String, hours: Double, notify: String): AreaAlert
+    suspend fun clearAreaAlert(id: String)
     suspend fun deleteEnergyArea(id: String)
 
     /** Colour bands and the last 30 minutes of house readings for the live power dial. */
@@ -385,6 +390,18 @@ class KtorHeatingApi(
             contentType(ContentType.Application.Json)
             setBody(EnergyAreaName(name))
         }.body()
+
+    override suspend fun areaAlert(id: String): AreaAlert = client.get("api/energy/areas/${id.encodeURLPathPart()}/alert").body()
+
+    override suspend fun setAreaAlert(id: String, hours: Double, notify: String): AreaAlert =
+        client.put("api/energy/areas/${id.encodeURLPathPart()}/alert") {
+            contentType(ContentType.Application.Json)
+            setBody(AreaAlertRequest(hours, notify))
+        }.body()
+
+    override suspend fun clearAreaAlert(id: String) {
+        client.delete("api/energy/areas/${id.encodeURLPathPart()}/alert")
+    }
 
     override suspend fun deleteEnergyArea(id: String) {
         client.delete("api/energy/areas/${id.encodeURLPathPart()}")

@@ -68,6 +68,13 @@ class FakeHeatingApi : HeatingApi {
     override suspend fun energyAreas(): List<EnergyArea> = emptyList()
     override suspend fun addEnergyArea(name: String) = EnergyArea(name.lowercase(), name)
     override suspend fun renameEnergyArea(id: String, name: String) = EnergyArea(id, name)
+    val areaAlerts = mutableMapOf<String, AreaAlert>()
+    override suspend fun areaAlert(id: String): AreaAlert { call("areaAlert $id"); return areaAlerts[id] ?: AreaAlert() }
+    override suspend fun setAreaAlert(id: String, hours: Double, notify: String): AreaAlert {
+        call("setAreaAlert $id $hours $notify")
+        return AreaAlert(hours, notify, "jane", mine = true).also { areaAlerts[id] = it }
+    }
+    override suspend fun clearAreaAlert(id: String) { call("clearAreaAlert $id"); areaAlerts.remove(id) }
     override suspend fun deleteEnergyArea(id: String) {}
     override suspend fun stopUsingMeterForHouse(meter: String): EnergySettings { call("stopUsingMeterForHouse $meter"); return EnergySettings() }
     override suspend fun labelMeter(meter: String, label: String): Meter { call("labelMeter $meter $label"); return Meter(meter, label = label) }

@@ -4,7 +4,11 @@ import heating.Actor
 import heating.ApiException
 import heating.HeatingApp
 import heating.actionLog
+import heating.auth.Caller
+import heating.energy.AreaAlertRequest
+import heating.energy.AreaAlertView
 import heating.energy.UsageWindow
+import io.ktor.server.auth.principal
 import heating.untrusted
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
@@ -114,12 +118,45 @@ fun Route.energyAreaRoutes(heating: HeatingApp) {
         call.respond(HttpStatusCode.NoContent)
     }
 
+    get("/api/energy/areas/{id}/alert") {
+        val area = heating.energyAreas.get(call.parameters["id"]!!)
+        val alert = heating.areaAlerts.get(area.id)
+        val caller = call.principal<Caller>()
+        call.respond(
+            alert?.let { AreaAlertView(it.hours, it.notify, heating.users.list().firstOrNull { u -> u.id == it.byUserId }?.username, it.byUserId == caller?.userId) }
+                ?: AreaAlertView(),
+        )
+    }
+
+    put("/api/energy/areas/{id}/alert") {
+        val area = heating.energyAreas.get(call.parameters["id"]!!)
+        val request = runCatching { call.receive<AreaAlertRequest>() }.getOrElse { throw ApiException.badRequest("hours and notify (me or everyone) are needed") }
+        val caller = call.principal<Caller>()!!
+        val by = caller.userId ?: throw ApiException.badRequest("a notification belongs to a signed-in admin")
+        val alert = call.acting {
+            heating.areaAlerts.set(area.id, request, by).also {
+                actionLog.info("area {} notifies {} after {} h{}", untrusted(area.name), request.notify.name.lowercase(), request.hours, Actor.by())
+            }
+        }
+        call.respond(AreaAlertView(alert.hours, alert.notify, caller.username, mine = true))
+    }
+
+    delete("/api/energy/areas/{id}/alert") {
+        val area = heating.energyAreas.get(call.parameters["id"]!!)
+        call.acting {
+            heating.areaAlerts.clear(area.id)
+            actionLog.info("area {} notification off{}", untrusted(area.name), Actor.by())
+        }
+        call.respond(HttpStatusCode.NoContent)
+    }
+
     delete("/api/energy/areas/{id}") {
         val id = call.parameters["id"]!!
         call.acting {
             // Its clamp goes with it (waiting to be set up again); its plugs stay monitored in no room or area.
             heating.energyAreas.delete(id)
             heating.monitoredMeters.areaDeleted(id)
+            heating.areaAlerts.clear(id)
             actionLog.info("energy area {} deleted{}", untrusted(id), Actor.by())
         }
         call.respond(HttpStatusCode.NoContent)

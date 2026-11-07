@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -20,6 +21,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.clickable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -51,6 +54,11 @@ fun EnergyAreasSection(
     var renaming by remember { mutableStateOf<EnergyArea?>(null) }
     var deleting by remember { mutableStateOf<EnergyArea?>(null) }
     var deleteError by remember { mutableStateOf<String?>(null) }
+    var alerts by remember { mutableStateOf(emptyMap<String, heating.app.data.AreaAlert>()) }
+    var alerting by remember { mutableStateOf<EnergyArea?>(null) }
+    LaunchedEffect(areas) {
+        alerts = areas.mapNotNull { a -> runCatching { a.id to api.areaAlert(a.id) }.getOrNull() }.toMap()
+    }
 
     // Read again whenever the meters change, so each area's clamp and shared circuits are current.
     LaunchedEffect(meters) { runCatching { api.energyAreas() }.onSuccess { areas = it.sortedBy { a -> a.name.lowercase() } } }
@@ -79,6 +87,12 @@ fun EnergyAreasSection(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.testTag("area-now-${area.id}"),
                     )
+                    alertLine(alerts[area.id])?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+                IconButton(onClick = { alerting = area }) {
+                    Icon(Icons.Filled.Notifications, contentDescription = "Set up notification for ${area.name}")
                 }
                 IconButton(onClick = { renaming = area }) { Icon(Icons.Filled.Edit, contentDescription = "Rename ${area.name}") }
                 IconButton(onClick = { deleteError = null; deleting = area }) { Icon(Icons.Filled.Delete, contentDescription = "Delete ${area.name}") }
@@ -132,6 +146,27 @@ fun EnergyAreasSection(
             renaming = null
         }
     }
+    alerting?.let { area ->
+        AreaAlertDialog(
+            area.name,
+            alerts[area.id],
+            onDismiss = { alerting = null },
+            onSave = { hours, notify ->
+                scope.launch {
+                    runCatching { api.setAreaAlert(area.id, hours, notify) }
+                        .onSuccess { alerts = alerts + (area.id to it); alerting = null }
+                        .onFailure { onMessage(friendlyError(it)) }
+                }
+            },
+            onTurnOff = {
+                scope.launch {
+                    runCatching { api.clearAreaAlert(area.id) }
+                        .onSuccess { alerts = alerts - area.id; alerting = null }
+                        .onFailure { onMessage(friendlyError(it)) }
+                }
+            },
+        )
+    }
     deleting?.let { area ->
         AlertDialog(
             onDismissRequest = { deleting = null },
@@ -181,5 +216,53 @@ private fun AreaNameDialog(title: String, action: String, initial: String, onDis
             ) { Text(action) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+/** "Notify after [hours] h if <area> is still using power", to just me or everyone; Turn off when one is set. */
+@Composable
+private fun AreaAlertDialog(
+    name: String,
+    current: heating.app.data.AreaAlert?,
+    onDismiss: () -> Unit,
+    onSave: (Double, String) -> Unit,
+    onTurnOff: () -> Unit,
+) {
+    var hours by remember { mutableStateOf(current?.hours?.let { if (it % 1.0 == 0.0) it.toInt().toString() else it.toString() } ?: "1") }
+    var notify by remember { mutableStateOf(current?.notify ?: "me") }
+    val value = alertHoursOrNull(hours)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Notification for $name") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Notify after", style = MaterialTheme.typography.labelLarge)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    androidx.compose.material3.OutlinedTextField(
+                        hours, { hours = it },
+                        singleLine = true,
+                        isError = value == null,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
+                        modifier = Modifier.width(96.dp),
+                    )
+                    Text("h if $name is still using power", style = MaterialTheme.typography.bodyMedium)
+                }
+                if (value == null) Text("From 0.5 to 24 hours, in half hours.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                Text("Who to notify", style = MaterialTheme.typography.labelLarge)
+                listOf("me" to "Just me", "everyone" to "Everyone with energy access").forEach { (v, label) ->
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { notify = v }) {
+                        androidx.compose.material3.RadioButton(selected = notify == v, onClick = { notify = v })
+                        Text(label)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(enabled = value != null, onClick = { value?.let { onSave(it, notify) } }) { Text("Save") } },
+        dismissButton = {
+            Row {
+                if (current?.hours != null) TextButton(onClick = onTurnOff) { Text("Turn off") }
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
+        },
     )
 }

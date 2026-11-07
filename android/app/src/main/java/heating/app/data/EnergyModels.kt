@@ -18,6 +18,14 @@ data class EnergySettings(
     val dailyKwhTarget: Double? = null,
 )
 
+/** openapi: AreaAlertView. An area's "still using power" notification; all null with none. [mine]: the signed-in admin set it up. */
+@Serializable
+data class AreaAlert(val hours: Double? = null, val notify: String? = null, val by: String? = null, val mine: Boolean = false)
+
+/** PUT /api/energy/areas/{id}/alert: [notify] is "me" or "everyone". */
+@Serializable
+data class AreaAlertRequest(val hours: Double, val notify: String)
+
 /** PUT /api/settings/energy with only the daily target; null clears it. */
 @Serializable
 data class DailyTargetRequest(val dailyKwhTarget: Double?)

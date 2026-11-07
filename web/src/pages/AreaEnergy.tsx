@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Pencil, Trash2 } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { IncompleteWarning } from '@/components/heating/IncompleteWarning'
+import { AreaAlertControls } from '@/components/heating/AreaAlertCard'
 import { AreaNameDialog } from '@/components/heating/OtherAreas'
 import { PlugTable } from '@/components/heating/PlugTable'
 import { UsageCarousel, type UsageSlide } from '@/components/heating/UsageCarousel'
@@ -180,6 +181,7 @@ export function AreaEnergyPage() {
                 })}
               </fieldset>
             )}
+            <AreaAlertControls area={area.id} name={area.name} />
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" onClick={() => setRenaming(true)}>
                 <Pencil /> Rename area
