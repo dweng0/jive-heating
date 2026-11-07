@@ -49,11 +49,11 @@ private const val TICK_MS = 250L
 
 /** One wheel of a mechanical counter, rolling to [digit] over [roll] ms. */
 @Composable
-private fun Wheel(digit: Int, tenths: Boolean, roll: Int) {
+private fun Wheel(digit: Int, tenths: Boolean, roll: Int, fraction: Color? = null) {
     val pos by animateFloatAsState(digit.toFloat(), tween(roll), label = "wheel")
     Box(
         Modifier.width(WHEEL_WIDTH).height(WHEEL).clipToBounds()
-            .background(if (tenths) zoneColor(PowerZone.HIGH, false).copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurface),
+            .background(if (tenths) (fraction ?: zoneColor(PowerZone.HIGH, false).copy(alpha = 0.85f)) else MaterialTheme.colorScheme.onSurface),
     ) {
         Column(Modifier.offset(y = -WHEEL * pos)) {
             (0..9).forEach { d ->
@@ -67,7 +67,7 @@ private fun Wheel(digit: Int, tenths: Boolean, roll: Int) {
 
 /** A car's counter: [value] on wheels, its last [decimals] wheels the fraction, [prefix] such as "£" before them. */
 @Composable
-private fun Rolling(value: Double, digits: Int, decimals: Int, description: String, prefix: String? = null, roll: Int = 700) {
+private fun Rolling(value: Double, digits: Int, decimals: Int, description: String, prefix: String? = null, roll: Int = 700, fraction: Color? = null) {
     val text = String.format(Locale.UK, "%.${decimals}f", value).padStart(digits + if (decimals > 0) 1 else 0, '0')
     Row(
         Modifier.background(MaterialTheme.colorScheme.onSurface, RoundedCornerShape(2.dp)).padding(2.dp).semantics { contentDescription = "$description ${String.format(Locale.UK, "%.${decimals}f", value)}" },
@@ -80,7 +80,7 @@ private fun Rolling(value: Double, digits: Int, decimals: Int, description: Stri
         }
         text.forEachIndexed { i, ch ->
             if (ch == '.') Text(".", color = MaterialTheme.colorScheme.surface, modifier = Modifier.padding(horizontal = 1.dp))
-            else Wheel(ch - '0', tenths = i >= text.length - decimals, roll = roll)
+            else Wheel(ch - '0', tenths = i >= text.length - decimals, roll = roll, fraction = fraction)
         }
     }
 }
@@ -145,6 +145,23 @@ fun TripMeters(totals: EnergyTotals?, readings: List<Pair<Long, Double?>>, dark:
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally)) {
             OdometerPeriod.entries.forEach { p -> FilterChip(selected = period == p, onClick = { period = p }, label = { Text(p.label) }) }
+        }
+        // The gas meter's latest whole day, a day late, against the day before.
+        totals?.gas?.let { gas ->
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+            ) {
+                Text(gasDayLabel(gas.date), style = MaterialTheme.typography.labelSmall, color = muted)
+                Rolling(gas.kwh, digits = 3, decimals = 1, description = "Gas kWh", fraction = heating.app.ui.theme.HeatingTheme.colors.heat.copy(alpha = 0.9f))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("kWh · ${formatCost(gas.cost, currency)}", style = MaterialTheme.typography.labelMedium)
+                    gasDelta(gas)?.let { (text, more) ->
+                        Text(text, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = zoneColor(if (more) PowerZone.MID else PowerZone.LOW, dark))
+                    }
+                }
+            }
         }
         val vs = totals?.let { versusYesterday(todayKwh, it.yesterdaySoFar) }
         Text(

@@ -167,6 +167,18 @@ fun versusYesterday(todayKwh: Double, yesterday: heating.app.data.EnergyTotal?):
     return "${if (delta > 0) "▲" else "▼"} ${one(kotlin.math.abs(delta))} kWh vs yesterday" to (delta > 0)
 }
 
+/** "GAS · THU 5 NOV" for the gas counter's day. */
+fun gasDayLabel(date: String): String =
+    "GAS · " + java.time.LocalDate.parse(date).format(java.time.format.DateTimeFormatter.ofPattern("EEE d MMM", java.util.Locale.UK)).uppercase(java.util.Locale.UK)
+
+/** "▲ 4.2 kWh vs Wed" and whether it is more: the gas day against the day before; null with no day before. */
+fun gasDelta(gas: heating.app.data.GasDayTotal): Pair<String, Boolean>? {
+    val previous = gas.previousKwh ?: return null
+    val delta = gas.kwh - previous
+    val before = java.time.LocalDate.parse(gas.date).minusDays(1).format(java.time.format.DateTimeFormatter.ofPattern("EEE", java.util.Locale.UK))
+    return "${if (delta > 0) "▲" else "▼"} ${one(kotlin.math.abs(delta))} kWh vs $before" to (delta > 0)
+}
+
 enum class OdometerPeriod(val label: String) { TODAY("Day"), WEEK("Week"), MONTH("Month"), YEAR("Year") }
 
 fun odometerText(kwh: Double): String = one(kwh)

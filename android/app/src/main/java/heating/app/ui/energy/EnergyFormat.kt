@@ -92,8 +92,23 @@ const val NO_METER = "Choose an electricity meter to see electricity use"
 /** One figure on the dashboard: "Gas", "£3.96", "36.0 kWh · 3.0 h boiler". */
 data class EnergyLine(val label: String, val cost: String, val detail: String)
 
+/** Where the dashboard's gas comes from: the smart meter up to when it has reported ([meteredTo]), else boiler hours. */
+fun gasSource(meteredTo: String?, zone: java.time.ZoneId = java.time.ZoneId.systemDefault()): String {
+    val at = meteredTo?.let { runCatching { java.time.OffsetDateTime.parse(it).atZoneSameInstant(zone) }.getOrNull() }
+        ?: return "Gas is estimated from the boiler's hours."
+    val text = at.format(java.time.format.DateTimeFormatter.ofPattern("d MMM HH:mm", java.util.Locale.UK))
+    return "Gas is from the smart meter up to $text, estimated from the boiler's hours after."
+}
+
+/** "estimated" when all of the gas is, "part estimated" when some is, null when none is. */
+fun gasEstimate(kwh: Double, estimatedKwh: Double?): String? {
+    val estimated = estimatedKwh ?: kwh
+    if (estimated < 0.05) return null
+    return if (estimated >= kwh - 0.05) "estimated" else "part estimated"
+}
+
 fun energyLines(d: EnergyDashboard): List<EnergyLine> = listOf(
-    EnergyLine("Gas", formatCost(d.gasCost, d.currency), "${formatKwh(d.gasKwh)} · ${oneDecimal(d.boilerHours)} h boiler"),
+    EnergyLine("Gas", formatCost(d.gasCost, d.currency), listOfNotNull(formatKwh(d.gasKwh), "${oneDecimal(d.boilerHours)} h boiler", gasEstimate(d.gasKwh, d.gasEstimatedKwh)).joinToString(" · ")),
     EnergyLine("Electricity", formatCost(d.electricityCost, d.currency), d.electricityKwh?.let(::formatKwh) ?: "No meter chosen"),
     EnergyLine("Standing charges", formatCost(d.standingCost, d.currency), "Charged per day"),
     EnergyLine("Total", formatCost(d.totalCost, d.currency), if (d.incomplete) "Some time missing" else ""),
@@ -148,8 +163,10 @@ data class DayBar(
     /** Where the day's total would be with electricity at the daily target, as a share of the tallest; null with no target. */
     val target: Float? = null,
     val overTarget: Boolean = false,
+    /** The part of gas estimated from boiler hours, drawn hatched on top of [gas] (the meter's). */
+    val gasEstimated: Float = 0f,
 ) {
-    val total: Float get() = gas + electricity + standing
+    val total: Float get() = gas + gasEstimated + electricity + standing
 }
 
 /** A bar per day for week and month; none for today. */
@@ -160,9 +177,11 @@ fun dayBars(d: EnergyDashboard): List<DayBar> {
     fun atTarget(day: heating.app.data.EnergyDay) = if (daily != null && price != null) day.gasCost + day.standingCost + daily * price else null
     val max = d.days.maxOfOrNull { maxOf(it.totalCost, atTarget(it) ?: 0.0) }?.takeIf { it > 0 } ?: 1.0
     return d.days.map {
+        // The estimated part's cost: its share of the day's gas kWh.
+        val estimated = if (it.gasKwh > 0) it.gasCost * ((it.gasEstimatedKwh ?: it.gasKwh) / it.gasKwh).coerceIn(0.0, 1.0) else 0.0
         DayBar(
-            it.date, (it.gasCost / max).toFloat(), ((it.electricityCost ?: 0.0) / max).toFloat(), (it.standingCost / max).toFloat(), it.incomplete,
-            atTarget(it)?.let { t -> (t / max).toFloat() }, (it.targetDeltaKwh ?: 0.0) > 0,
+            it.date, ((it.gasCost - estimated) / max).toFloat(), ((it.electricityCost ?: 0.0) / max).toFloat(), (it.standingCost / max).toFloat(), it.incomplete,
+            atTarget(it)?.let { t -> (t / max).toFloat() }, (it.targetDeltaKwh ?: 0.0) > 0, (estimated / max).toFloat(),
         )
     }
 }

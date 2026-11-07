@@ -1,6 +1,6 @@
 # BDD Status
 
-Checked 412 scenario(s) across 118 test file(s).
+Checked 416 scenario(s) across 121 test file(s).
 
 
 ## Feature: Service foundation
@@ -550,5 +550,12 @@ Checked 412 scenario(s) across 118 test file(s).
 - [x] The chart can be dragged back in time
 - [x] The chart says what each point used and cost
 
+## Feature: Gas meter
+
+- [x] Gas readings are fetched from the smart meter
+- [x] The dashboard's gas is the meter's where it has reported
+- [x] The Energy tab says where gas comes from
+- [x] The car dashboard shows the gas meter's latest day
+
 ---
-**412/412 scenarios covered.**
+**416/416 scenarios covered.**

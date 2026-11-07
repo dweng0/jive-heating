@@ -44,6 +44,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -61,7 +63,7 @@ fun EnergySection(state: EnergyState, onPeriod: (String) -> Unit, onSetTarget: (
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Use and cost", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
         Text(
-            "Gas is estimated from the boiler's hours. Costs use today's prices.",
+            "${gasSource(state.dashboard?.gasMeteredTo)} Costs use today's prices.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -206,6 +208,7 @@ private fun DayBars(bars: List<DayBar>) {
                         val empty = 1f - bar.total.coerceIn(0f, 1f)
                         if (empty > 0f) Spacer(Modifier.weight(empty))
                         val alpha = if (bar.incomplete) 0.4f else 1f
+                        Hatched(bar.gasEstimated, gas.copy(alpha = alpha))
                         Part(bar.gas, gas.copy(alpha = alpha))
                         Part(bar.electricity, electricity.copy(alpha = alpha))
                         Part(bar.standing, standing)
@@ -224,7 +227,8 @@ private fun DayBars(bars: List<DayBar>) {
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Key(gas, "Gas")
+                Key(gas, if (bars.any { it.gasEstimated > 0f }) "Gas, meter" else "Gas")
+                if (bars.any { it.gasEstimated > 0f }) HatchedKey(gas, "Gas, estimated")
                 Key(electricity, "Electricity")
                 Key(standing, "Standing")
             }
@@ -243,6 +247,29 @@ private fun DayBars(bars: List<DayBar>) {
 @Composable
 private fun androidx.compose.foundation.layout.ColumnScope.Part(fraction: Float, color: Color) {
     if (fraction > 0f) Box(Modifier.fillMaxWidth().weight(fraction).background(color))
+}
+
+/** Gas estimated from boiler hours: stripes of [color] over a pale wash of it. */
+@Composable
+private fun androidx.compose.foundation.layout.ColumnScope.Hatched(fraction: Float, color: Color) {
+    if (fraction > 0f) Box(Modifier.fillMaxWidth().weight(fraction).clipToBounds().background(color.copy(alpha = color.alpha * 0.35f)).drawBehind { stripes(color) })
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.stripes(color: Color) {
+    val step = 6.dp.toPx()
+    var x = -size.height
+    while (x < size.width) {
+        drawLine(color, androidx.compose.ui.geometry.Offset(x, size.height), androidx.compose.ui.geometry.Offset(x + size.height, 0f), strokeWidth = 2.5.dp.toPx())
+        x += step
+    }
+}
+
+@Composable
+private fun HatchedKey(color: Color, label: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Box(Modifier.size(10.dp).clipToBounds().background(color.copy(alpha = 0.35f)).drawBehind { stripes(color) })
+        Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
 }
 
 @Composable

@@ -88,4 +88,10 @@ data class EnergyTotals(
     val month: EnergyTotal,
     val year: EnergyTotal,
     val yesterdaySoFar: EnergyTotal? = null,
+    /** The smart gas meter's latest whole day; null until it has reported one. */
+    val gas: GasDayTotal? = null,
 )
+
+/** openapi: GasDayTotal. A whole day of the smart gas meter, its cost at the gas price, and the day before's kWh. */
+@kotlinx.serialization.Serializable
+data class GasDayTotal(val date: String, val kwh: Double, val cost: Double, val previousKwh: Double? = null)

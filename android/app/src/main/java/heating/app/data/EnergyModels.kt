@@ -125,6 +125,8 @@ data class EnergyDay(
     val incomplete: Boolean = false,
     /** electricityKwh minus the daily target (today: the share of it gone); null with no target. */
     val targetDeltaKwh: Double? = null,
+    /** The part of gasKwh estimated from boiler hours; null (all of it) from a service without a gas meter. */
+    val gasEstimatedKwh: Double? = null,
 )
 
 /**
@@ -202,4 +204,8 @@ data class EnergyDashboard(
     val areas: List<AreaEnergy> = emptyList(),
     /** The house's electricity against the daily target; null with no target or house meter. */
     val target: EnergyTarget? = null,
+    /** The part of gasKwh estimated from boiler hours; null (all of it) from a service without a gas meter. */
+    val gasEstimatedKwh: Double? = null,
+    /** The end of the last half-hour the smart gas meter has reported; null with no readings. */
+    val gasMeteredTo: String? = null,
 )
