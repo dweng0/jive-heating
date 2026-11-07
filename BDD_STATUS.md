@@ -1,6 +1,6 @@
 # BDD Status
 
-Checked 460 scenario(s) across 137 test file(s).
+Checked 460 scenario(s) across 142 test file(s).
 
 
 ## Feature: Service foundation
@@ -609,11 +609,11 @@ Checked 460 scenario(s) across 137 test file(s).
 
 ## Feature: Rule builder
 
-- [ ] UNCOVERED: A rule is built from an event
-- [ ] UNCOVERED: Conditions are mapped from the payload's fields
-- [ ] UNCOVERED: The topic is widened to similar devices
-- [ ] UNCOVERED: Rules are suggested for a Zigbee2MQTT device
-- [ ] UNCOVERED: Rules are managed in the app
+- [x] A rule is built from an event
+- [x] Conditions are mapped from the payload's fields
+- [x] The topic is widened to similar devices
+- [x] Rules are suggested for a Zigbee2MQTT device
+- [x] Rules are managed in the app
 
 ## Feature: Notification deliveries
 
@@ -623,11 +623,4 @@ Checked 460 scenario(s) across 137 test file(s).
 - [x] Deliveries are searched in the app
 
 ---
-**455/460 scenarios covered.**
-
-5 scenario(s) need tests:
-- A rule is built from an event
-- Conditions are mapped from the payload's fields
-- The topic is widened to similar devices
-- Rules are suggested for a Zigbee2MQTT device
-- Rules are managed in the app
+**460/460 scenarios covered.**
