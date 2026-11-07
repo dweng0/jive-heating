@@ -74,6 +74,7 @@ async function serve(page: Page, me: typeof jane, all: E[]) {
       const next = start + limit < rows.length ? String(start + limit) : null
       return route.fulfill({ json: { events, next, total: rows.length } })
     }
+    if (pathname === '/api/rules/suggestions') return route.fulfill({ json: [] })
     return route.fulfill({ status: 404, json: { error: 'not mocked' } })
   })
   return { calls }

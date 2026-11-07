@@ -76,6 +76,8 @@ export const rulesApi = {
   resume: (id: string) => request<Rule>('POST', `/api/rules/${encodeURIComponent(id)}/resume`),
   history: (id: string, limit = 50) => request<RuleHistoryEntry[]>('GET', `/api/rules/${encodeURIComponent(id)}/history?limit=${limit}`),
   test: (r: RuleRequest) => request<{ events: TestEvent[] }>('POST', '/api/rules/test', r),
+  suggestions: (device?: string) =>
+    request<Suggestion[]>('GET', `/api/rules/suggestions${device ? `?device=${encodeURIComponent(device)}` : ''}`),
   sendTest: (r: RuleRequest) => request<{ title: string; message: string; deliveryIds: string[] }>('POST', '/api/rules/test/send', r),
 }
 
@@ -239,6 +241,7 @@ export const swapDevice = (text: string, from: string, to: string) => (from && f
 
 // ---- Zigbee2MQTT suggestions ----
 
+/** A rule worth having for a Zigbee2MQTT device, as GET /api/rules/suggestions offers it. */
 export interface Suggestion {
   /** The device's friendly name. */
   device: string
@@ -248,48 +251,8 @@ export interface Suggestion {
   trigger: 'changes to' | 'is'
   title: string
   message: string
-}
-
-interface Expose {
-  type?: string
-  property?: string
-  name?: string
-  values?: string[]
-  features?: Expose[]
-}
-
-function flatExposes(list: Expose[] | undefined): Expose[] {
-  return (list ?? []).flatMap((e) => [e, ...flatExposes(e.features)])
-}
-
-/** What a bridge/devices entry offers rules for: contact, water_leak, battery low, occupancy, tamper and each action value. */
-export function suggestionsFor(devices: unknown, base: string): Suggestion[] {
-  if (!Array.isArray(devices)) return []
-  const out: Suggestion[] = []
-  for (const d of devices as Array<{ friendly_name?: string; type?: string; definition?: { exposes?: Expose[] } | null; exposes?: Expose[] }>) {
-    const device = d.friendly_name
-    if (!device || d.type === 'Coordinator') continue
-    const exposes = flatExposes(d.definition?.exposes ?? d.exposes)
-    const props = new Map<string, Expose>()
-    exposes.forEach((e) => e.property && props.set(e.property, e))
-    const topic = `${base}/${device}`
-    const add = (name: string, condition: Condition, message: string) =>
-      out.push({ device, topic, name, conditions: [condition], trigger: 'changes to', title: device, message })
-    if (props.has('contact')) add(`${device} opened`, { field: 'contact', operator: '=', value: false }, `${device} opened`)
-    if (props.has('battery')) add(`${device} battery low`, { field: 'battery', operator: '<', value: 15 }, `${device} battery is low ({{payload.battery}}%)`)
-    if (props.has('water_leak')) add(`${device} leak detected`, { field: 'water_leak', operator: '=', value: true }, `${device} detected a leak`)
-    if (props.has('occupancy')) add(`${device} motion detected`, { field: 'occupancy', operator: '=', value: true }, `${device} detected motion`)
-    if (props.has('tamper')) add(`${device} tampered with`, { field: 'tamper', operator: '=', value: true }, `${device} was tampered with`)
-    const action = props.get('action')
-    if (action) for (const v of action.values ?? []) add(`${device} ${v}`, { field: 'action', operator: '=', value: v }, `${device}: ${v}`)
-  }
-  return out
-}
-
-/** Whether a rule already does what a suggestion offers: same topic, same first condition. */
-export function alreadySetUp(s: Suggestion, rules: Rule[]): boolean {
-  const c = s.conditions[0]
-  return rules.some((r) => r.topic === s.topic && r.conditions.some((x) => x.field === c.field && x.operator === c.operator && x.value === c.value))
+  /** A rule already does this: same topic and first condition. */
+  setUp: boolean
 }
 
 /** The rule builder's address for a draft; the builder reads these back. */

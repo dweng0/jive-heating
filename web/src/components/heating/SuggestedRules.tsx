@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { eventsApi, z2mBase } from '@/lib/events'
-import { alreadySetUp, builderAddress, conditionText, rulesApi, suggestionsFor, type Rule, type Suggestion } from '@/lib/rules'
+import { builderAddress, conditionText, rulesApi, type Suggestion } from '@/lib/rules'
 
 /** What a suggestion reads as: "contact changes to false", "battery < 15". */
 function describe(s: Suggestion): string {
@@ -19,25 +18,19 @@ function describe(s: Suggestion): string {
 export function SuggestedRules({ device }: { device?: string }) {
   const navigate = useNavigate()
   const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null)
-  const [rules, setRules] = useState<Rule[]>([])
 
   useEffect(() => {
     let cancelled = false
-    Promise.all([eventsApi.topics(), rulesApi.list()]).then(
-      ([topics, existing]) => {
-        if (cancelled) return
-        const bridge = topics.find((t) => t.topic.endsWith('/bridge/devices'))
-        setSuggestions(bridge ? suggestionsFor(bridge.lastPayload, z2mBase(topics)) : [])
-        setRules(existing)
-      },
+    rulesApi.suggestions(device).then(
+      (offered) => !cancelled && setSuggestions(offered),
       () => !cancelled && setSuggestions([]),
     )
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [device])
 
-  const shown = (suggestions ?? []).filter((s) => !device || s.device === device)
+  const shown = suggestions ?? []
   if (shown.length === 0) {
     return suggestions && !device ? <p className="text-sm text-muted-foreground">No Zigbee2MQTT devices to suggest rules for.</p> : null
   }
@@ -47,7 +40,7 @@ export function SuggestedRules({ device }: { device?: string }) {
         <h2 className="font-semibold">{device ? `Suggested rules for ${device}` : 'Suggested rules'}</h2>
         <ul className="divide-y text-sm" data-testid="suggestions">
           {shown.map((s) => {
-            const done = alreadySetUp(s, rules)
+            const done = s.setUp
             return (
               <li key={`${s.topic}/${s.name}`} data-testid="suggestion" className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
                 <span className="font-medium">{s.name}</span>

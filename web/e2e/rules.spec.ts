@@ -123,6 +123,14 @@ async function serve(page: Page, all: E[], rules: R[] = [], history: Record<stri
       mock.calls.push({ method, path: pathname, body })
       return route.fulfill({ json: { title: body.title, message: body.message, deliveryIds: ['d1'] } })
     }
+    if (pathname === '/api/rules/suggestions') {
+      const device = q.get('device')
+      return route.fulfill({
+        json: offered
+          .filter((s) => !device || s.device === device)
+          .map((s) => ({ ...s, setUp: mock.rules.some((r) => r.topic === s.topic && r.conditions.some((c) => c.field === s.conditions[0].field && c.operator === s.conditions[0].operator && c.value === s.conditions[0].value)) })),
+      })
+    }
     if (pathname === '/api/rules' && method === 'GET') return route.fulfill({ json: mock.rules })
     if (pathname === '/api/rules' && method === 'POST') {
       mock.calls.push({ method, path: pathname, body })
@@ -267,19 +275,25 @@ test('"Any device like this" widens the topic to a wildcard, lists what it match
   expect(created.find((b) => b.topic === 'z2m/back_door')).toMatchObject({ name: 'Back door contact false', title: 'back_door', message: 'back_door: contact is false' })
 })
 
-/** What Zigbee2MQTT publishes on z2m/bridge/devices for the house. */
-const bridgeDevices = [
-  { friendly_name: 'Coordinator', type: 'Coordinator', definition: null },
-  { friendly_name: 'front_door', type: 'EndDevice', definition: { exposes: [{ type: 'binary', property: 'contact' }, { type: 'numeric', property: 'battery' }, { type: 'numeric', property: 'linkquality' }] } },
-  { friendly_name: 'hall_leak', type: 'EndDevice', definition: { exposes: [{ type: 'binary', property: 'water_leak' }, { type: 'numeric', property: 'battery' }] } },
-  { friendly_name: 'hall_button', type: 'EndDevice', definition: { exposes: [{ type: 'enum', property: 'action', values: ['single', 'double', 'hold'] }] } },
-  { friendly_name: 'landing_motion', type: 'EndDevice', definition: { exposes: [{ type: 'binary', property: 'occupancy' }, { type: 'binary', property: 'tamper' }] } },
-]
-const withBridge = () => [...house(), event(12, 'z2m/bridge/devices', bridgeDevices, 1000, true)]
+/** What GET /api/rules/suggestions offers for the house's Zigbee2MQTT devices (the service works these out from bridge/devices). */
+const offered = (() => {
+  const make = (device: string, name: string, field: string, operator: string, value: unknown, message: string) => ({
+    device, topic: `z2m/${device}`, name, conditions: [{ field, operator, value }], trigger: 'changes to', title: device, message,
+  })
+  return [
+    make('front_door', 'front_door opened', 'contact', '=', false, 'front_door opened'),
+    make('front_door', 'front_door battery low', 'battery', '<', 15, 'front_door battery is low ({{payload.battery}}%)'),
+    make('hall_leak', 'hall_leak battery low', 'battery', '<', 15, 'hall_leak battery is low ({{payload.battery}}%)'),
+    make('hall_leak', 'hall_leak leak detected', 'water_leak', '=', true, 'hall_leak detected a leak'),
+    ...['single', 'double', 'hold'].map((v) => make('hall_button', `hall_button ${v}`, 'action', '=', v, `hall_button: ${v}`)),
+    make('landing_motion', 'landing_motion motion detected', 'occupancy', '=', true, 'landing_motion detected motion'),
+    make('landing_motion', 'landing_motion tampered with', 'tamper', '=', true, 'landing_motion was tampered with'),
+  ]
+})()
 
 // BDD: Rules are suggested for a Zigbee2MQTT device
 test('a device under Events is offered rules from what it exposes; one opens the builder filled in, and ones already set up say so', async ({ page }) => {
-  await serve(page, withBridge(), [rule('r1', 'Door', 'z2m/front_door', { conditions: [{ field: 'battery', operator: '<', value: 15 }] })])
+  await serve(page, house(), [rule('r1', 'Door', 'z2m/front_door', { conditions: [{ field: 'battery', operator: '<', value: 15 }] })])
   await page.goto('/events?device=front_door')
   const suggestions = page.getByTestId('suggestion')
   await expect(suggestions).toHaveCount(2)
@@ -312,7 +326,7 @@ const garage = { id: 'a1', name: 'Garage', alert: { hours: 2, notify: 'everyone'
 
 // BDD: Rules are managed in the app
 test('Notifications lists each rule and area notification with a switch, filters with chips, resumes a paused rule and asks before deleting', async ({ page }) => {
-  const mock = await serve(page, withBridge(), managed(), { r1: [sentEntry, skippedEntry] }, [garage])
+  const mock = await serve(page, house(), managed(), { r1: [sentEntry, skippedEntry] }, [garage])
   await page.goto('/')
   await page.getByRole('link', { name: 'Notifications' }).first().click()
   await expect(page).toHaveURL(/\/rules$/)
@@ -385,7 +399,7 @@ test('Notifications lists each rule and area notification with a switch, filters
 
 // BDD: Rules are suggested for a Zigbee2MQTT device
 test('"Suggested" in Notifications offers rules for every device, with action values, occupancy and tamper', async ({ page }) => {
-  await serve(page, withBridge(), [rule('r1', 'Front door opened', 'z2m/front_door', { conditions: [{ field: 'contact', operator: '=', value: false }] })])
+  await serve(page, house(), [rule('r1', 'Front door opened', 'z2m/front_door', { conditions: [{ field: 'contact', operator: '=', value: false }] })])
   await page.goto('/rules')
   await page.getByRole('button', { name: 'Suggested' }).click()
   const names = page.getByTestId('suggestion').locator('span.font-medium')
