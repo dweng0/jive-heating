@@ -1,6 +1,6 @@
 # BDD Status
 
-Checked 460 scenario(s) across 133 test file(s).
+Checked 460 scenario(s) across 137 test file(s).
 
 
 ## Feature: Service foundation
@@ -588,24 +588,24 @@ Checked 460 scenario(s) across 133 test file(s).
 
 ## Feature: Event explorer
 
-- [ ] UNCOVERED: An admin opens the event explorer
-- [ ] UNCOVERED: Events are filtered with chips
+- [x] An admin opens the event explorer
+- [x] Events are filtered with chips
 - [x] Events are sorted and paged
-- [ ] UNCOVERED: An event's payload is shown in full
-- [ ] UNCOVERED: Topics are browsed as a tree
+- [x] An event's payload is shown in full
+- [x] Topics are browsed as a tree
 
 ## Feature: Notification rules
 
 - [x] An admin creates a rule
-- [ ] UNCOVERED: A rule fires when a message changes to match
-- [ ] UNCOVERED: An "is" rule fires on every matching message
-- [ ] UNCOVERED: A wildcard rule tracks each topic on its own
-- [ ] UNCOVERED: The message fills in from the event
+- [x] A rule fires when a message changes to match
+- [x] An "is" rule fires on every matching message
+- [x] A wildcard rule tracks each topic on its own
+- [x] The message fills in from the event
 - [x] Quiet hours hold back a rule
-- [ ] UNCOVERED: A noisy rule is held back
+- [x] A noisy rule is held back
 - [x] A payload that is not JSON can still match
-- [ ] UNCOVERED: An admin tests a rule against recent events
-- [ ] UNCOVERED: A rule's history shows what it did
+- [x] An admin tests a rule against recent events
+- [x] A rule's history shows what it did
 
 ## Feature: Rule builder
 
@@ -623,20 +623,9 @@ Checked 460 scenario(s) across 133 test file(s).
 - [x] Deliveries are searched in the app
 
 ---
-**444/460 scenarios covered.**
+**455/460 scenarios covered.**
 
-16 scenario(s) need tests:
-- An admin opens the event explorer
-- Events are filtered with chips
-- An event's payload is shown in full
-- Topics are browsed as a tree
-- A rule fires when a message changes to match
-- An "is" rule fires on every matching message
-- A wildcard rule tracks each topic on its own
-- The message fills in from the event
-- A noisy rule is held back
-- An admin tests a rule against recent events
-- A rule's history shows what it did
+5 scenario(s) need tests:
 - A rule is built from an event
 - Conditions are mapped from the payload's fields
 - The topic is widened to similar devices
