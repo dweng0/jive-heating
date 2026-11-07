@@ -551,4 +551,75 @@ class RulesTest {
             assertEquals(92, t.pushed.size)
         }
     }
+
+    /** A service whose event log is written when asked, so tests decide when it is drained. */
+    private fun serviceWithEvents() = TestHeating(configure = { it.copy(eventFlushMillis = 0) })
+
+    /** 25 front door messages over 7 days, oldest first: contact true, false, false, true, true, five times over. */
+    private fun TestHeating.sevenDaysOfFrontDoor() {
+        val contacts = listOf(true, false, false, true, true)
+        repeat(25) { i ->
+            bus.receive(frontDoor, """{"contact":${contacts[i % 5]},"battery":${90 - i}}""")
+            app.events.flush()
+            clock.advance(Duration.ofHours(6))
+        }
+        bus.receive("z2m/back_door", """{"contact":false}""")
+        app.events.flush()
+    }
+
+    // BDD: An admin tests a rule against recent events
+    @Test
+    fun `an admin tests a rule against recent events`() {
+        val t = serviceWithEvents()
+        t.api {
+            val tokens = household()
+            val jane = tokens.getValue("jane")
+            t.sevenDaysOfFrontDoor()
+            t.pushed.clear()
+            val response = send("POST", "/api/rules/test", jane, rule(title = "{{topic.last}}", message = "Door opened, battery {{payload.battery}}%"))
+            assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
+            val events = heatingJson.parseToJsonElement(response.bodyAsText()).jsonObject["events"]!!.jsonArray.map { it.jsonObject }
+            assertEquals(20, events.size)
+            assertEquals(setOf(frontDoor), events.map { it["topic"]!!.jsonPrimitive.content }.toSet())
+            // newest first: the last five were contact true, false, false, true, true (oldest to newest), then the same again
+            val results = events.map { it["result"]!!.jsonPrimitive.content }
+            assertEquals(
+                List(4) { listOf("conditions not met: contact is true", "conditions not met: contact is true", "no change", "would send", "conditions not met: contact is true") }.flatten(),
+                results,
+            )
+            val sending = events.filter { it["result"]!!.jsonPrimitive.content == "would send" }
+            assertEquals(4, sending.size)
+            assertEquals("front_door", sending.first()["title"]!!.jsonPrimitive.content)
+            assertEquals("Door opened, battery ${90 - 21}%", sending.first()["message"]!!.jsonPrimitive.content)
+            assertEquals(
+                listOf("not_met", "not_met", "no_change", "would_send", "not_met"),
+                events.take(5).map { it["status"]!!.jsonPrimitive.content },
+            )
+            // testing sends nothing and writes no history
+            assertEquals(0, t.pushed.size)
+            assertEquals(HttpStatusCode.Forbidden, send("POST", "/api/rules/test", tokens.getValue("sam"), rule()).status)
+            assertEquals(HttpStatusCode.BadRequest, send("POST", "/api/rules/test", jane, rule(topic = "")).status)
+        }
+    }
+
+    // BDD: An admin tests a rule against recent events
+    @Test
+    fun `send me a test sends the filled in notification to the admin only`() {
+        val t = serviceWithEvents()
+        t.api {
+            val tokens = household()
+            t.sevenDaysOfFrontDoor()
+            val response = send("POST", "/api/rules/test/send", tokens.getValue("jane"), rule(title = "{{topic.last}}", message = "Battery {{payload.battery}}%"))
+            assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
+            assertEquals(1, t.pushed.size)
+            assertEquals("jane-phone", t.pushed.single().token)
+            assertEquals("front_door", t.pushed.single().title)
+            assertEquals("Battery 66%", t.pushed.single().body) // the latest front door message
+            val body = heatingJson.parseToJsonElement(response.bodyAsText()).jsonObject
+            assertEquals("front_door", body["title"]!!.jsonPrimitive.content)
+            assertEquals(1, body["deliveryIds"]!!.jsonArray.size)
+            assertEquals(HttpStatusCode.Forbidden, send("POST", "/api/rules/test/send", tokens.getValue("sam"), rule()).status)
+            assertEquals(HttpStatusCode.BadRequest, send("POST", "/api/rules/test/send", TEST_TOKEN, rule()).status)
+        }
+    }
 }

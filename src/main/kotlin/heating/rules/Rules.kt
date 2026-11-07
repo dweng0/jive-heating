@@ -1,6 +1,7 @@
 package heating.rules
 
 import heating.ApiException
+import heating.events.Event
 import heating.heatingJson
 import heating.mqtt.MqttBus
 import heating.mqtt.TopicFilter
@@ -112,6 +113,52 @@ class Rules(
             listOfNotNull(rule.byUserId).filter(deliveries::hasDevices), "${rule.name} paused", NOISY_TEXT, rule.name, ruleId = rule.id,
         )
         log.info("rule {} paused for an hour: {}", heating.untrusted(rule.name), NOISY_TEXT)
+    }
+
+    /**
+     * What [request] would have done with [recent] events (newest first; the oldest of them beyond [TEST_EVENTS] only says
+     * what each topic was doing before), newest first: whether it would send, and with what title and message. Cooldown,
+     * quiet hours and pausing are not part of it. Sends nothing and writes no history.
+     */
+    fun preview(request: RuleRequest, recent: List<Event>): List<RuleTestEvent> {
+        val rule = request.validated()
+        val base = z2mBase()
+        val before = mutableMapOf<String, Boolean>()
+        return recent.reversed().mapNotNull { e ->
+            val failing = Matching.firstFailing(rule.conditions, e.payload)
+            val met = failing == null
+            val previous = before.put(e.topic, met) ?: false
+            val shownEvent = recent.size <= TEST_EVENTS || e !== recent.last()
+            if (!shownEvent) return@mapNotNull null
+            when {
+                !met -> RuleTestEvent(e.id, e.at.toString(), e.topic, e.payload, "not_met", "conditions not met: ${describe(failing!!, e.payload)}")
+                rule.trigger == CHANGES_TO && previous -> RuleTestEvent(e.id, e.at.toString(), e.topic, e.payload, "no_change", "no change")
+                else -> RuleTestEvent(
+                    e.id, e.at.toString(), e.topic, e.payload, "would_send", "would send",
+                    Templates.fill(rule.title, e.topic, e.payload, base), Templates.fill(rule.message, e.topic, e.payload, base),
+                )
+            }
+        }.reversed()
+    }
+
+    private fun describe(c: Condition, payload: String): String {
+        val actual = Payloads.field(payload, c.field)
+        return "${c.field} is ${actual?.let(Templates::show) ?: "missing"}"
+    }
+
+    /** Sends [request]'s notification, filled in from [event] (or an empty one), to [userId] only. */
+    fun sendTest(request: RuleRequest, userId: String, event: Event?): TestSend {
+        val rule = request.validated()
+        val topic = event?.topic ?: rule.topic
+        val payload = event?.payload ?: "{}"
+        val base = z2mBase()
+        val title = Templates.fill(rule.title, topic, payload, base)
+        val message = Templates.fill(rule.message, topic, payload, base)
+        val ids = deliveries.enqueue(
+            listOf(userId).filter(deliveries::hasDevices), title, message, rule.name,
+            event = DeliveryEvent(event?.id?.toString(), topic, payloadJson(payload), (event?.at ?: now()).toString()),
+        )
+        return TestSend(title, message, ids)
     }
 
     /** Lets a paused rule send again now. */
@@ -235,6 +282,9 @@ class Rules(
         private val log = LoggerFactory.getLogger(Rules::class.java)
         private const val KEY = "rules"
         private val SERIALIZER = ListSerializer(Rule.serializer())
+
+        /** POST /api/rules/test looks at this many of the newest events on the rule's topic. */
+        const val TEST_EVENTS = 20
 
         /** A rule that would send a 31st time in 10 minutes is stopped for an hour. */
         const val NOISY_LIMIT = 30

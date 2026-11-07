@@ -78,3 +78,24 @@ data class RuleRequest(
         return copy(name = name.trim(), topic = topic.trim(), conditions = tidy)
     }
 }
+
+/** One event in a rule test. [status] is "would_send", "not_met" or "no_change"; [result] says it in words. [title] and [message] are filled in for "would_send". */
+@Serializable
+data class RuleTestEvent(
+    val id: Long,
+    val at: String,
+    val topic: String,
+    val payload: String,
+    val status: String,
+    val result: String,
+    val title: String? = null,
+    val message: String? = null,
+)
+
+/** POST /api/rules/test: the last events on the rule's topic, newest first. */
+@Serializable
+data class RuleTestResult(val events: List<RuleTestEvent>)
+
+/** POST /api/rules/test/send: the notification sent to the caller, and its deliveries. */
+@Serializable
+data class TestSend(val title: String, val message: String, val deliveryIds: List<String>)

@@ -5,7 +5,10 @@ import heating.ApiException
 import heating.HeatingApp
 import heating.actionLog
 import heating.auth.Caller
+import heating.events.EventQuery
 import heating.rules.Rule
+import heating.rules.RuleTestResult
+import heating.rules.Rules
 import heating.rules.RuleRequest
 import heating.untrusted
 import io.ktor.http.HttpStatusCode
@@ -37,6 +40,22 @@ fun Route.ruleRoutes(heating: HeatingApp) {
             rules.create(request, owner, caller.username).also { actionLog.info("rule {} added{}", untrusted(it.name), Actor.by()) }
         }
         call.respond(HttpStatusCode.Created, rule)
+    }
+
+    post("/api/rules/test") {
+        val request = call.request()
+        request.validated()
+        val recent = heating.eventLog.search(EventQuery(topic = request.topic.trim(), limit = Rules.TEST_EVENTS + 1)).events
+        call.respond(RuleTestResult(rules.preview(request, recent)))
+    }
+
+    post("/api/rules/test/send") {
+        val request = call.request()
+        request.validated()
+        val caller = call.principal<Caller>()!!
+        val userId = caller.userId ?: throw ApiException.badRequest("a test goes to a signed-in admin")
+        val latest = heating.eventLog.search(EventQuery(topic = request.topic.trim(), limit = 1)).events.firstOrNull()
+        call.respond(call.acting { rules.sendTest(request, userId, latest).also { actionLog.info("rule {} test sent{}", untrusted(request.name), Actor.by()) } })
     }
 
     get("/api/rules/{id}") {
