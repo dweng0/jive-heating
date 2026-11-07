@@ -182,7 +182,7 @@ fun prettyPayload(event: LoggedEvent): String =
     if (event.json) kotlinx.serialization.json.Json { prettyPrint = true }.encodeToString(JsonElement.serializer(), event.payload)
     else (event.payload as? JsonPrimitive)?.content ?: event.payload.toString()
 
-/** Where "Notify me when…" goes until the rule builder exists: a placeholder carrying the topic, field and value. */
+/** Where "Notify me when…" goes: the rule builder, carrying the topic, field and value. */
 fun ruleRoute(topic: String, field: String? = null, value: String? = null): String =
     "rules/new?topic=${percent(topic)}&field=${percent(field.orEmpty())}&value=${percent(value.orEmpty())}"
 

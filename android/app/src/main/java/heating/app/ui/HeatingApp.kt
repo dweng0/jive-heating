@@ -63,7 +63,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.navArgument
 import heating.app.ui.events.EventsCard
 import heating.app.ui.events.EventsScreen
-import heating.app.ui.events.RuleNewScreen
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
@@ -189,6 +188,7 @@ private fun Connected(connection: Connection, onSignOut: () -> Unit, onPasswordC
         "events" -> "Events"
         "rules" -> "Notifications"
         "rules/new?topic={topic}&field={field}&value={value}" -> "New rule"
+        "rules/edit/{id}" -> "Edit rule"
         else -> null
     }
 
@@ -365,16 +365,25 @@ private fun Connected(connection: Connection, onSignOut: () -> Unit, onPasswordC
                 if (state.admin) EventsScreen(connection.api, onNotify = { topic, field, value -> nav.navigate(heating.app.data.ruleRoute(topic, field, value)) }, onError = showError, contentPadding = padding)
             }
             composable("rules") {
-                if (state.admin) heating.app.ui.rules.RulesScreen(connection.api, onEdit = {}, onError = showError, contentPadding = padding)
+                if (state.admin) heating.app.ui.rules.RulesScreen(connection.api, onEdit = { nav.navigate("rules/edit/$it") }, onError = showError, contentPadding = padding)
             }
             composable(
                 "rules/new?topic={topic}&field={field}&value={value}",
                 arguments = listOf("topic", "field", "value").map { navArgument(it) { type = NavType.StringType; defaultValue = "" } },
             ) { e ->
                 if (state.admin) {
-                    RuleNewScreen(
-                        e.arguments?.getString("topic").orEmpty(), e.arguments?.getString("field").orEmpty(), e.arguments?.getString("value").orEmpty(),
-                        contentPadding = padding,
+                    heating.app.ui.rules.RuleFormScreen(
+                        connection.api, ruleId = null,
+                        topic = e.arguments?.getString("topic").orEmpty(), field = e.arguments?.getString("field").orEmpty(), value = e.arguments?.getString("value").orEmpty(),
+                        onDone = { nav.popBackStack() }, onError = showError, contentPadding = padding,
+                    )
+                }
+            }
+            composable("rules/edit/{id}") { e ->
+                if (state.admin) {
+                    heating.app.ui.rules.RuleFormScreen(
+                        connection.api, ruleId = e.arguments?.getString("id")!!,
+                        onDone = { nav.popBackStack() }, onError = showError, contentPadding = padding,
                     )
                 }
             }
