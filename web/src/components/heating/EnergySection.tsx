@@ -5,7 +5,6 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { NO_METER, READINGS_MISSING, SET_TARGET, gasEstimate, gasSource, targetDelta, targetProgress, type EnergyTarget, energyApi, energyPlace, formatCost, formatKwh, plugNowWarning, type DeviceEnergy, type EnergyDashboard, type RoomEnergy, type EverythingElse, type EnergyDay, type EnergyPeriod } from '@/lib/energy'
 import { IncompleteWarning } from './IncompleteWarning'
-import { GasCard } from './GasCard'
 import { cn } from '@/lib/utils'
 import { useHome } from '@/lib/home'
 
@@ -74,7 +73,7 @@ export function EnergySection() {
       {shown && (
         <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <Figure testId="energy-gas" icon={<Flame />} label="Gas" cost={formatCost(shown.gasCost, shown.currency)} detail={[formatKwh(shown.gasKwh), `${shown.boilerHours.toFixed(1)} h boiler`, gasEstimate(shown.gasKwh, shown.gasEstimatedKwh)].filter(Boolean).join(' · ')} />
+            <Figure testId="energy-gas" icon={<Flame />} label="Gas" cost={formatCost(shown.gasCost, shown.currency)} detail={`${formatKwh(shown.gasKwh)} · ${shown.boilerHours.toFixed(1)} h boiler`} chip={gasEstimate(shown.gasKwh, shown.gasEstimatedKwh)} />
             <Figure
               testId="energy-electricity"
               icon={<PlugZap />}
@@ -104,7 +103,6 @@ export function EnergySection() {
           {period !== 'today' && <DayBars days={shown.days} currency={shown.currency} dailyTarget={shown.target ? shown.target.kwh / shown.days.length : null} price={shown.electricityKwh ? (shown.electricityCost ?? 0) / shown.electricityKwh : null} />}
         </>
       )}
-      <GasCard />
     </section>
   )
 }
@@ -142,7 +140,7 @@ function TargetCard({ target, today }: { target: EnergyTarget; today: boolean })
   )
 }
 
-function Figure({ testId, icon, label, cost, detail }: { testId: string; icon: React.ReactNode; label: string; cost: string; detail: string }) {
+function Figure({ testId, icon, label, cost, detail, chip }: { testId: string; icon: React.ReactNode; label: string; cost: string; detail: string; chip?: string | null }) {
   return (
     <Card data-testid={testId}>
       <CardContent className="flex items-center gap-3 p-3 sm:p-4">
@@ -151,6 +149,7 @@ function Figure({ testId, icon, label, cost, detail }: { testId: string; icon: R
           <div className="text-xs text-muted-foreground sm:text-sm">{label}</div>
           <div className="text-xl font-bold tabular-nums">{cost}</div>
           <div className="truncate text-xs text-muted-foreground">{detail}</div>
+          {chip && <div data-testid="gas-estimate-chip" className="mt-1 inline-block rounded-full bg-heat/15 px-2 py-0.5 text-xs font-semibold text-heat-text first-letter:uppercase">{chip}</div>}
         </div>
       </CardContent>
     </Card>
@@ -229,6 +228,9 @@ function UseRow({ testId, name, detail, kwh, cost, currency, missingMinutes }: {
   )
 }
 
+/** "Sun 1" for a day's bar. */
+const dayLabel = (date: string) => new Date(`${date}T12:00:00Z`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', timeZone: 'UTC' }).replace(',', '')
+
 /** Gas estimated from boiler hours, hatched in the heat colour. */
 const HATCH = 'repeating-linear-gradient(135deg, var(--heat) 0 3px, color-mix(in srgb, var(--heat) 35%, transparent) 3px 6px)'
 
@@ -241,10 +243,13 @@ function DayBars({ days, currency, dailyTarget, price }: { days: EnergyDay[]; cu
   const targetTotal = (d: EnergyDay) => (dailyTarget != null && price != null ? d.standingCost + d.gasCost + dailyTarget * price : null)
   const max = Math.max(1, ...days.map((d) => Math.max(d.totalCost, targetTotal(d) ?? 0)))
   const pct = (pence: number | null) => `${((pence ?? 0) / max) * 100}%`
+  // A week has room for each day's name and total; a month's 30 bars do not.
+  const week = days.length <= 7
   return (
     <Card>
       <CardContent className="flex flex-col gap-3 p-4">
-        <div className="flex h-40 items-end gap-[2px]">
+        <div className="text-sm font-semibold">Each day</div>
+        <div className={cn('flex h-40 items-end', week ? 'gap-3 pt-5 sm:gap-5' : 'gap-[2px]')}>
           {days.map((d) => (
             <div
               key={d.date}
@@ -256,6 +261,11 @@ function DayBars({ days, currency, dailyTarget, price }: { days: EnergyDay[]; cu
             >
               {targetTotal(d) != null && <div data-testid="day-target" className="absolute inset-x-0 h-0.5 bg-foreground/70" style={{ bottom: pct(targetTotal(d)) }} />}
               {d.targetDeltaKwh != null && d.targetDeltaKwh > 0 && <div data-testid="day-over" className="absolute inset-x-0 -top-2 mx-auto size-1.5 rounded-full bg-amber-500" />}
+              {week && (
+                <div data-testid="day-total" className="absolute inset-x-0 text-center text-[11px] text-muted-foreground tabular-nums" style={{ bottom: `calc(${pct(d.totalCost)} + 2px)` }}>
+                  {formatCost(d.totalCost, currency)}
+                </div>
+              )}
               <div className="bg-muted-foreground/30" style={{ height: pct(d.standingCost) }} />
               <div className="bg-cool-foreground" style={{ height: pct(d.electricityCost) }} />
               <div className={cn('bg-heat', !estimatedGas(d) && 'rounded-t-sm')} style={{ height: pct(d.gasCost - estimatedGas(d)) }} />
@@ -263,6 +273,17 @@ function DayBars({ days, currency, dailyTarget, price }: { days: EnergyDay[]; cu
             </div>
           ))}
         </div>
+        {week && (
+          <div className="-mt-1 flex gap-3 sm:gap-5">
+            {days.map((d) => (
+              <div key={d.date} data-testid="day-label" className="flex-1 text-center text-xs leading-tight text-muted-foreground">
+                {dayLabel(d.date)}
+                <br />
+                <span className="text-[11px]">{estimatedGas(d) > 0 ? 'estimate' : 'meter'}</span>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
           <span className="flex items-center gap-1.5"><span className="size-3 rounded-sm bg-heat" /> {days.some((d) => estimatedGas(d) > 0) ? 'Gas, from the meter' : 'Gas'}</span>
           {days.some((d) => estimatedGas(d) > 0) && <span className="flex items-center gap-1.5"><span className="size-3 rounded-sm" style={{ background: HATCH }} /> Gas, estimated from boiler hours</span>}

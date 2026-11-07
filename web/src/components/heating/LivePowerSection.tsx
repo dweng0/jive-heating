@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { GasCard } from './GasCard'
 import { energyApi, type EnergyDashboard } from '@/lib/energy'
 import { followBusiest, NO_BUSIEST, places, totalsApi, type Busiest, type EnergyTotals, type TodayPeak } from '@/lib/energyDials'
 import { followPower, powerApi, type LivePower, type PowerBands } from '@/lib/livePower'
@@ -91,6 +92,8 @@ export function LivePowerSection() {
         admin={admin}
         counters={<TripMeters totals={totals} readings={readings} />}
       />
+
+      <GasCard />
 
       <HouseHistoryChart />
 

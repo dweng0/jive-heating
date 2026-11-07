@@ -2859,8 +2859,9 @@ Engineering rules (apply to every scenario):
             Given the meter has reported gas up to the end of 5 November
             When admin "jane" opens the Energy tab on the web app or the Android app
             Then under "Use and cost" it says "Gas is from the smart meter up to 6 Nov 00:00, estimated from the boiler's hours after."
-            And the gas figure says "estimated" when all of it is estimated and "part estimated" when some is
+            And the gas figure has a chip saying "Estimated" when all of it is estimated and "Part estimated" when some is
             And in the bar per day the estimated part of gas is hatched, with "Gas, estimated from boiler hours" in the key
+            And over a week each bar is named, such as "Sun 1" with "meter" or "estimate" under it, and has its total above it
             And with no meter readings it says "Gas is estimated from the boiler's hours."
 
         Scenario: The car dashboard shows the gas meter's latest day
@@ -2877,7 +2878,7 @@ Engineering rules (apply to every scenario):
             Then it has date "2026-11-05" (the latest whole day), kwh, cost at the gas price, currency and halfHours, each with at and kwh
             And previous and next are the nearest days either side with readings, null at either end
             And date=2026-11-04 gives that day, a day with no readings gets 404, and with no readings at all it is 404
-            And on the Energy tab of the web app and the Android app a "Gas" card charts the half-hours as bars, with
+            And on the Energy tab of the web app and the Android app a "Gas" card, right under the dials, charts the half-hours as bars, with
                 the day's kWh, cost and busiest half-hour, and buttons for the day before and the day after
 
         Scenario: The boiler's average burn rate from the meter

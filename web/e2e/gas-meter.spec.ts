@@ -88,7 +88,11 @@ test('the energy tab says where gas comes from', async ({ page }) => {
   await expect(energy.getByTestId('energy-gas')).toContainText('estimated')
   await expect(energy.getByTestId('energy-gas')).not.toContainText('part estimated')
   await energy.getByRole('button', { name: 'Week' }).click()
-  await expect(energy.getByTestId('energy-gas')).toContainText('part estimated')
+  await expect(energy.getByTestId('gas-estimate-chip')).toHaveText('part estimated')
+  // Each day of the week named, with its total.
+  await expect(energy.getByTestId('day-label').first()).toContainText('Sun 1')
+  await expect(energy.getByTestId('day-label').nth(5)).toContainText('estimate')
+  await expect(energy.getByTestId('day-total')).toHaveCount(7)
   // The estimated part of each day's gas is hatched.
   await expect(energy.locator('[data-testid=energy-day] [data-testid=gas-estimated]')).toHaveCount(2)
   await expect(energy).toContainText('Gas, estimated from boiler hours')
@@ -128,6 +132,11 @@ test('a day of gas, half-hour by half-hour', async ({ page }) => {
   await page.goto('/energy')
   const card = page.getByTestId('gas-card')
   await expect(card.getByTestId('gas-card-date')).toHaveText('Thu 5 Nov')
+  // Right under the dials, above the history chart.
+  const dials = await page.getByTestId('energy-dials').boundingBox()
+  const gasBox = await card.boundingBox()
+  expect(gasBox!.y).toBeGreaterThan(dials!.y + dials!.height - 1)
+  expect(gasBox!.y).toBeLessThan((await page.getByTestId('energy').boundingBox())!.y)
   await expect(card.getByTestId('gas-half-hour')).toHaveCount(48)
   await expect(card.getByTestId('gas-card-figures')).toContainText('53.5 kWh · £3.69')
   await expect(card.getByTestId('gas-card-figures')).toContainText('busiest 18:30, 6.5 kWh')
@@ -162,4 +171,14 @@ test('members do not see the burn rate, and no button when it matches', async ({
   await page.reload()
   await expect(page.getByTestId('boiler-measured')).toContainText('12.1 kW')
   await expect(page.getByTestId('boiler-measured').getByRole('button')).toHaveCount(0)
+})
+
+test('screenshot for review', async ({ page }) => {
+  test.skip(!process.env.SHOT, 'manual')
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await serve(page, { gas: { date: '2026-11-05', kwh: 67.95, cost: 469.26, previousKwh: 63.8 } })
+  await page.goto('/energy')
+  await page.getByTestId('energy').getByRole('button', { name: 'Week' }).click()
+  await page.getByTestId('gas-card').waitFor()
+  await page.screenshot({ path: process.env.SHOT!, fullPage: true })
 })
