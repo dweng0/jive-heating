@@ -32,6 +32,10 @@ data class Config(
     /** Bright app (Glowmarkt) sign-in for the smart gas meter; none keeps gas an estimate from boiler hours. */
     val brightUsername: String? = null,
     val brightPassword: String? = null,
+    /** How often queued MQTT events are written to the event log; 0 writes only when asked (tests). */
+    val eventFlushMillis: Long = 500,
+    /** The event log is trimmed to this many bytes, oldest first. */
+    val eventMaxBytes: Long = heating.events.EventRecorder.MAX_BYTES,
 ) {
     companion object {
         fun fromEnv(env: Map<String, String> = System.getenv()): Config {

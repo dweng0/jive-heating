@@ -12,7 +12,7 @@ import kotlinx.serialization.json.jsonObject
 class InMemoryMqttBus : MqttBus {
     data class Message(val topic: String, val payload: String, val retained: Boolean)
 
-    private val subscriptions = mutableListOf<Pair<String, (String, String) -> Unit>>()
+    private val subscriptions = mutableListOf<Pair<String, (String, String, Boolean) -> Unit>>()
     private val retainedMessages = linkedMapOf<String, String>()
     private val _published = mutableListOf<Message>()
 
@@ -24,12 +24,15 @@ class InMemoryMqttBus : MqttBus {
         dispatch(topic, payload, retained)
     }
 
-    override fun subscribe(filter: String, handler: (topic: String, payload: String) -> Unit) {
+    override fun subscribe(filter: String, handler: (topic: String, payload: String) -> Unit) =
+        subscribeWithRetained(filter) { topic, payload, _ -> handler(topic, payload) }
+
+    override fun subscribeWithRetained(filter: String, handler: (topic: String, payload: String, retained: Boolean) -> Unit) {
         val replay = synchronized(this) {
             subscriptions += filter to handler
             retainedMessages.filterKeys { TopicFilter.matches(filter, it) }.toList()
         }
-        replay.forEach { (topic, payload) -> handler(topic, payload) }
+        replay.forEach { (topic, payload) -> handler(topic, payload, true) }
     }
 
     /** Simulate a message arriving from another client (e.g. Zigbee2MQTT). */
@@ -46,6 +49,6 @@ class InMemoryMqttBus : MqttBus {
             if (retained) retainedMessages[topic] = payload
             subscriptions.filter { TopicFilter.matches(it.first, topic) }.map { it.second }
         }
-        handlers.forEach { it(topic, payload) }
+        handlers.forEach { it(topic, payload, retained) }
     }
 }

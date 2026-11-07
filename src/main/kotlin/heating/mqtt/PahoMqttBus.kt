@@ -27,12 +27,13 @@ class PahoMqttBus(
     private val log = LoggerFactory.getLogger(PahoMqttBus::class.java)
     private val client = MqttClient(url, clientId, MemoryPersistence())
     private val subscriptions = CopyOnWriteArrayList<Pair<String, (String, String) -> Unit>>()
+    private val retainedSubscriptions = CopyOnWriteArrayList<Pair<String, (String, String, Boolean) -> Unit>>()
     private val handlers = Executors.newSingleThreadExecutor { Thread(it, "mqtt-handlers").apply { isDaemon = true } }
 
     init {
         client.setCallback(object : MqttCallbackExtended {
             override fun connectComplete(reconnect: Boolean, serverURI: String) {
-                if (reconnect) subscriptions.map { it.first }.distinct().forEach { client.subscribe(it, 1) }
+                if (reconnect) (subscriptions.map { it.first } + retainedSubscriptions.map { it.first }).distinct().forEach { client.subscribe(it, 1) }
                 log.info("MQTT connected to {} (reconnect={})", serverURI, reconnect)
             }
 
@@ -40,7 +41,12 @@ class PahoMqttBus(
 
             override fun messageArrived(topic: String, message: MqttMessage) {
                 val payload = String(message.payload, Charsets.UTF_8)
+                val retained = message.isRetained
                 handlers.execute {
+                    retainedSubscriptions.filter { TopicFilter.matches(it.first, topic) }.forEach {
+                        runCatching { it.second(topic, payload, retained) }
+                            .onFailure { e -> log.error("handler failed for {}", topic, e) }
+                    }
                     subscriptions.filter { TopicFilter.matches(it.first, topic) }.forEach {
                         runCatching { it.second(topic, payload) }
                             .onFailure { e -> log.error("handler failed for {}", topic, e) }
@@ -59,6 +65,11 @@ class PahoMqttBus(
 
     override fun subscribe(filter: String, handler: (topic: String, payload: String) -> Unit) {
         subscriptions += filter to handler
+        client.subscribe(filter, 1)
+    }
+
+    override fun subscribeWithRetained(filter: String, handler: (topic: String, payload: String, retained: Boolean) -> Unit) {
+        retainedSubscriptions += filter to handler
         client.subscribe(filter, 1)
     }
 

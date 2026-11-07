@@ -9,6 +9,10 @@ package heating.mqtt
 interface MqttBus {
     fun publish(topic: String, payload: String, retained: Boolean = false)
     fun subscribe(filter: String, handler: (topic: String, payload: String) -> Unit)
+
+    /** Like [subscribe], but also told whether each message was retained (a retained message replayed on connect, or live). */
+    fun subscribeWithRetained(filter: String, handler: (topic: String, payload: String, retained: Boolean) -> Unit) =
+        subscribe(filter) { topic, payload -> handler(topic, payload, false) }
 }
 
 /** MQTT topic filter matching with `+` (one level) and `#` (rest) wildcards. */
