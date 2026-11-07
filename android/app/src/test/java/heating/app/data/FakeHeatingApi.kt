@@ -161,6 +161,8 @@ class FakeHeatingApi : HeatingApi {
     override suspend fun ruleHistory(id: String, limit: Int): List<RuleHistoryEntry> { call("ruleHistory $id $limit"); return historyFor[id].orEmpty().take(limit) }
     val testedRules = mutableListOf<RuleRequest>()
     override suspend fun testRule(request: RuleRequest): RuleTestResult { call("testRule ${request.name}"); testedRules += request; return testResult }
+    var testSent = RuleTestSent()
+    override suspend fun sendTestRule(request: RuleRequest): RuleTestSent { call("sendTestRule ${request.name}"); return testSent }
     var setupStatus = SetupStatus()
     var broker: BrokerView? = null
     var brokerTest = BrokerTestResult(ok = true)

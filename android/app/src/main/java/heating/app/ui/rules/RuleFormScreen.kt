@@ -14,6 +14,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -43,6 +44,7 @@ import heating.app.data.seenFields
 import heating.app.data.draftFromEvent
 import heating.app.data.friendlyError
 import heating.app.data.previewLabel
+import heating.app.data.testSentLabel
 import heating.app.data.toRequest
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -70,6 +72,8 @@ fun RuleFormScreen(
     var request by remember { mutableStateOf<RuleRequest?>(null) }
     var preview by remember { mutableStateOf<List<RuleTestEvent>>(emptyList()) }
     var saving by remember { mutableStateOf(false) }
+    var sending by remember { mutableStateOf(false) }
+    var sentText by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(ruleId) {
         runCatching {
@@ -146,6 +150,20 @@ fun RuleFormScreen(
                 }
             }
         }
+
+        OutlinedButton(
+            onClick = {
+                sending = true
+                sentText = null
+                scope.launch {
+                    runCatching { api.sendTestRule(r) }.onSuccess { sentText = testSentLabel(it) }.onFailure { onError(friendlyError(it)) }
+                    sending = false
+                }
+            },
+            enabled = !sending && r.topic.isNotBlank(),
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text(if (sending) "Sending…" else "Send me a test") }
+        sentText?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
 
         Button(
             onClick = {

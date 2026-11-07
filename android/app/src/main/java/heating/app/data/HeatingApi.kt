@@ -144,6 +144,8 @@ interface HeatingApi {
     suspend fun resumeRule(id: String): Rule
     suspend fun ruleHistory(id: String, limit: Int = 50): List<RuleHistoryEntry>
     suspend fun testRule(request: RuleRequest): RuleTestResult
+    /** Sends [request]'s notification, filled from the topic's latest event, to the signed-in admin only. */
+    suspend fun sendTestRule(request: RuleRequest): RuleTestSent
 
     /** Connection setup (admins): broker and Zigbee2MQTT. */
     suspend fun setupStatus(): SetupStatus
@@ -474,6 +476,11 @@ class KtorHeatingApi(
         client.get("api/rules/${id.encodeURLPathPart()}/history") { parameter("limit", limit) }.body()
 
     override suspend fun testRule(request: RuleRequest): RuleTestResult = client.post("api/rules/test") {
+        contentType(ContentType.Application.Json)
+        setBody(request)
+    }.body()
+
+    override suspend fun sendTestRule(request: RuleRequest): RuleTestSent = client.post("api/rules/test/send") {
         contentType(ContentType.Application.Json)
         setBody(request)
     }.body()

@@ -52,3 +52,7 @@ fun conditionText(c: RuleCondition): String {
     val v = c.value as? JsonPrimitive
     return if (c.operator == "exists" || v == null) "${c.field} ${c.operator}" else "${c.field} ${c.operator} ${v.content}"
 }
+
+/** What a "Send me a test" did: the notification sent, and whether it was delivered to the admin who asked. */
+fun testSentLabel(sent: RuleTestSent): String =
+    (if (sent.deliveryIds.isEmpty()) "Nothing was delivered" else "Sent to you") + ": ${sent.title} — ${sent.message}"

@@ -50,4 +50,15 @@ class RulesApiTest {
         assertEquals("d1", history.single().deliveryIds.single())
         assertEquals("api/rules/r1/history?limit=5", path(requests.last()))
     }
+
+    // BDD: Rules are managed in the app
+    @Test
+    fun `a test of a rule is sent to the admin and says what was sent`() = runTest {
+        val rule = api("[$ruleJson]").rules().single()
+        val sent = api("""{"title":"front_door","message":"front_door: contact is false","deliveryIds":["d9"]}""").sendTestRule(rule.toRequest())
+        assertEquals(RuleTestSent("front_door", "front_door: contact is false", listOf("d9")), sent)
+        assertEquals(HttpMethod.Post, requests.last().method)
+        assertEquals("api/rules/test/send", path(requests.last()))
+        assertTrue((requests.last().body as TextContent).text.contains(""""topic":"z2m/front_door""""))
+    }
 }

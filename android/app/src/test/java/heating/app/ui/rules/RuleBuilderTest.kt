@@ -4,6 +4,8 @@ import heating.app.data.FakeHeatingApi
 import heating.app.data.RuleCondition
 import heating.app.data.RuleTestEvent
 import heating.app.data.RuleTestResult
+import heating.app.data.RuleTestSent
+import heating.app.data.testSentLabel
 import heating.app.data.TRIGGER_CHANGES_TO
 import heating.app.data.draftFromEvent
 import heating.app.data.previewLabel
@@ -66,5 +68,12 @@ class RuleBuilderTest {
     @Test
     fun `notify me when opens the builder with the topic and field`() {
         assertEquals("rules/new?topic=z2m%2Ffront_door&field=contact&value=false", ruleRoute("z2m/front_door", "contact", "false"))
+    }
+
+    // BDD: Rules are managed in the app
+    @Test
+    fun `a test send says what was sent and that it went only to you`() {
+        assertEquals("Sent to you: front_door — front_door: contact is false", testSentLabel(RuleTestSent("front_door", "front_door: contact is false", listOf("d1"))))
+        assertEquals("Nothing was delivered: front_door — m", testSentLabel(RuleTestSent("front_door", "m", emptyList())))
     }
 }
