@@ -186,4 +186,21 @@ class HeatingApiTest {
         assertEquals(HttpMethod.Delete, requests.single().method)
         assertEquals("/api/house/boost", requests.single().url.encodedPath)
     }
+
+    // BDD: Events are sorted and paged
+    @Test
+    fun `events are fetched a page at a time with the chips as query parameters`() = runTest {
+        val api = api { respond("""{"events":[{"id":3,"at":"2026-11-07T12:00:00Z","topic":"z2m/front_door","payload":{"contact":false},"json":true,"retained":false,"truncated":false}],"next":"abc","total":3000}""", HttpStatusCode.OK, json) }
+
+        val page = api.events(listOf("topic" to "z2m/front_door", "sort" to "topic asc", "limit" to "100", "cursor" to "x"))
+
+        assertEquals(3000, page.total)
+        assertEquals("abc", page.next)
+        assertEquals("z2m/front_door", page.events.single().topic)
+        val query = requests.single().url.parameters
+        assertEquals("z2m/front_door", query["topic"])
+        assertEquals("topic asc", query["sort"])
+        assertEquals("100", query["limit"])
+        assertEquals("x", query["cursor"])
+    }
 }

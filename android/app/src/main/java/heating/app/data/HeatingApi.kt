@@ -131,6 +131,11 @@ interface HeatingApi {
     suspend fun retryDelivery(id: String)
     suspend fun retryAllDeliveries(): Int
     suspend fun clearDelivery(id: String)
+
+    /** The event log (admins): [params] are GET /api/events query parameters, see [eventParams]. */
+    suspend fun events(params: List<Pair<String, String>>): EventPage
+    suspend fun eventTopics(): List<EventTopic>
+
     /** Connection setup (admins): broker and Zigbee2MQTT. */
     suspend fun setupStatus(): SetupStatus
     suspend fun savedBroker(): BrokerView?
@@ -431,6 +436,11 @@ class KtorHeatingApi(
     override suspend fun clearDelivery(id: String) {
         client.delete("api/deliveries/${id.encodeURLPathPart()}")
     }
+
+    override suspend fun events(params: List<Pair<String, String>>): EventPage =
+        client.get("api/events") { params.forEach { (k, v) -> parameter(k, v) } }.body()
+
+    override suspend fun eventTopics(): List<EventTopic> = client.get("api/events/topics").body()
 
     override suspend fun setupStatus(): SetupStatus = client.get("api/setup/status").body()
 

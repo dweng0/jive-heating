@@ -58,7 +58,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
+import androidx.navigation.navArgument
+import heating.app.ui.events.EventsCard
+import heating.app.ui.events.EventsScreen
+import heating.app.ui.events.RuleNewScreen
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
@@ -181,6 +186,8 @@ private fun Connected(connection: Connection, onSignOut: () -> Unit, onPasswordC
         "account" -> "Account"
         "users" -> "People"
         "connection" -> "Connection"
+        "events" -> "Events"
+        "rules/new?topic={topic}&field={field}&value={value}" -> "New rule"
         else -> null
     }
 
@@ -344,12 +351,27 @@ private fun Connected(connection: Connection, onSignOut: () -> Unit, onPasswordC
                         EnergyPricesCard(energyState.settings, energy::savePrices)
                         IgnoredDevicesCard(energyState.ignored, energy::showAgain)
                         heating.app.ui.account.FailedDeliveries(connection.api, onError = showError)
+                        EventsCard(onOpen = { nav.navigate("events") })
                         ConnectionCard(onOpen = { nav.navigate("connection") })
                     }) else null,
                 )
             }
             composable("connection") {
                 if (state.admin) ConnectionSetupScreen(connection.api, onFinish = { nav.popBackStack() }, contentPadding = padding)
+            }
+            composable("events") {
+                if (state.admin) EventsScreen(connection.api, onNotify = { topic, field, value -> nav.navigate(heating.app.data.ruleRoute(topic, field, value)) }, onError = showError, contentPadding = padding)
+            }
+            composable(
+                "rules/new?topic={topic}&field={field}&value={value}",
+                arguments = listOf("topic", "field", "value").map { navArgument(it) { type = NavType.StringType; defaultValue = "" } },
+            ) { e ->
+                if (state.admin) {
+                    RuleNewScreen(
+                        e.arguments?.getString("topic").orEmpty(), e.arguments?.getString("field").orEmpty(), e.arguments?.getString("value").orEmpty(),
+                        contentPadding = padding,
+                    )
+                }
             }
             composable("users") {
                 UsersScreen(connection.account, state.rooms, onError = showError, contentPadding = padding)

@@ -92,6 +92,46 @@ class FakeHeatingApi : HeatingApi {
         return failed
     }
     override suspend fun clearDelivery(id: String) { call("clearDelivery $id"); deliveryList.removeAll { it.id == id } }
+    /** The event log, oldest first. [events] filters, sorts and pages it like the service (cursor = offset). */
+    val eventLog = mutableListOf<LoggedEvent>()
+    override suspend fun events(params: List<Pair<String, String>>): EventPage {
+        call("events ${params.joinToString("&") { "${it.first}=${it.second}" }}")
+        val p = params.toMap()
+        var rows = eventLog.toList()
+        p["topic"]?.let { t -> rows = rows.filter { topicMatches(t, it.topic) } }
+        p["device"]?.let { d -> rows = rows.filter { it.topic == "zigbee2mqtt/$d" || it.topic.startsWith("zigbee2mqtt/$d/") } }
+        p["field"]?.let { f ->
+            rows = rows.filter { e ->
+                val v = payloadFields(e.payload).firstOrNull { it.path == f }?.value
+                e.json && v != null && (p["value"] == null || (valueText(v) == p["value"]) != (p["op"] == "ne"))
+            }
+        }
+        p["from"]?.let { from -> rows = rows.filter { it.at >= from } }
+        p["retained"]?.let { r -> rows = rows.filter { it.retained == r.toBoolean() } }
+        p["text"]?.let { t -> rows = rows.filter { (it.topic + it.payload).contains(t, ignoreCase = true) } }
+        val (by, dir) = (p["sort"] ?: "at desc").split(" ")
+        rows = if (by == "topic") rows.sortedWith(compareBy({ it.topic }, { it.id })) else rows.sortedWith(compareBy({ it.at }, { it.id }))
+        if (dir != "asc") rows = rows.reversed()
+        val limit = p["limit"]?.toInt() ?: 100
+        val start = p["cursor"]?.toInt() ?: 0
+        return EventPage(rows.drop(start).take(limit), if (start + limit < rows.size) "${start + limit}" else null, rows.size.toLong())
+    }
+    private fun topicMatches(filter: String, topic: String): Boolean {
+        val f = filter.split('/')
+        val t = topic.split('/')
+        f.forEachIndexed { i, part ->
+            if (part == "#") return true
+            if (i >= t.size || (part != "+" && part != t[i])) return false
+        }
+        return f.size == t.size
+    }
+    override suspend fun eventTopics(): List<EventTopic> {
+        call("eventTopics")
+        return eventLog.groupBy { it.topic }.toSortedMap().map { (topic, list) ->
+            val last = list.maxByOrNull { it.id }!!
+            EventTopic(topic, list.size.toLong(), last.at, last.payload, last.json)
+        }
+    }
     var setupStatus = SetupStatus()
     var broker: BrokerView? = null
     var brokerTest = BrokerTestResult(ok = true)
