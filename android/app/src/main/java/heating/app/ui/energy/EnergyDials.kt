@@ -266,7 +266,12 @@ private fun FuelGauge(today: EnergyDashboard?, dark: Boolean, onSetTarget: (() -
     val track = MaterialTheme.colorScheme.surfaceVariant
     val ink = MaterialTheme.colorScheme.onSurface
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    val high = zoneColor(PowerZone.HIGH, dark)
+    val level = when {
+        f == null -> track
+        f.low -> zoneColor(PowerZone.HIGH, dark)
+        f.left < 0.5 -> zoneColor(PowerZone.MID, dark)
+        else -> zoneColor(PowerZone.LOW, dark)
+    }
     val density = LocalDensity.current
     val letters = remember(muted, density) {
         android.graphics.Paint().apply {
@@ -295,8 +300,10 @@ private fun FuelGauge(today: EnergyDashboard?, dark: Boolean, onSetTarget: (() -
             val thick = size.width * 0.055f
             arc(track, 180f, 360f, r, thick, StrokeCap.Round, c)
             if (f != null) {
-                arc(high.copy(alpha = 0.7f), 180f, 180f + 36f, r, thick, StrokeCap.Round, c)
-                drawLine(ink, point(angle(f.pace.toFloat()), r * 0.82f, c), point(angle(f.pace.toFloat()), r * 1.18f, c), strokeWidth = size.width * 0.02f, cap = StrokeCap.Round)
+                // The fuel left: from E to the needle, green when plenty, amber under half, red when low (as on the web).
+                if (left > 0.005f) arc(level, 180f, angle(left), r, thick, StrokeCap.Round, c)
+                // Where the needle should be by now: a small muted notch outside the arc.
+                drawLine(muted, point(angle(f.pace.toFloat()), r * 1.12f, c), point(angle(f.pace.toFloat()), r * 1.27f, c), strokeWidth = size.width * 0.012f, cap = StrokeCap.Round)
             }
             drawContext.canvas.nativeCanvas.drawText("E", c.x - r, c.y + letters.textSize * 1.3f, letters)
             drawContext.canvas.nativeCanvas.drawText("F", c.x + r, c.y + letters.textSize * 1.3f, letters)
