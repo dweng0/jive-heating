@@ -230,4 +230,44 @@ class EventLogTest {
             assertEquals(emptyList(), t.topicsLogged())
         }
     }
+
+    // BDD: Topics can be left out of the event log
+    @Test
+    fun `excluded topics are not logged but still reach other subscribers`() {
+        val t = service()
+        val heard = mutableListOf<String>()
+        t.bus.subscribe("#") { topic, _ -> heard += topic } // stands in for a notification rule
+        t.api {
+            val response = putSettings("""{"excluded":["z2m/bridge/logging","homeassistant/#"]}""")
+            assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
+            repeat(3) { t.bus.receive("z2m/bridge/logging", """{"level":"info"}""") }
+            t.bus.receive("homeassistant/sensor/a/config", "{}")
+            t.bus.receive("homeassistant/sensor/b/config", "{}")
+            t.bus.receive("z2m/bridge/state", "online")
+            val logged = getJson("/api/events")["events"]!!.jsonArray.map { it.jsonObject["topic"]!!.jsonPrimitive.content }
+            assertTrue("z2m/bridge/state" in logged)
+            assertTrue(logged.none { it == "z2m/bridge/logging" || it.startsWith("homeassistant/") }, logged.toString())
+            assertEquals(3, heard.count { it == "z2m/bridge/logging" })
+            assertEquals(2, heard.count { it.startsWith("homeassistant/") })
+
+            suspend fun rates() = getJson("/api/events/settings")["excluded"]!!.jsonArray.associate {
+                it.jsonObject["topic"]!!.jsonPrimitive.content to it.jsonObject["perMinute"]!!.jsonPrimitive.int
+            }
+            assertEquals(mapOf("z2m/bridge/logging" to 3, "homeassistant/#" to 2), rates())
+            t.clock.advance(Duration.ofSeconds(61))
+            assertEquals(mapOf("z2m/bridge/logging" to 0, "homeassistant/#" to 0), rates())
+
+            // Taking a topic off the list logs it again; bad filters and members are refused.
+            putSettings("""{"excluded":["homeassistant/#"]}""")
+            t.bus.receive("z2m/bridge/logging", "{}")
+            assertTrue("z2m/bridge/logging" in getJson("/api/events")["events"]!!.jsonArray.map { it.jsonObject["topic"]!!.jsonPrimitive.content })
+            listOf("\"a/#/b\"", "\"\"", "\"a/b+\"").forEach {
+                assertEquals(HttpStatusCode.BadRequest, putSettings("""{"excluded":[$it]}""").status, it)
+            }
+            assertEquals(HttpStatusCode.Forbidden, putSettings("""{"excluded":[]}""", memberToken()).status)
+        }
+        // Kept across a restart.
+        t.restart()
+        t.api { assertEquals(listOf("homeassistant/#"), getJson("/api/events/settings")["excluded"]!!.jsonArray.map { it.jsonObject["topic"]!!.jsonPrimitive.content }) }
+    }
 }
