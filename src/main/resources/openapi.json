@@ -776,6 +776,37 @@
           "at": { "type": "string", "format": "date-time", "description": "The service's time these totals were worked out" }
         }
       },
+      "EnergyFlow": {
+        "description": "Where the house's energy went over a dashboard period (GET /api/energy/flow?period=today|yesterday|week|month), for a Sankey diagram.",
+        "type": "object", "required": ["currency", "from", "to", "nodes", "links"],
+        "properties": {
+          "currency": { "type": "string" },
+          "from": { "type": "string", "format": "date-time" },
+          "to": { "type": "string", "format": "date-time" },
+          "nodes": { "type": "array", "items": { "$ref": "#/components/schemas/FlowNode" } },
+          "links": { "type": "array", "items": { "$ref": "#/components/schemas/FlowLink" } }
+        }
+      },
+      "FlowNode": {
+        "type": "object", "required": ["id", "name", "kind", "kwh", "cost"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "kind": { "type": "string", "enum": ["source", "place", "device"] },
+          "kwh": { "type": "number" },
+          "cost": { "type": "number", "description": "Minor units at today's price" },
+          "estimated": { "type": "boolean" }
+        }
+      },
+      "FlowLink": {
+        "type": "object", "required": ["from", "to", "kwh"],
+        "properties": {
+          "from": { "type": "string", "description": "A node id" },
+          "to": { "type": "string", "description": "A node id" },
+          "kwh": { "type": "number" },
+          "estimated": { "type": "boolean", "description": "Shared out (gas between rooms by hours calling), not measured" }
+        }
+      },
       "PowerSummary": {
         "description": "What the dials need besides the live readings (GET /api/power).",
         "type": "object", "required": ["recent"],

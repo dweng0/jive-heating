@@ -124,6 +124,7 @@ class HeatingApp(
     /** Keeps the prices at the Bright tariff when asked to; null without a Bright account. */
     val priceSync = gasMeter?.let { heating.gas.PriceSync(it, energySettings, activity, gasExecutor, clock::instant) }
     val energyDashboards = heating.energy.EnergyDashboards(history, energyHistory, energySettings, monitoredMeters, meters, rooms::list, ::now, energyAreas::list, gasReadings, gasDays::measuredBoilerKw)
+    val energyFlow = heating.energy.EnergyFlowReport(energyDashboards, history, rooms::list, meterLabels::of)
     val roomPlugs = heating.energy.RoomPlugsReport(energyHistory, energySettings, monitoredMeters, meters, ::now)
     val roomEnergyHistory = heating.energy.RoomEnergyHistoryReport(energyHistory, config.timezone, clock)
     val houseHistory = heating.energy.HouseHistoryReport(energyHistory, energySettings, config.timezone, clock)
