@@ -2790,6 +2790,30 @@ Engineering rules (apply to every scenario):
             And it never rolls back: when today's recorded figure arrives it carries on from whichever is higher
             And it starts again from 0 at midnight
 
+        Scenario: Energy totals say which household day they are for
+            Given the household's timezone is Europe/London and it is 23:58 on 10 November there
+            When someone with energy access sends GET /api/energy/totals
+            Then it has day "2026-11-10" and dayEndsAt "2026-11-11T00:00:00Z", the next midnight in the household's timezone
+            And at 00:00:30 it has day "2026-11-11" and today 0 kWh, whatever timezone the server's own clock is set to
+            And on a clock-change day dayEndsAt is still the next local midnight, 23 or 25 hours after the one before
+
+        Scenario: The usage counter starts again at the household's midnight
+            Given the dashboard has been open all evening and the usage counter reads "19.412" kWh at 23:59
+            When the household's midnight passes
+            Then the counter reads "0.000" kWh and rolls on from there, without waiting for the next poll or a refresh
+            And a recorded figure for the new day is taken even though it is lower than the counter's last figure
+            And yesterday's figure is never carried into the new day: totals for a day the counter has left are ignored
+            And the odometer's Day, Week, Month and Year do not count yesterday's roll a second time
+            And the day is the household's, from the totals' day and dayEndsAt, not the phone's or browser's own clock or timezone
+
+        Scenario: The dashboard reloads its day figures at the household's midnight
+            Given the dashboard is open at 23:59, on the web app or on Android, such as a wall-mounted tablet left on overnight
+            When the household's midnight passes
+            Then within a minute it fetches the totals, today's dashboard and today's peak again
+            And the usage counter, today's peak, the fuel gauge, today vs yesterday and the odometer all show the new day without a refresh
+            And a device whose clock is wrong or set to another timezone still turns over at the household's midnight
+            And a device that slept or lost its connection over midnight fetches them again as soon as it is back
+
         Scenario: The odometer totals the day, week, month or year
             Given the house has used 8.2 kWh today, 51.0 kWh since Monday, 190.0 kWh since the 1st and 2100.0 kWh since 1 January
             When someone with energy access sends GET /api/energy/totals
