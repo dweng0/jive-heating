@@ -2897,10 +2897,10 @@ Engineering rules (apply to every scenario):
             And period is today, yesterday, week or month like the dashboard, and anything else gets 400
 
         Scenario: Heating's gas is split between the rooms that called for it
-            Given today the boiler burned 22.1 kWh of gas, while "Lounge" was below its target for 3 of those hours and
+            Given today the boiler burned 20.0 kWh of gas, while "Lounge" was below its target for 3 of those hours and
                 "Bedroom" for 1
             When someone with energy access sends GET /api/energy/flow?period=today
-            Then "Heating" links to "Lounge" 16.58 kWh and "Bedroom" 5.52 kWh, its gas shared by each room's hours calling for heat
+            Then "Heating" links to "Lounge" 15.0 kWh and "Bedroom" 5.0 kWh, its gas shared by each room's hours calling for heat
             And those links have estimated true, as the meter does not know which room used the gas
             And burning time when no room was below its target goes to "Heating, no room calling"
 
