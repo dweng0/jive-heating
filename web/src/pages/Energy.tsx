@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Settings2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { EnergySection } from '@/components/heating/EnergySection'
+import { EnergyFlowCard } from '@/components/heating/EnergyFlowCard'
 import { LivePowerSection } from '@/components/heating/LivePowerSection'
 import { energyPlace } from '@/lib/energy'
 import { useHome } from '@/lib/home'
@@ -43,6 +44,7 @@ export function EnergyPage() {
       </div>
       <LivePowerSection />
       <EnergySection />
+      <EnergyFlowCard />
     </div>
   )
 }
