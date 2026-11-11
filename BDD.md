@@ -1514,6 +1514,17 @@ Engineering rules (apply to every scenario):
             And saving a change sends PUT /api/settings/energy and shows the new prices
             And members do not see the section
 
+        Scenario: Prices can follow the Bright tariff
+            Given BRIGHT_USERNAME and BRIGHT_PASSWORD are set and Bright's tariff is gas 6.906p per kWh and 27.324p a day,
+                electricity 24.04p per kWh and 41.19p a day
+            When an admin turns on "Sync prices with Bright" in the Energy prices section on the web app or the Android app
+            Then PUT /api/settings/energy has syncPricesWithBright true and the four prices become Bright's at once
+            And they are fetched again every day, and a price that changes is logged in the activity feed
+            And while it is on the price fields say "From Bright" and cannot be edited; turning it off keeps the last prices to edit
+            And a fetch that fails keeps the prices as they are and is tried again the next day
+            And without BRIGHT_USERNAME and BRIGHT_PASSWORD the switch is not offered, and syncPricesWithBright true gets 400
+            And currency, boilerAverageKw, electricityMeter and dailyKwhTarget are never changed by it
+
         Scenario: Money is shown in the household's currency
             Given energy settings have currency "GBP" (the default), or an admin sets another such as "EUR"
             When any cost is shown on the web app or the Android app (Energy tab, devices, rooms, plugs)
@@ -2784,8 +2795,8 @@ Engineering rules (apply to every scenario):
             When someone with energy access watches the dashboard for a minute
             Then the counter labelled "Usage today", like a car's trip meter, rolls up from "8.200" kWh by about 0.020 kWh,
                 three decimals so it is seen to move, with today's cost under it
-            And tapping it swaps it to "Cost today" in pounds to five decimals, such as "£2.21400", rolling up at the price
-                per kWh, and tapping again swaps back; the choice is remembered
+            And a "£" switch beside its label swaps it to "Cost today" in pounds to five decimals, such as "£2.21400", rolling
+                up at the price per kWh, and "kWh" swaps back; the choice is remembered
             And its wheels are near square-cornered, in a plain monospaced face
             And it never rolls back: when today's recorded figure arrives it carries on from whichever is higher
             And it starts again from 0 at midnight
@@ -2818,7 +2829,17 @@ Engineering rules (apply to every scenario):
             Given the house has used 8.2 kWh today, 51.0 kWh since Monday, 190.0 kWh since the 1st and 2100.0 kWh since 1 January
             When someone with energy access sends GET /api/energy/totals
             Then it has today, week, month and year, each with kwh and cost at today's price, and the electricity price per kWh
-            And the dashboard's odometer shows one of them with its cost, chosen with Day, Week, Month and Year, and remembers the choice
+            And the dashboard's usage counter shows any one of them (see "The usage counter shows the day, week, month or year")
+
+        Scenario: The usage counter shows the day, week, month or year
+            Given the house has used 8.2 kWh today, 51.0 kWh since Monday, 190.0 kWh since the 1st and 2100.0 kWh since 1 January
+            When someone with energy access taps the usage counter on the web app or the Android app
+            Then "Usage today" becomes "Usage this week" showing 51.0 kWh, and further taps give "Usage this month", "Usage this year"
+                and "Usage today" again
+            And whichever it shows rolls on at the house's power like today's, with its cost under it, or in pounds with the "£" switch
+            And the choice is remembered, and the period starts again from 0 at the household's midnight, Monday, the 1st or 1 January
+            And there is no separate odometer: its place on the dashboard is left free for what comes next, such as solar
+            And "Today vs yesterday" still compares today, whichever period the counter shows
 
         Scenario: Today is compared with yesterday at the same time
             Given at 18:00 the house has used 8.2 kWh today and had used 7.0 kWh by 18:00 yesterday
@@ -2861,8 +2882,9 @@ Engineering rules (apply to every scenario):
         So that the heating's cost is real, not an estimate from boiler hours
 
         Gas comes half-hourly from the smart meter through the Bright app's Glowmarkt API, signed in with
-        BRIGHT_USERNAME and BRIGHT_PASSWORD. It arrives about a day late. Without those settings, and for the time
-        the meter has not reported yet, gas stays the estimate: boiler hours times boilerAverageKw.
+        BRIGHT_USERNAME and BRIGHT_PASSWORD. It arrives one to two days late. Without those settings, and for the time
+        the meter has not reported yet, gas stays the estimate: boiler hours times the boiler's burn rate, the meter's
+        measuredBoilerKw where there is one, else boilerAverageKw.
 
         Scenario: Gas readings are fetched from the smart meter
             Given BRIGHT_USERNAME and BRIGHT_PASSWORD are set and the meter has half-hourly gas readings from 31 October to the half-hour starting 23:30 on 5 November
@@ -2875,7 +2897,7 @@ Engineering rules (apply to every scenario):
             Given the meter recorded 52.4 kWh of gas on 2 November and has reported up to the end of 5 November
             When an admin sends GET /api/dashboard?period=week on 7 November
             Then 2 November's gasKwh is 52.4 with gasEstimatedKwh 0, costed at the gas price
-            And 6 and 7 November's gas is boiler hours times boilerAverageKw, all of it gasEstimatedKwh
+            And 6 and 7 November's gas is boiler hours times the boiler's burn rate, all of it gasEstimatedKwh
             And a day the meter reported only part of is the meter's kWh plus the estimate for the rest of it
             And gasMeteredTo is the end of the last half-hour reported, and null with no meter readings
 
@@ -2893,7 +2915,7 @@ Engineering rules (apply to every scenario):
             When someone with energy access sends GET /api/energy/totals
             Then gas has date "2026-11-05", kwh 68.0, cost at the gas price and previousKwh 63.8
             And gas is null until the meter has reported a whole day, and previousKwh is null with no readings the day before
-            And next to the odometer on the web app and the Android app a counter labelled "GAS · THU 5 NOV" shows "068.0"
+            And next to the usage counter on the web app and the Android app a counter labelled "GAS · THU 5 NOV" shows "068.0"
                 kWh on wheels with its cost and "▲ 4.2 kWh vs Wed", or "▼" when less
 
         Scenario: A day of gas, half-hour by half-hour
@@ -2909,9 +2931,19 @@ Engineering rules (apply to every scenario):
             Given over the 7 days up to the latest whole day the boiler burned for 30 hours and the meter recorded 363 kWh
             When someone with energy access sends GET /api/energy/gas
             Then measuredBoilerKw is 12.1 (the meter's kWh over the boiler's hours on those days), null with under 5 hours
-            And boilerAverageKw is the setting the estimate uses
-            And on the Gas card admins see "Boiler average from the meter: 12.1 kW" and, when it is 0.1 kW or more from
-                boilerAverageKw, a "Use 12.1 kW" button that sends PUT /api/settings/energy with boilerAverageKw 12.1
+            And boilerAverageKw is the setting the estimate falls back on
+            And on the Gas card admins see "Boiler average from the meter: 12.1 kW, used for estimates"
+
+        Scenario: The gas estimate uses the boiler's burn rate from the meter
+            Given measuredBoilerKw is 9.6 over the 7 days up to the meter's latest whole day and boilerAverageKw is 10.1
+            When an admin sends GET /api/dashboard?period=today after the boiler has burned for 2.2 hours today
+            Then today's gasKwh is 21.12, 2.2 hours times 9.6 kW, all of it gasEstimatedKwh, with gasBurnRateKw 9.6 and
+                gasBurnRateFrom "meter"
+            And with measuredBoilerKw null (no meter, or under 5 boiler hours in those days) it is boilerAverageKw, from "setting"
+            And as the meter reports each half-hour its estimate is replaced by the meter's kWh, so a day's gas ends as the meter's
+            And measuredBoilerKw moves on with each whole day the meter reports
+            And under "Use and cost" it says "Gas is from the smart meter up to 10 Nov 01:30, estimated after from the boiler's
+                hours at 9.6 kW (the meter's last 7 days)."
 
     Feature: Area notifications
         As the household admin
