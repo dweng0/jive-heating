@@ -1,6 +1,6 @@
 # BDD Status
 
-Checked 460 scenario(s) across 144 test file(s).
+Checked 469 scenario(s) across 150 test file(s).
 
 
 ## Feature: Service foundation
@@ -318,6 +318,7 @@ Checked 460 scenario(s) across 144 test file(s).
 - [x] Energy settings refuse impossible values
 - [x] Only admins see or change energy settings
 - [x] An admin edits prices in the app
+- [x] Prices can follow the Bright tariff
 - [x] Money is shown in the household's currency
 - [x] An admin chooses the household's currency
 
@@ -541,7 +542,11 @@ Checked 460 scenario(s) across 144 test file(s).
 - [x] Today's peak is the highest five-minute power since midnight
 - [x] Today's peak says what was using the power
 - [x] The trip counter ticks up with the house's use
+- [x] Energy totals say which household day they are for
+- [x] The usage counter starts again at the household's midnight
+- [x] The dashboard reloads its day figures at the household's midnight
 - [x] The odometer totals the day, week, month or year
+- [x] The usage counter shows the day, week, month or year
 - [x] Today is compared with yesterday at the same time
 
 ## Feature: Energy history chart
@@ -549,6 +554,12 @@ Checked 460 scenario(s) across 144 test file(s).
 - [x] The house's use over a day, week, month or year
 - [x] The chart can be dragged back in time
 - [x] The chart says what each point used and cost
+
+## Feature: Energy flow
+
+- [x] Where the house's energy went
+- [x] Heating's gas is split between the rooms that called for it
+- [x] The Energy tab shows where the energy went
 
 ## Feature: Gas meter
 
@@ -558,6 +569,7 @@ Checked 460 scenario(s) across 144 test file(s).
 - [x] The car dashboard shows the gas meter's latest day
 - [x] A day of gas, half-hour by half-hour
 - [x] The boiler's average burn rate from the meter
+- [x] The gas estimate uses the boiler's burn rate from the meter
 
 ## Feature: Area notifications
 
@@ -623,4 +635,4 @@ Checked 460 scenario(s) across 144 test file(s).
 - [x] Deliveries are searched in the app
 
 ---
-**460/460 scenarios covered.**
+**469/469 scenarios covered.**

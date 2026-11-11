@@ -43,5 +43,6 @@ fun EnergyScreen(
         }
         LivePowerSection(api, onOpenRoom, onOpenEverythingElse, onOpenArea = onOpenArea, onAddArea = onManage, admin = admin, onDayFigures = { onPeriod(state.period) })
         EnergySection(state, onPeriod, onSetTarget = if (admin) onManage else null)
+        EnergyFlowCard(api)
     }
 }

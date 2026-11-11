@@ -179,6 +179,9 @@ interface HeatingApi {
     /** The house's use today, this week, month and year, and by this time yesterday. */
     suspend fun energyTotals(): EnergyTotals
 
+    /** Where the house's energy went over [period] (today, yesterday, week or month). */
+    suspend fun energyFlow(period: String): EnergyFlow = EnergyFlow()
+
     /** A day of the smart gas meter: [date], or the latest whole day; null with no readings. */
     suspend fun gasDay(date: String? = null): GasDay?
 
@@ -571,6 +574,8 @@ class KtorHeatingApi(
     override suspend fun powerSummary(): PowerSummary = client.get("api/power").body()
 
     override suspend fun energyTotals(): EnergyTotals = client.get("api/energy/totals").body()
+
+    override suspend fun energyFlow(period: String): EnergyFlow = client.get("api/energy/flow") { parameter("period", period) }.body()
 
     override suspend fun gasDay(date: String?): GasDay? = try {
         val response = client.get("api/energy/gas") { date?.let { parameter("date", it) } }
