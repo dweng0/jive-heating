@@ -77,6 +77,7 @@ fun activityText(e: ActivityEvent, brief: Boolean): String {
         "unresponsive" ->
             if (state == "unresponsive") pick("$room is not responding to commands", "$short not responding")
             else pick("$room is responding again", "$short responding")
+        "prices" -> pick("Prices updated from Bright: ${state.orEmpty()}", "Prices from Bright")
         else -> pick("${who ?: "Something"} changed ${room.ifBlank { "the heating" }}", "${short.ifBlank { "Heating" }} changed")
     }
 }

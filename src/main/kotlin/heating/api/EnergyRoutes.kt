@@ -22,6 +22,10 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
+import heating.heatingJson
 
 /** The "to" of a usage request: an instant, or null for now; 400 if it cannot be read. */
 internal fun usageTo(to: String?): Instant? = to?.let {
@@ -30,7 +34,7 @@ internal fun usageTo(to: String?): Instant? = to?.let {
 
 /** Energy prices and the house electricity meter. Registered inside [adminOnly]. */
 fun Route.energyRoutes(heating: HeatingApp) {
-    get("/api/settings/energy") { call.respond(heating.energySettings.get()) }
+    get("/api/settings/energy") { call.respond(heating.settingsView(heating.energySettings.get())) }
 
     get("/api/energy/else/usage") {
         val window = UsageWindow.of(call.request.queryParameters["window"])
@@ -101,11 +105,20 @@ fun Route.energyRoutes(heating: HeatingApp) {
 
     put("/api/settings/energy") {
         val body = call.receive<JsonObject>()
+        var turnedOn = false
         val updated = call.acting {
-            heating.energySettings.update { current -> current.patched(body).validated { heating.meters[it] != null } }
-                .also { actionLog.info("energy settings {}{}", it.logged(), Actor.by()) }
+            heating.energySettings.update { current ->
+                val next = current.patched(body).validated { heating.meters[it] != null }
+                if (next.syncPricesWithBright && heating.priceSync == null) throw ApiException.badRequest("syncPricesWithBright needs a Bright account")
+                if (current.syncPricesWithBright && next.syncPricesWithBright && next.prices() != current.prices()) {
+                    throw ApiException.badRequest("prices follow Bright while syncPricesWithBright is on")
+                }
+                turnedOn = next.syncPricesWithBright && !current.syncPricesWithBright
+                next
+            }.also { actionLog.info("energy settings {}{}", it.logged(), Actor.by()) }
         }
-        call.respond(updated)
+        if (turnedOn) heating.priceSync?.syncNow()
+        call.respond(heating.settingsView(heating.energySettings.get()))
     }
 }
 
@@ -162,6 +175,15 @@ fun HeatingApp.meterView(meter: Meter, house: String? = energySettings.get().ele
     label = meterLabels.of(meter.name),
 )
 
+/** The four prices Bright can set. */
+private fun EnergySettings.prices() = listOf(gasPencePerKwh, gasStandingPencePerDay, electricityPencePerKwh, electricityStandingPencePerDay)
+
+/** The settings as GET and PUT return them, with brightAvailable: whether a Bright account is set up to sync prices from. */
+private fun HeatingApp.settingsView(settings: EnergySettings): JsonObject = buildJsonObject {
+    heatingJson.encodeToJsonElement(EnergySettings.serializer(), settings).jsonObject.forEach { (k, v) -> put(k, v) }
+    put("brightAvailable", JsonPrimitive(priceSync != null))
+}
+
 /** [this] with the fields present in [body] replaced; fields left out are unchanged. */
 private fun EnergySettings.patched(body: JsonObject): EnergySettings {
     fun price(key: String, current: Double): Double {
@@ -185,6 +207,11 @@ private fun EnergySettings.patched(body: JsonObject): EnergySettings {
             is JsonNull -> null
             else -> (target as? JsonPrimitive)?.takeUnless { it.isString }?.doubleOrNull
                 ?: throw ApiException.badRequest("dailyKwhTarget must be a number")
+        },
+        syncPricesWithBright = when (val sync = body["syncPricesWithBright"]) {
+            null -> syncPricesWithBright
+            else -> (sync as? JsonPrimitive)?.takeUnless { it.isString }?.booleanOrNull
+                ?: throw ApiException.badRequest("syncPricesWithBright must be true or false")
         },
         electricityMeter = when (val meter = body["electricityMeter"]) {
             null -> electricityMeter

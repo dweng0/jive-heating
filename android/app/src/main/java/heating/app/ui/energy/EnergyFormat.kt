@@ -17,6 +17,9 @@ enum class PriceField(val label: String, private val per: String?, val value: (E
 
     /** "p per kWh" in pounds, "c per kWh" in euros; "kW" for the boiler. */
     fun unit(currency: String): String = per?.let { "${minorUnit(currency)} per $it" } ?: "kW"
+
+    /** Whether "Sync prices with Bright" sets this price: all but the boiler rate. */
+    val fromBright: Boolean get() = this != BOILER
 }
 
 /** The currencies an admin can choose, code to label; any other already set is offered by its code. */
@@ -45,7 +48,8 @@ internal fun oneDecimal(v: Double) = String.format(Locale.UK, "%.1f", v)
 
 /** "27.0p per kWh", "27.0c per kWh", "12.0 kW". */
 fun formatPrice(field: PriceField, settings: EnergySettings): String {
-    val v = oneDecimal(field.value(settings))
+    // Up to three decimals, as a tariff gives them (6.906p), and at least one (11.0p).
+    val v = String.format(Locale.UK, "%.3f", field.value(settings)).replace(Regex("0{1,2}$"), "")
     val unit = field.unit(settings.currency)
     return if (field == PriceField.BOILER) "$v $unit" else "$v$unit"
 }

@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { NOT_CONVERTED, PRICE_FIELDS, currencyChoices, currencyLabel, energyApi, formatPrice, priceUnit, type EnergyPrices, type EnergySettings } from '@/lib/energy'
+import { Switch } from '@/components/ui/switch'
+import { BRIGHT_PRICES, NOT_CONVERTED, PRICE_FIELDS, currencyChoices, currencyLabel, energyApi, formatPrice, priceUnit, type EnergyPrices, type EnergySettings } from '@/lib/energy'
 import { useHome } from '@/lib/home'
 
 /** Gas and electricity prices and the household's currency for the energy dashboard. Admins only: the page leaves it out for members. */
@@ -31,11 +32,22 @@ export function EnergyPricesCard() {
     parsed.boilerAverageKw > 0 &&
     parsed.boilerAverageKw <= 100
 
+  const fromBright = (key: keyof EnergyPrices) => settings?.syncPricesWithBright === true && BRIGHT_PRICES.includes(key)
+
+  async function sync(on: boolean) {
+    const updated = await run(() => energyApi.savePrices({ syncPricesWithBright: on }), "Couldn't change syncing with Bright")
+    if (updated) {
+      setSettings(updated)
+      setDraft(null)
+    }
+  }
+
   async function save(e: FormEvent) {
     e.preventDefault()
     if (!valid || !parsed) return
-    // Only a changed currency is sent: prices are never converted.
-    const body = currency === settings?.currency ? parsed : { ...parsed, currency }
+    // Only a changed currency is sent: prices are never converted. Prices from Bright are not sent.
+    const editable = Object.fromEntries(Object.entries(parsed).filter(([k]) => !fromBright(k as keyof EnergyPrices)))
+    const body = currency === settings?.currency ? editable : { ...editable, currency }
     const updated = await run(() => energyApi.savePrices(body as EnergyPrices), "Couldn't save the prices")
     if (updated) {
       setSettings(updated)
@@ -59,13 +71,25 @@ export function EnergyPricesCard() {
           </p>
         ))}
         {!settings && <p className="text-sm text-muted-foreground">Loading…</p>}
+        {settings?.brightAvailable && (
+          <div className="flex items-center justify-between gap-3 rounded-lg bg-secondary px-3 py-2">
+            <Label htmlFor="sync-bright" className="flex flex-col items-start gap-0.5">
+              <span>Sync prices with Bright</span>
+              <span className="text-xs font-normal text-muted-foreground">Gas and electricity prices follow your Bright tariff, checked every day.</span>
+            </Label>
+            <Switch id="sync-bright" checked={settings.syncPricesWithBright === true} onCheckedChange={sync} />
+          </div>
+        )}
         {settings && !draft && (
           <>
             <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-2 text-sm">
               {PRICE_FIELDS.map((f) => (
                 <div key={f.key} className="contents">
                   <dt className="text-muted-foreground">{f.label}</dt>
-                  <dd className="text-right font-medium tabular-nums">{formatPrice(settings[f.key], f, settings.currency)}</dd>
+                  <dd className="text-right font-medium tabular-nums">
+                    {formatPrice(settings[f.key], f, settings.currency)}
+                    {fromBright(f.key) && <span className="ml-2 text-xs font-normal text-muted-foreground">From Bright</span>}
+                  </dd>
                 </div>
               ))}
             </dl>
@@ -84,10 +108,12 @@ export function EnergyPricesCard() {
                   id={`price-${f.key}`}
                   inputMode="decimal"
                   value={draft[f.key]}
+                  disabled={fromBright(f.key)}
+                  title={fromBright(f.key) ? 'From Bright' : undefined}
                   onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })}
                   className="text-right tabular-nums"
                 />
-                <span className="text-sm text-muted-foreground">{priceUnit(f, currency)}</span>
+                <span className="text-sm text-muted-foreground">{fromBright(f.key) ? 'From Bright' : priceUnit(f, currency)}</span>
               </div>
             ))}
             <div className="grid grid-cols-[1fr_13rem] items-center gap-2">

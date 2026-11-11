@@ -151,7 +151,9 @@
           "electricityMeter": { "type": "string", "nullable": true, "description": "Friendly name of the house electricity meter" },
           "currency": { "type": "string", "description": "ISO 4217 code every cost is in, e.g. GBP (default) or EUR" },
           "notices": { "type": "array", "items": { "type": "string" }, "description": "e.g. 'Main Clamp was removed from Zigbee2MQTT'; cleared when a meter is chosen" },
-          "dailyKwhTarget": { "type": "number", "nullable": true, "description": "kWh a day the household aims to use on the house meter; null (default) for none. Over 0 and at most 1000, else 400" }
+          "dailyKwhTarget": { "type": "number", "nullable": true, "description": "kWh a day the household aims to use on the house meter; null (default) for none. Over 0 and at most 1000, else 400" },
+          "syncPricesWithBright": { "type": "boolean", "description": "The four prices follow the Bright tariff, fetched every day; while on, PUT changing a price gets 400. true without a Bright account gets 400" },
+          "brightAvailable": { "type": "boolean", "readOnly": true, "description": "Whether a Bright account is set up to sync prices from" }
         }
       },
       "Meter": {

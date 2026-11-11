@@ -17,9 +17,16 @@ export interface EnergySettings {
   notices: string[]
   /** kWh a day the household aims to use on the house meter; null for none */
   dailyKwhTarget?: number | null
+  /** The four prices follow the Bright tariff, fetched every day */
+  syncPricesWithBright?: boolean
+  /** Whether a Bright account is set up to sync prices from */
+  brightAvailable?: boolean
 }
 
-export type EnergyPrices = Omit<EnergySettings, 'electricityMeter' | 'currency' | 'notices' | 'dailyKwhTarget'>
+export type EnergyPrices = Omit<EnergySettings, 'electricityMeter' | 'currency' | 'notices' | 'dailyKwhTarget' | 'syncPricesWithBright' | 'brightAvailable'>
+
+/** The prices "Sync prices with Bright" sets; the boiler rate stays the household's. */
+export const BRIGHT_PRICES: (keyof EnergyPrices)[] = ['gasPencePerKwh', 'gasStandingPencePerDay', 'electricityPencePerKwh', 'electricityStandingPencePerDay']
 
 export interface Meter {
   name: string
@@ -226,7 +233,7 @@ const enc = encodeURIComponent
 
 export const energyApi = {
   settings: () => request<EnergySettings>('GET', '/api/settings/energy'),
-  savePrices: (prices: Partial<EnergyPrices> & { currency?: string }) => request<EnergySettings>('PUT', '/api/settings/energy', prices),
+  savePrices: (prices: Partial<EnergyPrices> & { currency?: string; syncPricesWithBright?: boolean }) => request<EnergySettings>('PUT', '/api/settings/energy', prices),
   meters: (unassignedOnly = false) => request<Meter[]>('GET', unassignedOnly ? '/api/meters?unassigned=true' : '/api/meters'),
   useForHouse: (meter: string) => request<EnergySettings>('PUT', `/api/meters/${enc(meter)}/house`),
   stopUsingForHouse: (meter: string) => request<EnergySettings>('DELETE', `/api/meters/${enc(meter)}/house`),
@@ -319,7 +326,9 @@ export const priceUnit = (field: { per: string | null }, currency: string) => (f
 /** "27.0p per kWh", "27.0c per kWh", "12.0 kW". */
 export function formatPrice(value: number, field: { per: string | null }, currency: string): string {
   const unit = priceUnit(field, currency)
-  return field.per ? `${value.toFixed(1)}${unit}` : `${value.toFixed(1)} ${unit}`
+  // Up to three decimals, as a tariff gives them (6.906p), and at least one (11.0p).
+  const text = value.toFixed(3).replace(/0{1,2}$/, '')
+  return field.per ? `${text}${unit}` : `${text} ${unit}`
 }
 
 /** "£", "€", or the code itself when the browser does not know it. */

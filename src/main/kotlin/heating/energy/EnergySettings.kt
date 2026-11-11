@@ -26,6 +26,8 @@ data class EnergySettings(
     val notices: List<String> = emptyList(),
     /** kWh a day the household aims to use on the house meter; null for no target. */
     val dailyKwhTarget: Double? = null,
+    /** The four prices follow the Bright account's tariff, fetched every day, and cannot be edited while on. */
+    val syncPricesWithBright: Boolean = false,
 )
 
 /** Throws a 400 unless every price is zero or more, the boiler rate is over 0 and at most 100 kW, the currency is a known ISO 4217 code, and the meter [isMeter]. */

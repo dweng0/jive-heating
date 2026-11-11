@@ -121,6 +121,8 @@ class HeatingApp(
     val meterRecorder = heating.energy.MeterRecorder(energyHistory, meters, energySettings, monitoredMeters, clock::instant, energyAreas)
     val gasReadings = heating.gas.GasReadings(config.dbPath)
     val gasDays = heating.gas.GasDayReport(gasReadings, history, energySettings, config.timezone)
+    /** Keeps the prices at the Bright tariff when asked to; null without a Bright account. */
+    val priceSync = gasMeter?.let { heating.gas.PriceSync(it, energySettings, activity, gasExecutor, clock::instant) }
     val energyDashboards = heating.energy.EnergyDashboards(history, energyHistory, energySettings, monitoredMeters, meters, rooms::list, ::now, energyAreas::list, gasReadings, gasDays::measuredBoilerKw)
     val roomPlugs = heating.energy.RoomPlugsReport(energyHistory, energySettings, monitoredMeters, meters, ::now)
     val roomEnergyHistory = heating.energy.RoomEnergyHistoryReport(energyHistory, config.timezone, clock)
@@ -211,6 +213,7 @@ class HeatingApp(
         }
         periodic += meterRecorder.tick
         gasMeter?.let { periodic += heating.gas.GasSync(it, gasReadings, gasExecutor).tick }
+        priceSync?.let { periodic += it.tick }
         periodic += livePower.tick
         periodic += areaAlerts.tick
         events.start()

@@ -185,6 +185,9 @@ interface HeatingApi {
     /** Sets only the boiler's average burn rate the gas estimate uses. */
     suspend fun setBoilerAverageKw(kw: Double): EnergySettings
 
+    /** Turn "Sync prices with Bright" on or off. */
+    suspend fun setSyncPricesWithBright(on: Boolean): EnergySettings = throw UnsupportedOperationException()
+
     /** Live events from /ws until the connection drops. */
     fun liveEvents(): Flow<LiveEvent>
 
@@ -579,6 +582,11 @@ class KtorHeatingApi(
     override suspend fun setBoilerAverageKw(kw: Double): EnergySettings = client.put("api/settings/energy") {
         contentType(ContentType.Application.Json)
         setBody(BoilerRateRequest(kw))
+    }.body()
+
+    override suspend fun setSyncPricesWithBright(on: Boolean): EnergySettings = client.put("api/settings/energy") {
+        contentType(ContentType.Application.Json)
+        setBody(SyncPricesRequest(on))
     }.body()
 
     override suspend fun houseHistory(range: String, to: String?): HouseHistory =

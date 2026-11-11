@@ -85,6 +85,8 @@ export function activityLine(e: ActivityEvent): ActivityLine {
       return e.value === 'unresponsive'
         ? { wide: `${room} is not responding to commands`, narrow: `${short} not responding` }
         : { wide: `${room} is responding again`, narrow: `${short} responding` }
+    case 'prices':
+      return { wide: `Prices updated from Bright: ${String(e.value ?? '')}`, narrow: 'Prices from Bright' }
     default:
       return { wide: `${who ?? 'Something'} changed ${room || 'the heating'}`, narrow: `${short || 'Heating'} changed` }
   }

@@ -328,6 +328,13 @@ class FakeHeatingApi : HeatingApi {
     /** Dashboards by period; a missing one is an empty dashboard. */
     val dashboards = mutableMapOf<String, EnergyDashboard>()
     override suspend fun energySettings(): EnergySettings { call("energySettings"); return energy }
+    override suspend fun setSyncPricesWithBright(on: Boolean): EnergySettings {
+        call("setSyncPricesWithBright $on")
+        energy = energy.copy(syncPricesWithBright = on)
+        if (on) energy = energy.copy(gasPencePerKwh = 6.906, gasStandingPencePerDay = 27.324, electricityPencePerKwh = 24.04, electricityStandingPencePerDay = 41.19)
+        return energy
+    }
+
     override suspend fun saveEnergyPrices(prices: EnergyPricesRequest): EnergySettings {
         call("saveEnergyPrices $prices")
         energy = energy.copy(

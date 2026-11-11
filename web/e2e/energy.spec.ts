@@ -187,6 +187,10 @@ async function serve(page: Page, me: MockUser, meters: object[] = [], rooms: obj
       const body = request.postDataJSON() as Partial<typeof settings>
       puts.push({ path: pathname, body })
       Object.assign(settings, body)
+      // The service takes Bright's tariff at once when syncing is turned on.
+      if ((body as { syncPricesWithBright?: boolean }).syncPricesWithBright === true) {
+        Object.assign(settings, { gasPencePerKwh: 6.906, gasStandingPencePerDay: 27.324, electricityPencePerKwh: 24.04, electricityStandingPencePerDay: 41.19 })
+      }
       return route.fulfill({ json: settings })
     }
     if (pathname === '/api/meters') {
@@ -260,6 +264,40 @@ test('an admin edits energy prices on the account page', async ({ page }) => {
   })
   await expect(card).toContainText('24.5p per kWh')
   await expect(card.getByRole('button', { name: 'Edit prices' })).toBeVisible()
+})
+
+// BDD: Prices can follow the Bright tariff
+test('an admin turns on syncing prices with Bright', async ({ page }) => {
+  const { puts, settings } = await serve(page, { ...jane })
+  Object.assign(settings, { brightAvailable: true, syncPricesWithBright: false })
+  await page.goto('/account')
+  const card = page.getByTestId('energy-prices')
+  const toggle = card.getByRole('switch', { name: /Sync prices with Bright/ })
+  await expect(toggle).not.toBeChecked()
+  await toggle.click()
+  await expect.poll(() => puts.at(-1)?.body).toEqual({ syncPricesWithBright: true })
+  await expect(toggle).toBeChecked()
+  await expect(card).toContainText('6.906p per kWh')
+  await expect(card).toContainText('41.19p per day')
+  await expect(card.getByText('From Bright')).toHaveCount(4)
+  // While on, the Bright prices cannot be edited; the boiler rate can, and only it is sent.
+  await card.getByRole('button', { name: 'Edit prices' }).click()
+  await expect(card.getByLabel('Gas', { exact: true })).toBeDisabled()
+  await expect(card.getByLabel('Electricity', { exact: true })).toBeDisabled()
+  await card.getByRole('button', { name: 'Save' }).click()
+  await expect.poll(() => puts.at(-1)?.body).toEqual({ boilerAverageKw: 12 })
+  // Turned off, the last prices stay and can be edited.
+  await toggle.click()
+  await expect.poll(() => puts.at(-1)?.body).toEqual({ syncPricesWithBright: false })
+  await expect(card.getByText('From Bright')).toHaveCount(0)
+  await expect(card).toContainText('6.906p per kWh')
+})
+
+test('without Bright there is no sync switch', async ({ page }) => {
+  await serve(page, { ...jane })
+  await page.goto('/account')
+  await expect(page.getByTestId('energy-prices')).toContainText('11.0p per kWh')
+  await expect(page.getByRole('switch', { name: /Sync prices with Bright/ })).toHaveCount(0)
 })
 
 // BDD: An admin chooses the household's currency

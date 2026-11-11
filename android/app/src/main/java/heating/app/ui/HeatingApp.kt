@@ -381,7 +381,7 @@ private fun Connected(connection: Connection, onSignOut: () -> Unit, onPasswordC
                     contentPadding = padding,
                     adminSections = if (state.admin) ({
                         BoostSettingsCard(state.boostTarget, store::saveBoostTarget)
-                        EnergyPricesCard(energyState.settings, energy::savePrices)
+                        EnergyPricesCard(energyState.settings, energy::savePrices, energy::syncPricesWithBright)
                         IgnoredDevicesCard(energyState.ignored, energy::showAgain)
                         heating.app.ui.account.FailedDeliveries(connection.api, onError = showError)
                         EventsCard(onOpen = { nav.navigate("events") })

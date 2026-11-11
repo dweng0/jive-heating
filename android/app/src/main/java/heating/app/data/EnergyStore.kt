@@ -176,6 +176,13 @@ class EnergyStore(private val api: HeatingApi, private val scope: CoroutineScope
             .onFailure(::showError)
     }
 
+    /** Turn "Sync prices with Bright" on (the prices become Bright's at once) or off. */
+    fun syncPricesWithBright(on: Boolean) = scope.launch {
+        runCatching { api.setSyncPricesWithBright(on) }
+            .onSuccess { s -> _state.update { it.copy(settings = s) } }
+            .onFailure(::showError)
+    }
+
     fun clearMessage() = _state.update { it.copy(message = null) }
 
     private fun showError(e: Throwable) = _state.update { it.copy(message = friendlyError(e)) }

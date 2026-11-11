@@ -28,7 +28,18 @@ interface GasMeter {
 
     /** kWh used in each reported half-hour starting from [from] to [to], both included. At most ten days at once. */
     fun readings(from: Instant, to: Instant): Map<Instant, Double>
+
+    /** The account's current gas and electricity prices; null when it has none to give. */
+    fun tariff(): BrightTariff? = null
 }
+
+/** Prices in pence (including VAT) as the Bright account's tariff gives them. Electricity is null when it has no electricity tariff. */
+data class BrightTariff(
+    val gasPencePerKwh: Double,
+    val gasStandingPencePerDay: Double,
+    val electricityPencePerKwh: Double?,
+    val electricityStandingPencePerDay: Double?,
+)
 
 /**
  * The gas meter as the Bright app (Hildebrand) sees it, through the Glowmarkt API. Signs in with the Bright account
@@ -68,15 +79,39 @@ class GlowmarktGasMeter(
         }.toMap()
     }
 
+    @Synchronized
+    override fun tariff(): BrightTariff? {
+        val gas = resource()?.let(::rates) ?: return null
+        val electricity = resource("electricity.consumption")?.let { runCatching { rates(it) }.getOrNull() }
+        return BrightTariff(gas.first, gas.second, electricity?.first, electricity?.second)
+    }
+
+    /** A resource's current unit rate and standing charge in pence, from its tariff. */
+    private fun rates(id: String): Pair<Double, Double>? {
+        val data = get("/resource/$id/tariff")["data"]?.jsonArray?.firstOrNull()?.jsonObject ?: return null
+        data["currentRates"]?.jsonObject?.let { current ->
+            val rate = current["rate"]?.jsonPrimitive?.doubleOrNull
+            val standing = current["standingCharge"]?.jsonPrimitive?.doubleOrNull
+            if (rate != null && standing != null) return rate to standing
+        }
+        // The older shape: a list of plan details, one with "standing" and one with "rate".
+        val details = data["structure"]?.jsonArray?.firstOrNull()?.jsonObject?.get("planDetail")?.jsonArray?.map { it.jsonObject } ?: return null
+        val rate = details.firstNotNullOfOrNull { it["rate"]?.jsonPrimitive?.doubleOrNull } ?: return null
+        val standing = details.firstNotNullOfOrNull { it["standing"]?.jsonPrimitive?.doubleOrNull } ?: return null
+        return rate to standing
+    }
+
     /** The meter's gas.consumption resource, once the account's smart meter has been linked. */
-    private fun resource(): String? {
-        resource?.let { return it }
+    private fun resource(): String? = resource ?: resource("gas.consumption")?.also { resource = it }
+
+    /** The id of the account's resource with [classifier], such as "electricity.consumption"; null without one. */
+    private fun resource(classifier: String): String? {
         val entities = getArray("/virtualentity")
         for (entity in entities) {
             val veId = entity.jsonObject["veId"]!!.jsonPrimitive.content
             val resources = get("/virtualentity/$veId/resources")["resources"]?.jsonArray ?: continue
-            val gas = resources.map { it.jsonObject }.firstOrNull { it["classifier"]?.jsonPrimitive?.content == "gas.consumption" }
-            if (gas != null) return gas["resourceId"]!!.jsonPrimitive.content.also { resource = it }
+            val found = resources.map { it.jsonObject }.firstOrNull { it["classifier"]?.jsonPrimitive?.content == classifier }
+            if (found != null) return found["resourceId"]!!.jsonPrimitive.content
         }
         return null
     }

@@ -16,7 +16,15 @@ data class EnergySettings(
     val notices: List<String> = emptyList(),
     /** kWh a day the household aims to use on the house meter; null for none. */
     val dailyKwhTarget: Double? = null,
+    /** The four prices follow the Bright tariff, fetched every day. */
+    val syncPricesWithBright: Boolean = false,
+    /** Whether a Bright account is set up to sync prices from. */
+    val brightAvailable: Boolean = false,
 )
+
+/** PUT /api/settings/energy turning "Sync prices with Bright" on or off. */
+@Serializable
+data class SyncPricesRequest(val syncPricesWithBright: Boolean)
 
 /** openapi: AreaAlertView. An area's "still using power" notification; all null with none. [mine]: the signed-in admin set it up. */
 @Serializable

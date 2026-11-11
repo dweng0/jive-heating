@@ -33,7 +33,7 @@ import heating.app.data.EnergySettings
 
 /** Gas and electricity prices and the household's currency for the dashboard's costs. Shown to admins only. */
 @Composable
-fun EnergyPricesCard(settings: EnergySettings?, onSave: (EnergyPricesRequest) -> Unit) {
+fun EnergyPricesCard(settings: EnergySettings?, onSave: (EnergyPricesRequest) -> Unit, onSync: (Boolean) -> Unit = {}) {
     var draft by remember { mutableStateOf<PriceDraft?>(null) }
     var currency by remember { mutableStateOf("GBP") }
 
@@ -45,10 +45,26 @@ fun EnergyPricesCard(settings: EnergySettings?, onSave: (EnergyPricesRequest) ->
                 return@Column
             }
             settings.notices.forEach { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+            if (settings.brightAvailable) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(SYNC_WITH_BRIGHT, style = MaterialTheme.typography.bodyLarge)
+                        Text("Gas and electricity prices follow your Bright tariff, checked every day.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    androidx.compose.material3.Switch(
+                        checked = settings.syncPricesWithBright,
+                        onCheckedChange = onSync,
+                        modifier = Modifier.semantics { contentDescription = SYNC_WITH_BRIGHT },
+                    )
+                }
+            }
             PriceField.entries.forEach { field ->
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(field.label, Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(formatPrice(field, settings), style = MaterialTheme.typography.bodyLarge)
+                    if (settings.syncPricesWithBright && field.fromBright) {
+                        Text(FROM_BRIGHT, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 8.dp))
+                    }
                 }
             }
             Text(currencyLine(settings), color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -72,8 +88,9 @@ fun EnergyPricesCard(settings: EnergySettings?, onSave: (EnergyPricesRequest) ->
                         OutlinedTextField(
                             value = current[field].orEmpty(),
                             onValueChange = { draft = current + (field to it) },
+                            enabled = !(settings?.syncPricesWithBright == true && field.fromBright),
                             label = { Text(field.label) },
-                            suffix = { Text(field.unit(currency)) },
+                            suffix = { Text(if (settings?.syncPricesWithBright == true && field.fromBright) FROM_BRIGHT else field.unit(currency)) },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         )
@@ -89,6 +106,9 @@ fun EnergyPricesCard(settings: EnergySettings?, onSave: (EnergyPricesRequest) ->
         )
     }
 }
+
+const val SYNC_WITH_BRIGHT = "Sync prices with Bright"
+const val FROM_BRIGHT = "From Bright"
 
 /** "Currency" with a button showing the choice; tap for the list. */
 @Composable

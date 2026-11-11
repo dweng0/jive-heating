@@ -50,6 +50,29 @@ class EnergyStoreTest {
         assertEquals("11.0p per kWh", formatPrice(PriceField.GAS, store.state.value.settings!!))
     }
 
+    // BDD: Prices can follow the Bright tariff
+    @Test
+    fun `an admin turns on syncing prices with Bright`() = runTest {
+        val store = EnergyStore(api, backgroundScope)
+        store.start(admin = true)
+        runCurrent()
+        store.syncPricesWithBright(true)
+        runCurrent()
+        assertTrue("setSyncPricesWithBright true" in api.calls)
+        val settings = store.state.value.settings!!
+        assertTrue(settings.syncPricesWithBright)
+        assertEquals(
+            listOf("6.906p per kWh", "27.324p per day", "24.04p per kWh", "41.19p per day", "12.0 kW"),
+            PriceField.entries.map { formatPrice(it, settings) },
+        )
+        // The boiler rate stays the household's; the rest come from Bright.
+        assertEquals(listOf(true, true, true, true, false), PriceField.entries.map { it.fromBright })
+        store.syncPricesWithBright(false)
+        runCurrent()
+        assertEquals(false, store.state.value.settings!!.syncPricesWithBright)
+        assertEquals("6.906p per kWh", formatPrice(PriceField.GAS, store.state.value.settings!!))
+    }
+
     @Test
     fun `impossible prices are not sent`() {
         val draft = priceDraft(EnergySettings())
