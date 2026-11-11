@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -39,7 +38,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import heating.app.data.EnergyTotals
 import kotlinx.coroutines.delay
-import java.time.LocalDate
 import java.util.Locale
 
 private val WHEEL = 30.dp
@@ -87,62 +85,69 @@ private fun Rolling(value: Double, digits: Int, decimals: Int, description: Stri
     }
 }
 
+/** Whole-number wheels and fraction wheels for each period: enough to hold it, and the last turning while watched. */
+private fun wheels(period: UsagePeriod): Pair<Int, Int> = when (period) {
+    UsagePeriod.TODAY, UsagePeriod.WEEK -> 3 to 4
+    UsagePeriod.MONTH -> 4 to 3
+    UsagePeriod.YEAR -> 5 to 3
+}
+
 /**
- * The dashboard's counters, like a car's: today's usage (or, tapped, its cost) rolling on at the last 5 minutes' average power, an
- * odometer for the day, week, month or year, and today against yesterday at the same time.
+ * The dashboard's counters, like a car's: the house's usage today, this week, this month or this year (a tap moves on
+ * through them), in kWh or, with the "£" switch, its cost, rolling on at the last 5 minutes' average power; the gas
+ * meter's latest whole day; and today against yesterday at the same time. The day is the household's, from the
+ * service, and turns over at its midnight whatever the phone's clock says. [now] is the phone's clock.
  */
 @Composable
 fun TripMeters(totals: EnergyTotals?, readings: List<Pair<Long, Double?>>, dark: Boolean, now: () -> Long = System::currentTimeMillis) {
-    var period by rememberSaveable { mutableStateOf(OdometerPeriod.WEEK) }
+    var period by rememberSaveable { mutableStateOf(UsagePeriod.TODAY) }
     var showsCost by rememberSaveable { mutableStateOf(false) }
-    var trip by remember { mutableStateOf<Trip?>(null) }
+    var counter by remember { mutableStateOf<Counter?>(null) }
     val latestReadings by rememberUpdatedState(readings)
 
-    // Every quarter second the usage counter rolls on; a new recorded figure is taken at once.
+    // Every quarter second the counter rolls on; new totals are taken at once.
     LaunchedEffect(totals) {
         val t = totals ?: return@LaunchedEffect
         while (true) {
-            val at = now()
-            trip = tripAt(trip, LocalDate.now().toString(), t.today.kwh, fiveMinuteAverage(latestReadings, at), at)
+            val at = now() + serviceSkew(t)
+            counter = counterAt(counter, t, fiveMinuteAverage(latestReadings, at), at)
             delay(TICK_MS)
         }
     }
 
-    val todayKwh = trip?.kwh ?: totals?.today?.kwh ?: 0.0
-    val rolled = totals?.let { maxOf(0.0, todayKwh - it.today.kwh) } ?: 0.0
-    val odometer = totals?.let {
-        when (period) {
-            OdometerPeriod.TODAY -> it.today
-            OdometerPeriod.WEEK -> it.week
-            OdometerPeriod.MONTH -> it.month
-            OdometerPeriod.YEAR -> it.year
-        }.kwh + rolled
-    } ?: 0.0
+    val kwh = counter?.get(period) ?: totals?.let { Counter("", it.today.kwh, it.week.kwh, it.month.kwh, it.year.kwh, 0)[period] } ?: 0.0
+    val todayKwh = counter?.today ?: totals?.today?.kwh ?: 0.0
+    val (digits, decimals) = wheels(period)
     val price = totals?.pencePerKwh ?: 0.0
     val currency = totals?.currency ?: "GBP"
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val what = if (showsCost) "Cost" else "Usage"
 
     val usage: @Composable () -> Unit = {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-            modifier = Modifier.clickable(onClickLabel = if (showsCost) "Show usage" else "Show cost") { showsCost = !showsCost },
-        ) {
-            Text(if (showsCost) "COST TODAY" else "USAGE TODAY", style = MaterialTheme.typography.labelSmall, color = muted)
-            if (showsCost) {
-                Rolling(todayKwh * price / 100, digits = 2, decimals = 4, description = "Cost today", prefix = symbol(currency), roll = (TICK_MS * 2).toInt())
-                Text(String.format(Locale.UK, "%.1f kWh", todayKwh), style = MaterialTheme.typography.labelMedium, color = muted)
-            } else {
-                Rolling(todayKwh, digits = 3, decimals = 4, description = "Usage today kWh", roll = (TICK_MS * 2).toInt())
-                Text("kWh · ${formatCost(todayKwh * price, currency)}", style = MaterialTheme.typography.labelMedium)
-            }
-        }
-    }
-    val odometerColumn: @Composable () -> Unit = {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("ODOMETER · ${period.label.uppercase()}", style = MaterialTheme.typography.labelSmall, color = muted)
-            Rolling(odometer, digits = 5, decimals = 1, description = "Odometer kWh")
-            Text("kWh · ${formatCost(odometer * price, currency)}", style = MaterialTheme.typography.labelMedium)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("$what ${period.label}".uppercase(Locale.UK), style = MaterialTheme.typography.labelSmall, color = muted)
+                Box(
+                    Modifier.background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(6.dp))
+                        .clickable(onClickLabel = if (showsCost) "Show usage" else "Show cost") { showsCost = !showsCost }
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                ) {
+                    Text(if (showsCost) "kWh" else symbol(currency), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
+                }
+            }
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.clickable(onClickLabel = "Show usage ${period.next().label}") { period = period.next() },
+            ) {
+                if (showsCost) {
+                    Rolling(kwh * price / 100, digits = digits - 1, decimals = decimals, description = "$what ${period.label}", prefix = symbol(currency), roll = (TICK_MS * 2).toInt())
+                    Text(String.format(Locale.UK, "%.1f kWh", kwh), style = MaterialTheme.typography.labelMedium, color = muted)
+                } else {
+                    Rolling(kwh, digits = digits, decimals = decimals, description = "$what ${period.label} kWh", roll = (TICK_MS * 2).toInt())
+                    Text("kWh · ${formatCost(kwh * price, currency)}", style = MaterialTheme.typography.labelMedium)
+                }
+            }
         }
     }
     // The gas meter's latest whole day, a day late, against the day before.
@@ -176,34 +181,22 @@ fun TripMeters(totals: EnergyTotals?, readings: List<Pair<Long, Double?>>, dark:
             )
         }
     }
-    val chips: @Composable () -> Unit = {
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally), modifier = Modifier.fillMaxWidth()) {
-            OdometerPeriod.entries.forEach { p -> FilterChip(selected = period == p, onClick = { period = p }, label = { Text(p.label) }) }
-        }
-    }
-
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         HorizontalDivider()
         androidx.compose.foundation.layout.BoxWithConstraints {
             if (maxWidth >= WIDE_WIDTH) {
-                // Wide, like the browser: every counter in one row, the odometer's periods under them.
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.Bottom) {
-                        usage()
-                        odometerColumn()
-                        gasColumn?.invoke()
-                        versus()
-                    }
-                    chips()
+                // Wide, like the browser: every counter in one row.
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.Bottom) {
+                    usage()
+                    gasColumn?.invoke()
+                    versus()
                 }
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.Bottom) {
                         usage()
-                        odometerColumn()
+                        gasColumn?.invoke()
                     }
-                    chips()
-                    gasColumn?.let { Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { it() } }
                     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { versus() }
                 }
             }

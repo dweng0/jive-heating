@@ -90,6 +90,14 @@ data class EnergyTotals(
     val yesterdaySoFar: EnergyTotal? = null,
     /** The smart gas meter's latest whole day; null until it has reported one. */
     val gas: GasDayTotal? = null,
+    /** The household's date that [today] is for, such as "2026-11-10". */
+    val day: String = "",
+    /** The next midnight in the household's timezone, when [day] ends. */
+    val dayEndsAt: String = "",
+    /** The service's time these totals were worked out. */
+    val at: String = "",
+    /** When these totals arrived, by the phone's clock; not sent by the service. */
+    @kotlinx.serialization.Transient val receivedAt: Long = 0,
 )
 
 /** openapi: GasDay. A day of the smart gas meter, half-hour by half-hour, and the boiler's burn rate the meter measured. */

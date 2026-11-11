@@ -41,7 +41,7 @@ fun EnergyScreen(
             Text("Energy", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             if (admin) OutlinedButton(onClick = onManage) { Text("Manage") }
         }
-        LivePowerSection(api, onOpenRoom, onOpenEverythingElse, onOpenArea = onOpenArea, onAddArea = onManage, admin = admin)
+        LivePowerSection(api, onOpenRoom, onOpenEverythingElse, onOpenArea = onOpenArea, onAddArea = onManage, admin = admin, onDayFigures = { onPeriod(state.period) })
         EnergySection(state, onPeriod, onSetTarget = if (admin) onManage else null)
     }
 }

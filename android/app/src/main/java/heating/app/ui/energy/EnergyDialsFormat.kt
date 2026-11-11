@@ -4,6 +4,7 @@ import heating.app.data.EnergyTarget
 import heating.app.data.HouseHistoryPoint
 import heating.app.data.LivePower
 import heating.app.data.TodayPeak
+import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -143,17 +144,72 @@ fun pointReadout(p: HouseHistoryPoint, range: HistoryRange, currency: String, zo
     if (p.incomplete) add(READINGS_MISSING)
 }
 
-/** The trip counter: today's kWh rolling on at the last 5 minutes' average power between recorded figures. */
-data class Trip(val day: String, val kwh: Double, val at: Long)
+/**
+ * The usage counter: the house's kWh today, this week, this month and this year, rolling on at the last 5 minutes'
+ * average power between recorded figures. [day] is the household's day it counts, as the service says; [at] is when it
+ * was last moved on, in the service's time.
+ */
+data class Counter(val day: String, val today: Double, val week: Double, val month: Double, val year: Double, val at: Long) {
+    operator fun get(period: UsagePeriod): Double = when (period) {
+        UsagePeriod.TODAY -> today
+        UsagePeriod.WEEK -> week
+        UsagePeriod.MONTH -> month
+        UsagePeriod.YEAR -> year
+    }
+}
+
+/** The usage counter's periods in the order a tap goes through them, and their labels ("USAGE THIS WEEK"). */
+enum class UsagePeriod(val label: String) {
+    TODAY("today"), WEEK("this week"), MONTH("this month"), YEAR("this year");
+
+    /** The period after this one, back to today after the year. */
+    fun next(): UsagePeriod = entries[(ordinal + 1) % entries.size]
+}
+
+private fun millis(at: String): Long? = runCatching { java.time.OffsetDateTime.parse(at).toInstant().toEpochMilli() }.getOrNull()
+
+/** How far ahead of the phone's clock the service's is, in ms; 0 when the totals do not say. */
+fun serviceSkew(t: heating.app.data.EnergyTotals): Long = millis(t.at)?.let { it - t.receivedAt } ?: 0L
+
+/** [c] carried into [day]: today starts again from 0, and so do the week on a Monday, the month on the 1st and the year on 1 January. */
+fun turnOver(c: Counter, day: String, at: Long): Counter {
+    val d = LocalDate.parse(day)
+    return Counter(
+        day, 0.0,
+        week = if (d.dayOfWeek == java.time.DayOfWeek.MONDAY) 0.0 else c.week,
+        month = if (d.dayOfMonth == 1) 0.0 else c.month,
+        year = if (d.dayOfYear == 1) 0.0 else c.year,
+        at = at,
+    )
+}
 
 /**
- * The trip counter at [now] ms: on from [trip] at [watts], and never back, except that a new [day] starts from today's
- * [recorded] figure. A newer recorded figure that is higher is taken as it is.
+ * The usage counter at [now] (the service's time): on from [c] at [watts], and never back. Totals for the counter's day
+ * are taken where higher; totals for a later day start it again from them; totals for a day it has left are ignored.
+ * At the totals' dayEndsAt it turns over into the next day without waiting for new totals.
  */
-fun tripAt(trip: Trip?, day: String, recorded: Double, watts: Double?, now: Long): Trip {
-    if (trip == null || trip.day != day) return Trip(day, recorded, now)
-    val rolled = trip.kwh + (watts ?: 0.0) * maxOf(0L, now - trip.at) / 3_600_000_000.0
-    return Trip(day, maxOf(rolled, recorded), now)
+fun counterAt(c: Counter?, t: heating.app.data.EnergyTotals, watts: Double?, now: Long): Counter {
+    val day = t.day.ifEmpty { LocalDate.now().toString() }
+    val fromTotals = Counter(day, t.today.kwh, t.week.kwh, t.month.kwh, t.year.kwh, now)
+    var next = if (c == null || day > c.day) fromTotals else {
+        val kwh = (watts ?: 0.0) * maxOf(0L, now - c.at) / 3_600_000_000.0
+        val rolled = Counter(c.day, c.today + kwh, c.week + kwh, c.month + kwh, c.year + kwh, now)
+        if (day == c.day) Counter(day, maxOf(rolled.today, t.today.kwh), maxOf(rolled.week, t.week.kwh), maxOf(rolled.month, t.month.kwh), maxOf(rolled.year, t.year.kwh), now)
+        else rolled
+    }
+    val endsAt = millis(t.dayEndsAt)
+    if (next.day == day && endsAt != null && now >= endsAt) next = turnOver(next, LocalDate.parse(day).plusDays(1).toString(), now)
+    return next
+}
+
+/**
+ * When the dashboard should next fetch its day figures (phone time): [every] ms after the last fetch, or just after the
+ * household's midnight if that is sooner. [jitter] spreads the midnight fetches out.
+ */
+fun nextFetchAt(lastFetch: Long, t: heating.app.data.EnergyTotals?, every: Long, jitter: Long): Long {
+    val regular = lastFetch + every
+    val endsAt = t?.let { millis(it.dayEndsAt) } ?: return regular
+    return minOf(regular, endsAt - serviceSkew(t) + jitter)
 }
 
 /** The house's average power over the 5 minutes up to [now] from its readings (ms, W); null with none. */
@@ -179,6 +235,3 @@ fun gasDelta(gas: heating.app.data.GasDayTotal): Pair<String, Boolean>? {
     return "${if (delta > 0) "▲" else "▼"} ${one(kotlin.math.abs(delta))} kWh vs $before" to (delta > 0)
 }
 
-enum class OdometerPeriod(val label: String) { TODAY("Day"), WEEK("Week"), MONTH("Month"), YEAR("Year") }
-
-fun odometerText(kwh: Double): String = one(kwh)

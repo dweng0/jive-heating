@@ -62,6 +62,9 @@ import kotlin.math.sin
 /** Today's kWh and cost are recorded every five minutes; there is no point asking more often. */
 private const val TODAY_EVERY_MS = 5 * 60_000L
 
+/** How often to look whether a fetch is due: by the wall clock, as delays stop while the device sleeps. */
+private const val CHECK_EVERY_MS = 10_000L
+
 
 /** Same colours as the web's --power-*: aqua, yellow, red and blue from the validated palette. */
 internal fun zoneColor(zone: PowerZone, dark: Boolean): Color = when (zone) {
@@ -96,8 +99,17 @@ fun LivePowerSection(
     onOpenArea: (String) -> Unit = {},
     onAddArea: () -> Unit = {},
     admin: Boolean = true,
+    /** Called after each fetch of the day figures (every five minutes and just after midnight), for Use and cost to follow. */
+    onDayFigures: () -> Unit = {},
 ) {
     val memory = viewModel<LivePowerMemory>()
+    val latestOnDayFigures by androidx.compose.runtime.rememberUpdatedState(onDayFigures)
+    // Fetch the day figures now: back from the background, or the live readings reconnected after a gap.
+    val fetchNow = androidx.compose.runtime.remember { kotlinx.coroutines.channels.Channel<Unit>(kotlinx.coroutines.channels.Channel.CONFLATED) }
+    androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
+        fetchNow.trySend(Unit)
+        onPauseOrDispose { }
+    }
     var live by memory::live
     var bands by memory::bands
     var peak by memory::peak
@@ -108,22 +120,35 @@ fun LivePowerSection(
 
     LaunchedEffect(Unit) {
         launch {
+            // Spreads the midnight fetches out over the minute after midnight.
+            val jitter = 5_000L + (Math.random() * 20_000).toLong()
+            var lastFetch = 0L
+            var fetches = 0
             while (true) {
-                runCatching { api.powerSummary() }.onSuccess { s ->
-                    bands = s.bands
-                    peak = s.todayPeak
-                    if (readings.isEmpty()) readings = s.recent.map { java.time.OffsetDateTime.parse(it.at).toInstant().toEpochMilli() to it.watts }
+                val asked = fetchNow.tryReceive().isSuccess
+                if (asked || System.currentTimeMillis() >= nextFetchAt(lastFetch, totals, TODAY_EVERY_MS, jitter)) {
+                    lastFetch = System.currentTimeMillis()
+                    runCatching { api.powerSummary() }.onSuccess { s ->
+                        bands = s.bands
+                        peak = s.todayPeak
+                        if (readings.isEmpty()) readings = s.recent.map { java.time.OffsetDateTime.parse(it.at).toInstant().toEpochMilli() to it.watts }
+                    }
+                    runCatching { api.energyTotals() }.onSuccess { totals = it.copy(receivedAt = System.currentTimeMillis()) }
+                    runCatching { api.energyDashboard("today") }.onSuccess { today = it }
+                    // The first is when the tab opens, and Use and cost fetches its own then.
+                    if (fetches++ > 0) latestOnDayFigures()
                 }
-                runCatching { api.energyTotals() }.onSuccess { totals = it }
-                runCatching { api.energyDashboard("today") }.onSuccess { today = it }
-                delay(TODAY_EVERY_MS)
+                kotlinx.coroutines.withTimeoutOrNull(CHECK_EVERY_MS) { fetchNow.receive(); fetchNow.trySend(Unit) }
             }
         }
         // Reconnect while the Energy tab is open.
         var backoff = 1_000L
+        var gap = false
         while (true) {
             runCatching {
                 api.livePower().collect { p ->
+                    if (gap) fetchNow.trySend(Unit)
+                    gap = false
                     backoff = 1_000L
                     live = p
                     p.at?.let { at ->
@@ -133,6 +158,7 @@ fun LivePowerSection(
                     busiest = followBusiest(busiest, places(p), System.currentTimeMillis())
                 }
             }
+            gap = true
             delay(backoff)
             backoff = (backoff * 2).coerceAtMost(30_000L)
         }
