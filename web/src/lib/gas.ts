@@ -33,5 +33,3 @@ export function busiest(day: GasDay): { at: string; kwh: number } | null {
   return top && top.kwh > 0 ? top : null
 }
 
-/** Whether the measured burn rate is far enough from the setting to offer it: 0.1 kW or more. */
-export const offersMeasured = (day: GasDay) => day.measuredBoilerKw != null && Math.abs(day.measuredBoilerKw - day.boilerAverageKw) >= 0.1 - 1e-9

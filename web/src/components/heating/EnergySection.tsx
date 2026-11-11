@@ -53,7 +53,7 @@ export function EnergySection() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Use and cost</h2>
-          <p data-testid="gas-source" className="text-sm text-muted-foreground">{gasSource(shown?.gasMeteredTo)} Costs use today's prices.</p>
+          <p data-testid="gas-source" className="text-sm text-muted-foreground">{gasSource(shown?.gasMeteredTo, { kw: shown?.gasBurnRateKw, from: shown?.gasBurnRateFrom })} Costs use today's prices.</p>
         </div>
         <div role="group" aria-label="Energy period" className="flex rounded-xl bg-secondary p-1">
           {PERIODS.map((p) => (

@@ -93,10 +93,12 @@ const val NO_METER = "Choose an electricity meter to see electricity use"
 data class EnergyLine(val label: String, val cost: String, val detail: String, val chip: String? = null)
 
 /** Where the dashboard's gas comes from: the smart meter up to when it has reported ([meteredTo]), else boiler hours. */
-fun gasSource(meteredTo: String?, zone: java.time.ZoneId = java.time.ZoneId.systemDefault()): String {
+fun gasSource(meteredTo: String?, zone: java.time.ZoneId = java.time.ZoneId.systemDefault(), burnRateKw: Double? = null, burnRateFrom: String? = null): String {
     val at = meteredTo?.let { runCatching { java.time.OffsetDateTime.parse(it).atZoneSameInstant(zone) }.getOrNull() }
         ?: return "Gas is estimated from the boiler's hours."
     val text = at.format(java.time.format.DateTimeFormatter.ofPattern("d MMM HH:mm", java.util.Locale.UK))
+    if (burnRateFrom == "meter" && burnRateKw != null)
+        return "Gas is from the smart meter up to $text, estimated after from the boiler's hours at ${String.format(java.util.Locale.UK, "%.1f", burnRateKw)} kW (the meter's last 7 days)."
     return "Gas is from the smart meter up to $text, estimated from the boiler's hours after."
 }
 

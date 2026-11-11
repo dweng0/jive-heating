@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { energyApi, formatCost, formatKwh } from '@/lib/energy'
-import { busiest, gasApi, gasDayTitle, halfHourTime, offersMeasured, type GasDay } from '@/lib/gas'
+import { formatCost, formatKwh } from '@/lib/energy'
+import { busiest, gasApi, gasDayTitle, halfHourTime, type GasDay } from '@/lib/gas'
 import { useHome } from '@/lib/home'
 
 /**
@@ -15,7 +15,6 @@ export function GasCard() {
   const { me } = useHome()
   const [date, setDate] = useState<string | undefined>(undefined)
   const [day, setDay] = useState<GasDay | null>(null)
-  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -32,15 +31,6 @@ export function GasCard() {
   const max = Math.max(0.5, ...day.halfHours.map((h) => h.kwh))
   const top = busiest(day)
 
-  async function adopt(kw: number) {
-    setSaving(true)
-    try {
-      await energyApi.savePrices({ boilerAverageKw: kw })
-      setDay((d) => d && { ...d, boilerAverageKw: kw })
-    } finally {
-      setSaving(false)
-    }
-  }
 
   return (
     <Card data-testid="gas-card">
@@ -82,16 +72,8 @@ export function GasCard() {
           <span>24:00</span>
         </div>
         {me.admin && day.measuredBoilerKw != null && (
-          <div data-testid="boiler-measured" className="flex flex-wrap items-center gap-3 rounded-xl bg-secondary px-4 py-3">
-            <div className="min-w-0 flex-[1_1_18rem] text-sm">
-              <span className="font-semibold">Boiler average from the meter: {day.measuredBoilerKw.toFixed(1)} kW.</span>{' '}
-              <span className="text-muted-foreground">The estimate for days the meter hasn't reported uses {day.boilerAverageKw.toFixed(1)} kW.</span>
-            </div>
-            {offersMeasured(day) && (
-              <Button disabled={saving} onClick={() => adopt(day.measuredBoilerKw!)}>
-                Use {day.measuredBoilerKw.toFixed(1)} kW
-              </Button>
-            )}
+          <div data-testid="boiler-measured" className="rounded-xl bg-secondary px-4 py-3 text-sm">
+            <span className="font-semibold">Boiler average from the meter: {day.measuredBoilerKw.toFixed(1)} kW, used for estimates.</span>
           </div>
         )}
       </CardContent>

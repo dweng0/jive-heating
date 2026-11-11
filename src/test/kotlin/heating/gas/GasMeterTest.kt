@@ -270,4 +270,41 @@ class GasMeterTest {
     private companion object {
         val HALF_HOUR: Duration = Duration.ofMinutes(30)
     }
+
+    // BDD: The gas estimate uses the boiler's burn rate from the meter
+    @Test
+    fun `the gas estimate uses the boiler's burn rate from the meter`() {
+        // 30 October to 5 November: the meter records 288 kWh while the boiler burns 30 hours, so 9.6 kW.
+        val from = Instant.parse("2026-10-30T00:00:00Z")
+        val t = TestHeating(clock = MutableClock(from), gasMeter = FakeGasMeter(halfHours(from, last, 288.0 / (7 * 48))))
+        (0L until 7L).forEach { d ->
+            val day = from.plus(Duration.ofDays(d))
+            t.app.history.boilerChanged("heating", day.plus(Duration.ofHours(6)))
+            t.app.history.boilerChanged("idle", day.plus(Duration.ofHours(6)).plus(Duration.ofMinutes(30L * 60 / 7)))
+        }
+        // Today, 7 November, the boiler has burned 2.2 hours and the meter has not reported it yet.
+        t.app.history.boilerChanged("heating", Instant.parse("2026-11-07T06:00:00Z"))
+        t.app.history.boilerChanged("idle", Instant.parse("2026-11-07T08:12:00Z"))
+        t.clock.set(Instant.parse("2026-11-07T09:00:00Z"))
+        t.app.tick()
+        assertEquals(9.6, gasDay(t)!!.number("measuredBoilerKw"), 1e-9)
+
+        val today = dashboard(t, "today")
+        assertEquals(21.12, today.number("gasKwh"), 1e-9)
+        assertEquals(21.12, today.number("gasEstimatedKwh"), 1e-9)
+        assertEquals(9.6, today.number("gasBurnRateKw"), 1e-9)
+        assertEquals("meter", today["gasBurnRateFrom"]!!.jsonPrimitive.content)
+        // Once the meter reports a half-hour, its estimate is replaced by the meter's kWh.
+
+        // Without the meter's rate (no meter here), the boilerAverageKw setting.
+        val plain = TestHeating(clock = MutableClock(Instant.parse("2026-11-07T06:00:00Z")))
+        plain.app.history.boilerChanged("heating", Instant.parse("2026-11-07T06:00:00Z"))
+        plain.app.history.boilerChanged("idle", Instant.parse("2026-11-07T08:00:00Z"))
+        plain.clock.set(Instant.parse("2026-11-07T09:00:00Z"))
+        val fallback = dashboard(plain, "today")
+        val setting = plain.app.energySettings.get().boilerAverageKw
+        assertEquals(2 * setting, fallback.number("gasKwh"), 1e-9)
+        assertEquals(setting, fallback.number("gasBurnRateKw"), 1e-9)
+        assertEquals("setting", fallback["gasBurnRateFrom"]!!.jsonPrimitive.content)
+    }
 }

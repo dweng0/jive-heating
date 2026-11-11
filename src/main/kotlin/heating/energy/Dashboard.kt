@@ -205,6 +205,10 @@ data class EnergyDashboard(
     val gasEstimatedKwh: Double = gasKwh,
     /** The end of the last half-hour the smart gas meter has reported; null with no meter readings. */
     val gasMeteredTo: String? = null,
+    /** The boiler's burn rate (kW) the gas estimate uses: the meter's measured rate, or the boilerAverageKw setting. */
+    val gasBurnRateKw: Double = 0.0,
+    /** "meter" when [gasBurnRateKw] is the meter's measured rate over its last 7 days, "setting" when it is boilerAverageKw. */
+    val gasBurnRateFrom: String = "setting",
 )
 
 /**
@@ -234,13 +238,18 @@ class EnergyDashboards(
     private val now: () -> ZonedDateTime,
     private val areas: () -> List<EnergyArea> = { emptyList() },
     private val gas: heating.gas.GasReadings? = null,
+    /** The boiler's burn rate the gas meter measured; null without one, when boilerAverageKw is used. */
+    private val measuredBoilerKw: () -> Double? = { null },
 ) {
     fun of(period: DashboardPeriod): EnergyDashboard {
         val clock = now()
         val firstDay = period.firstDay(clock)
         // Everything below runs up to the period's end, which is now unless it is a past day.
         val now = period.end(clock)
-        val prices = settings.get()
+        val settingPrices = settings.get()
+        val measured = measuredBoilerKw()
+        // The estimate burns at the meter's measured rate where there is one.
+        val prices = measured?.let { settingPrices.copy(boilerAverageKw = it) } ?: settingPrices
         val from = firstDay.atStartOfDay(now.zone)
         val boiler = history.boilerStates(from.toInstant(), now.toInstant())
         val samples = energy.samples(from.toInstant().minus(GAP), now.toInstant())
@@ -329,6 +338,8 @@ class EnergyDashboards(
             target = target(days, prices, from.toInstant(), now.toInstant(), period),
             gasEstimatedKwh = round(gasEstimatedKwh, 2),
             gasMeteredTo = gasMeteredTo?.atZone(now.zone)?.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+            gasBurnRateKw = prices.boilerAverageKw,
+            gasBurnRateFrom = if (measured != null) "meter" else "setting",
         )
     }
 

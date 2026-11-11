@@ -64,7 +64,7 @@ fun EnergySection(state: EnergyState, onPeriod: (String) -> Unit, onSetTarget: (
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Use and cost", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
         Text(
-            "${gasSource(state.dashboard?.gasMeteredTo)} Costs use today's prices.",
+            "${gasSource(state.dashboard?.gasMeteredTo, burnRateKw = state.dashboard?.gasBurnRateKw, burnRateFrom = state.dashboard?.gasBurnRateFrom)} Costs use today's prices.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

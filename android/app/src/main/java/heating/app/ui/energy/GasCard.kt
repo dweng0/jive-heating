@@ -14,7 +14,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -48,8 +47,6 @@ import kotlinx.coroutines.launch
 fun GasCard(api: HeatingApi, admin: Boolean) {
     var date by remember { mutableStateOf<String?>(null) }
     var day by remember { mutableStateOf<GasDay?>(null) }
-    var saving by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
     LaunchedEffect(date) {
         runCatching { api.gasDay(date) }.onSuccess { if (it != null || date == null) day = it }
     }
@@ -93,17 +90,6 @@ fun GasCard(api: HeatingApi, admin: Boolean) {
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(line, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                    Text("The estimate for days the meter hasn't reported uses ${oneDecimal(d.boilerAverageKw)} kW.", style = MaterialTheme.typography.bodySmall, color = muted)
-                    useMeasuredLabel(d)?.let { label ->
-                        Button(enabled = !saving, onClick = {
-                            val kw = d.measuredBoilerKw ?: return@Button
-                            saving = true
-                            scope.launch {
-                                runCatching { api.setBoilerAverageKw(kw) }.onSuccess { day = d.copy(boilerAverageKw = kw) }
-                                saving = false
-                            }
-                        }) { Text(label) }
-                    }
                 }
             }
         }

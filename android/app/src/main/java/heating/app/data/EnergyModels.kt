@@ -216,4 +216,8 @@ data class EnergyDashboard(
     val gasEstimatedKwh: Double? = null,
     /** The end of the last half-hour the smart gas meter has reported; null with no readings. */
     val gasMeteredTo: String? = null,
+    /** The boiler's burn rate (kW) the gas estimate uses. */
+    val gasBurnRateKw: Double? = null,
+    /** "meter": the gas meter's measured rate over its last 7 days; "setting": boilerAverageKw. */
+    val gasBurnRateFrom: String? = null,
 )

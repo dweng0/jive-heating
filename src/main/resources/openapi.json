@@ -235,7 +235,9 @@
           "areas": { "type": "array", "items": { "$ref": "#/components/schemas/AreaEnergy" }, "description": "Energy areas, by name. Of which the house's, never added to anything" },
           "target": { "allOf": [{ "$ref": "#/components/schemas/EnergyTarget" }], "nullable": true, "description": "House electricity against the daily target; null with no target or no house meter" },
           "gasEstimatedKwh": { "type": "number", "description": "The part of gasKwh estimated from boiler hours: all of it for time the gas meter has not reported" },
-          "gasMeteredTo": { "type": "string", "format": "date-time", "nullable": true, "description": "The end of the last half-hour the smart gas meter has reported; null with no meter readings" }
+          "gasMeteredTo": { "type": "string", "format": "date-time", "nullable": true, "description": "The end of the last half-hour the smart gas meter has reported; null with no meter readings" },
+          "gasBurnRateKw": { "type": "number", "description": "The boiler's burn rate (kW) the gas estimate uses" },
+          "gasBurnRateFrom": { "type": "string", "enum": ["meter", "setting"], "description": "meter: the gas meter's measured rate over its last 7 days; setting: boilerAverageKw" }
         }
       },
       "EverythingElse": {

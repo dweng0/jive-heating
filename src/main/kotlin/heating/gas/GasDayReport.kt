@@ -67,6 +67,9 @@ class GasDayReport(
         )
     }
 
+    /** The boiler's burn rate the meter measured over the 7 days up to its latest whole day; null with under 5 boiler hours or no meter. */
+    fun measuredBoilerKw(): Double? = latestWholeDay()?.let(::measuredKw)
+
     /** The last day the meter reported all of, as the odometer's gas counter shows it. */
     private fun latestWholeDay(): LocalDate? {
         val meteredTo = readings.meteredTo() ?: return null

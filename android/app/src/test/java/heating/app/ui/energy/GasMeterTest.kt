@@ -18,6 +18,19 @@ class GasMeterTest {
     fun `the energy tab says where gas comes from`() {
         assertEquals("Gas is from the smart meter up to 6 Nov 00:00, estimated from the boiler's hours after.", gasSource("2026-11-06T00:00:00Z", java.time.ZoneId.of("Europe/London")))
         assertEquals("Gas is estimated from the boiler's hours.", gasSource(null, java.time.ZoneId.of("Europe/London")))
+    }
+
+    // BDD: The gas estimate uses the boiler's burn rate from the meter
+    @Test
+    fun `the Energy tab says the estimate uses the meter's burn rate`() {
+        assertEquals(
+            "Gas is from the smart meter up to 10 Nov 01:30, estimated after from the boiler's hours at 9.6 kW (the meter's last 7 days).",
+            gasSource("2026-11-10T01:30:00Z", java.time.ZoneId.of("Europe/London"), burnRateKw = 9.6, burnRateFrom = "meter"),
+        )
+        assertEquals(
+            "Gas is from the smart meter up to 10 Nov 01:30, estimated from the boiler's hours after.",
+            gasSource("2026-11-10T01:30:00Z", java.time.ZoneId.of("Europe/London"), burnRateKw = 10.1, burnRateFrom = "setting"),
+        )
 
         val week = EnergyDashboard(
             period = "week", gasKwh = 378.0, gasCost = 2610.0, gasEstimatedKwh = 90.0, boilerHours = 13.5,
@@ -73,9 +86,7 @@ class GasMeterTest {
     // BDD: The boiler's average burn rate from the meter
     @Test
     fun `the boiler's average burn rate from the meter`() {
-        assertEquals("Boiler average from the meter: 12.1 kW", boilerMeasuredLine(gasDay()))
-        assertEquals("Use 12.1 kW", useMeasuredLabel(gasDay()))
-        assertNull(useMeasuredLabel(gasDay(12.05)))
+        assertEquals("Boiler average from the meter: 12.1 kW, used for estimates", boilerMeasuredLine(gasDay()))
         assertNull(boilerMeasuredLine(gasDay(null)))
     }
 }

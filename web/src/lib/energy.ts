@@ -187,14 +187,20 @@ export interface EnergyDashboard {
   gasEstimatedKwh?: number
   /** The end of the last half-hour the smart gas meter has reported; null with no readings */
   gasMeteredTo?: string | null
+  /** The boiler's burn rate (kW) the gas estimate uses */
+  gasBurnRateKw?: number
+  /** meter: the gas meter's measured rate over its last 7 days; setting: boilerAverageKw */
+  gasBurnRateFrom?: 'meter' | 'setting'
 }
 
 /** Where the dashboard's gas comes from: the smart meter up to when it has reported, else boiler hours. */
-export function gasSource(meteredTo: string | null | undefined): string {
+export function gasSource(meteredTo: string | null | undefined, burnRate?: { kw?: number; from?: 'meter' | 'setting' }): string {
   if (!meteredTo) return "Gas is estimated from the boiler's hours."
   const at = new Date(meteredTo)
   const date = at.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
   const time = at.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+  if (burnRate?.from === 'meter' && burnRate.kw != null)
+    return `Gas is from the smart meter up to ${date} ${time}, estimated after from the boiler's hours at ${burnRate.kw.toFixed(1)} kW (the meter's last 7 days).`
   return `Gas is from the smart meter up to ${date} ${time}, estimated from the boiler's hours after.`
 }
 
