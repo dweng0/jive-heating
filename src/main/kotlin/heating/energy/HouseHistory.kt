@@ -163,6 +163,12 @@ data class EnergyTotals(
     val yesterdaySoFar: EnergyTotal?,
     /** The smart gas meter's latest whole day; null until it has reported one. */
     val gas: GasDayTotal? = null,
+    /** The household's date that [today] is for, such as "2026-11-10", in the household's timezone. */
+    val day: String = "",
+    /** The next midnight in the household's timezone, when [day] ends and [today] starts again from 0. */
+    val dayEndsAt: String = "",
+    /** The service's time these totals were worked out, so a device with a wrong clock can tell how long is left of [day]. */
+    val at: String = "",
 )
 
 /**
@@ -206,6 +212,9 @@ class EnergyTotalsReport(
             year = total(yearStart),
             yesterdaySoFar = if (hadYesterday) total(yesterday, sameTimeYesterday) else null,
             gas = gasDay(prices),
+            day = today.toString(),
+            dayEndsAt = today.plusDays(1).atStartOfDay(zone).format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+            at = now.atZone(zone).format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME),
         )
     }
 

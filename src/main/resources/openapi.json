@@ -766,7 +766,10 @@
           "month": { "$ref": "#/components/schemas/EnergyTotal", "description": "Since the 1st" },
           "year": { "$ref": "#/components/schemas/EnergyTotal", "description": "Since 1 January" },
           "yesterdaySoFar": { "allOf": [{ "$ref": "#/components/schemas/EnergyTotal" }], "nullable": true, "description": "Yesterday from 00:00 to this time; null with no samples yesterday" },
-          "gas": { "allOf": [{ "$ref": "#/components/schemas/GasDayTotal" }], "nullable": true, "description": "The smart gas meter's latest whole day; null until it has reported one" }
+          "gas": { "allOf": [{ "$ref": "#/components/schemas/GasDayTotal" }], "nullable": true, "description": "The smart gas meter's latest whole day; null until it has reported one" },
+          "day": { "type": "string", "format": "date", "description": "The household's date that today is for, in the household's timezone" },
+          "dayEndsAt": { "type": "string", "format": "date-time", "description": "The next midnight in the household's timezone, when day ends and today starts again from 0" },
+          "at": { "type": "string", "format": "date-time", "description": "The service's time these totals were worked out" }
         }
       },
       "PowerSummary": {

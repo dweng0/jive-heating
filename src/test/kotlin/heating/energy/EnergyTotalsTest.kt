@@ -81,4 +81,35 @@ class EnergyTotalsTest {
         sample(quiet, now.minus(Duration.ofHours(1)), 1.0)
         assertEquals(JsonNull, totals(quiet)["yesterdaySoFar"])
     }
+
+    // BDD: Energy totals say which household day they are for
+    @Test
+    fun `energy totals say which household day they are for`() {
+        // The server's own clock is in New York; the household is in London.
+        val clock = MutableClock(Instant.parse("2026-11-10T23:58:00Z"), java.time.ZoneId.of("America/New_York"))
+        val t = TestHeating(clock = clock)
+        t.discover(meters = listOf("Main Clamp"))
+        t.api { client -> assertEquals(HttpStatusCode.OK, client.put("/api/meters/Main%20Clamp/house").status) }
+        sample(t, Instant.parse("2026-11-10T23:55:00Z"), 19.4)
+
+        val evening = totals(t)
+        assertEquals("2026-11-10", evening["day"]!!.jsonPrimitive.content)
+        assertEquals("2026-11-11T00:00:00Z", evening["dayEndsAt"]!!.jsonPrimitive.content)
+        assertEquals(19.4, evening.kwh("today"), 1e-9)
+        assertEquals("2026-11-10T23:58:00Z", evening["at"]!!.jsonPrimitive.content)
+
+        clock.set(Instant.parse("2026-11-11T00:00:30Z"))
+        val morning = totals(t)
+        assertEquals("2026-11-11", morning["day"]!!.jsonPrimitive.content)
+        assertEquals("2026-11-12T00:00:00Z", morning["dayEndsAt"]!!.jsonPrimitive.content)
+        assertEquals(0.0, morning.kwh("today"), 1e-9)
+
+        // Clocks go back at 02:00 BST on Sunday 25 October: that day is 25 hours long.
+        clock.set(Instant.parse("2026-10-24T12:00:00Z"))
+        assertEquals("2026-10-25T00:00:00+01:00", totals(t)["dayEndsAt"]!!.jsonPrimitive.content)
+        clock.set(Instant.parse("2026-10-25T12:00:00Z"))
+        val longDay = totals(t)
+        assertEquals("2026-10-25", longDay["day"]!!.jsonPrimitive.content)
+        assertEquals("2026-10-26T00:00:00Z", longDay["dayEndsAt"]!!.jsonPrimitive.content)
+    }
 }

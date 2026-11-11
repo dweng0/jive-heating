@@ -2805,6 +2805,7 @@ Engineering rules (apply to every scenario):
             Given the household's timezone is Europe/London and it is 23:58 on 10 November there
             When someone with energy access sends GET /api/energy/totals
             Then it has day "2026-11-10" and dayEndsAt "2026-11-11T00:00:00Z", the next midnight in the household's timezone
+            And at is the service's time it was worked out, so a device whose own clock is wrong can tell how long is left
             And at 00:00:30 it has day "2026-11-11" and today 0 kWh, whatever timezone the server's own clock is set to
             And on a clock-change day dayEndsAt is still the next local midnight, 23 or 25 hours after the one before
 
