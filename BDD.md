@@ -2876,6 +2876,42 @@ Engineering rules (apply to every scenario):
             Then it shows its time, kWh, cost and, for a day or month, the target
             And day and week are a line of power, month and year are bars of kWh with a target line, and incomplete points are marked
 
+    Feature: Energy flow
+        As someone with energy access
+        I want a diagram of where the house's energy went
+        So that I can see which rooms, areas and devices use the most
+
+        The flow runs from sources (electricity from the house meter, gas from the smart meter or its estimate, and
+        later solar) through places (rooms, energy areas and heating) to devices (plugs). Band widths are kWh.
+        Costs are at today's prices, like the dashboard.
+
+        Scenario: Where the house's energy went
+            Given today the house meter recorded 11.8 kWh, room "Kitchen" 3.0 kWh from plugs "Kettle" 1.2 kWh and "Oven" 1.8 kWh,
+                area "Lights" 0.9 kWh from its clamp, and gas was 22.1 kWh
+            When someone with energy access sends GET /api/energy/flow?period=today
+            Then it has currency, from, to and nodes, each with id, name, kind (source, place or device), kwh and cost
+            And links, each with from, to and kwh: "Electricity" to "Kitchen" 3.0, "Lights" 0.9 and "Everything else" 7.9,
+                "Kitchen" to "Kettle" 1.2 and "Oven" 1.8, and "Gas" to "Heating" 22.1
+            And a plug in no room or area is a place of its own, a plug behind an area's clamp counts once, and a room or area
+                using nothing is left out
+            And period is today, yesterday, week or month like the dashboard, and anything else gets 400
+
+        Scenario: Heating's gas is split between the rooms that called for it
+            Given today the boiler burned 22.1 kWh of gas, while "Lounge" was below its target for 3 of those hours and
+                "Bedroom" for 1
+            When someone with energy access sends GET /api/energy/flow?period=today
+            Then "Heating" links to "Lounge" 16.58 kWh and "Bedroom" 5.52 kWh, its gas shared by each room's hours calling for heat
+            And those links have estimated true, as the meter does not know which room used the gas
+            And burning time when no room was below its target goes to "Heating, no room calling"
+
+        Scenario: The Energy tab shows where the energy went
+            Given someone with energy access opens the Energy tab on the web app or the Android app
+            Then a "Where it went" card shows the flow as a Sankey diagram: sources on the left, places in the middle,
+                devices on the right, each labelled with its name and kWh, bands as wide as their kWh
+            And hovering or tapping a node or band shows its kWh, cost and share of its source, and estimated bands are hatched
+            And Today, Yesterday, Week and Month choose the period, and the choice is remembered
+            And with no house meter chosen the card says "Choose a house meter to see where electricity goes" and still shows gas
+
     Feature: Gas meter
         As the household admin
         I want the dashboard's gas to be what the smart meter recorded
