@@ -177,6 +177,21 @@ export interface EnergyTotals {
   yesterdaySoFar: EnergyTotal | null
   /** The smart gas meter's latest whole day; null until it has reported one */
   gas?: GasDayTotal | null
+  /** The household's date that today is for, such as "2026-11-10" */
+  day?: string
+  /** The next midnight in the household's timezone, when day ends */
+  dayEndsAt?: string
+  /** The service's time these totals were worked out */
+  at?: string
+}
+
+/** Totals as received, with the browser's time they arrived, to tell how far the browser's clock is from the service's. */
+export type ReceivedTotals = EnergyTotals & { receivedAt: number }
+
+/** How far ahead of the browser's clock the service's is, in ms; 0 when the totals do not say. */
+export function serviceSkew(t: ReceivedTotals): number {
+  const at = t.at ? Date.parse(t.at) : NaN
+  return Number.isNaN(at) ? 0 : at - t.receivedAt
 }
 
 /** A whole day of the smart gas meter, its cost at the gas price, and the day before's kWh (null with none). */
@@ -205,18 +220,28 @@ export function gasDelta(gas: GasDayTotal): { text: string; more: boolean } | nu
   return { text: `${delta > 0 ? '▲' : '▼'} ${Math.abs(delta).toFixed(1)} kWh vs ${before}`, more: delta > 0 }
 }
 
+/** Fired on window after each fetch of the day figures, so other cards showing today (Use and cost) fetch theirs too. */
+export const DAY_FIGURES_EVENT = 'energy:day-figures'
+
 export const totalsApi = {
   get: () => request<EnergyTotals>('GET', '/api/energy/totals'),
 }
 
-export type OdometerPeriod = 'today' | 'week' | 'month' | 'year'
+export type UsagePeriod = 'today' | 'week' | 'month' | 'year'
 
-export const ODOMETER_PERIODS: { value: OdometerPeriod; label: string }[] = [
-  { value: 'today', label: 'Day' },
-  { value: 'week', label: 'Week' },
-  { value: 'month', label: 'Month' },
-  { value: 'year', label: 'Year' },
+/** The usage counter's periods in the order a tap goes through them, with their labels ("Usage this week"). */
+export const USAGE_PERIODS: { value: UsagePeriod; label: string }[] = [
+  { value: 'today', label: 'today' },
+  { value: 'week', label: 'this week' },
+  { value: 'month', label: 'this month' },
+  { value: 'year', label: 'this year' },
 ]
+
+/** The period after [p], back to today after the year. */
+export function nextUsagePeriod(p: UsagePeriod): UsagePeriod {
+  const i = USAGE_PERIODS.findIndex((q) => q.value === p)
+  return USAGE_PERIODS[(i + 1) % USAGE_PERIODS.length].value
+}
 
 /** The house's average power over the 5 minutes up to [now] from its live readings; null with none. */
 export function fiveMinuteAverage(readings: { at: number; watts: number | null }[], now: number): number | null {
@@ -225,23 +250,65 @@ export function fiveMinuteAverage(readings: { at: number; watts: number | null }
   return recent.reduce((sum, r) => sum + r.watts!, 0) / recent.length
 }
 
-/** The trip counter: today's kWh, rolling on at the last 5 minutes' average power between the recorded figures. */
-export interface Trip {
-  /** The day it counts, so it starts again from 0 at midnight */
+/**
+ * The usage counter: the house's kWh today, this week, this month and this year, rolling on at the last 5 minutes'
+ * average power between the recorded figures. [day] is the household's day it counts, as the service says.
+ */
+export interface Counter {
   day: string
-  kwh: number
-  /** When [kwh] was last moved on */
+  today: number
+  week: number
+  month: number
+  year: number
+  /** When it was last moved on, in the service's time */
   at: number
 }
 
+const PERIODS: UsagePeriod[] = ['today', 'week', 'month', 'year']
+
+/** "2026-11-11" for "2026-11-10". */
+export function nextDay(day: string): string {
+  const d = new Date(`${day}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + 1)
+  return d.toISOString().slice(0, 10)
+}
+
+/** [c] carried into [day]: today starts again from 0, and so do the week on a Monday, the month on the 1st and the year on 1 January. */
+export function turnOver(c: Counter, day: string, at: number): Counter {
+  const d = new Date(`${day}T00:00:00Z`)
+  const first = d.getUTCDate() === 1
+  return { day, today: 0, week: d.getUTCDay() === 1 ? 0 : c.week, month: first ? 0 : c.month, year: first && d.getUTCMonth() === 0 ? 0 : c.year, at }
+}
+
 /**
- * The trip counter at [now]: on from [trip] at [watts], and never back, except that a new day starts from today's
- * recorded figure. A newer recorded figure that is higher is taken as it is.
+ * The usage counter at [now] (the service's time): on from [c] at [watts], and never back. Totals for the counter's day
+ * are taken where higher; totals for a later day start it again from them; totals for a day it has left are ignored.
+ * At the totals' dayEndsAt it turns over into the next day without waiting for new totals.
  */
-export function tripAt(trip: Trip | null, recorded: { day: string; kwh: number }, watts: number | null, now: number): Trip {
-  if (trip == null || trip.day !== recorded.day) return { day: recorded.day, kwh: recorded.kwh, at: now }
-  const rolled = trip.kwh + ((watts ?? 0) * Math.max(0, now - trip.at)) / 3_600_000_000
-  return { day: trip.day, kwh: Math.max(rolled, recorded.kwh), at: now }
+export function counterAt(c: Counter | null, t: EnergyTotals, watts: number | null, now: number): Counter {
+  const day = t.day ?? dayOf(now)
+  const fromTotals = (): Counter => ({ day, today: t.today.kwh, week: t.week.kwh, month: t.month.kwh, year: t.year.kwh, at: now })
+  let next: Counter
+  if (c == null || day > c.day) next = fromTotals()
+  else {
+    const kwh = ((watts ?? 0) * Math.max(0, now - c.at)) / 3_600_000_000
+    next = { day: c.day, today: c.today + kwh, week: c.week + kwh, month: c.month + kwh, year: c.year + kwh, at: now }
+    if (day === c.day) for (const p of PERIODS) next[p] = Math.max(next[p], t[p].kwh)
+  }
+  const endsAt = t.dayEndsAt ? Date.parse(t.dayEndsAt) : NaN
+  if (next.day === day && !Number.isNaN(endsAt) && now >= endsAt) next = turnOver(next, nextDay(day), now)
+  return next
+}
+
+/**
+ * When the dashboard should next fetch its day figures (browser time): five minutes after the last fetch, or just after
+ * the household's midnight if that is sooner. [jitter] spreads the midnight fetches out.
+ */
+export function nextFetchAt(lastFetch: number, t: ReceivedTotals | null, every: number, jitter: number): number {
+  const regular = lastFetch + every
+  const endsAt = t?.dayEndsAt ? Date.parse(t.dayEndsAt) : NaN
+  if (t == null || Number.isNaN(endsAt)) return regular
+  return Math.min(regular, endsAt - serviceSkew(t) + jitter)
 }
 
 /** "▲ 1.2 kWh vs yesterday" (more than yesterday by now) or "▼ 0.5 kWh vs yesterday"; null with nothing yesterday. */

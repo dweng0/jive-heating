@@ -7,6 +7,7 @@ import { NO_METER, READINGS_MISSING, SET_TARGET, gasEstimate, gasSource, targetD
 import { IncompleteWarning } from './IncompleteWarning'
 import { cn } from '@/lib/utils'
 import { useHome } from '@/lib/home'
+import { DAY_FIGURES_EVENT } from '@/lib/energyDials'
 
 const PERIODS: { value: EnergyPeriod; label: string }[] = [
   { value: 'today', label: 'Today' },
@@ -27,16 +28,21 @@ export function EnergySection() {
 
   useEffect(() => {
     let cancelled = false
-    energyApi.dashboard(period).then(
-      (d) => {
-        if (cancelled) return
-        setDashboard(d)
-        setFailed(false)
-      },
-      () => !cancelled && setFailed(true),
-    )
+    const load = () =>
+      energyApi.dashboard(period).then(
+        (d) => {
+          if (cancelled) return
+          setDashboard(d)
+          setFailed(false)
+        },
+        () => !cancelled && setFailed(true),
+      )
+    load()
+    // The dials fetch the day figures every five minutes and just after midnight: keep up with them.
+    window.addEventListener(DAY_FIGURES_EVENT, load)
     return () => {
       cancelled = true
+      window.removeEventListener(DAY_FIGURES_EVENT, load)
     }
   }, [period])
 

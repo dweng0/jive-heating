@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { GasCard } from './GasCard'
 import { energyApi, type EnergyDashboard } from '@/lib/energy'
-import { followBusiest, NO_BUSIEST, places, totalsApi, type Busiest, type EnergyTotals, type TodayPeak } from '@/lib/energyDials'
+import { DAY_FIGURES_EVENT, followBusiest, nextFetchAt, NO_BUSIEST, places, totalsApi, type Busiest, type ReceivedTotals, type TodayPeak } from '@/lib/energyDials'
 import { followPower, powerApi, type LivePower, type PowerBands } from '@/lib/livePower'
 import { useHome } from '@/lib/home'
 import { EnergyDials } from './EnergyDials'
@@ -12,6 +12,8 @@ import { UseCard } from './UseCard'
 
 /** Today's kWh, cost and peak are recorded every five minutes; there is no point asking more often. */
 const TODAY_EVERY_MS = 5 * 60_000
+/** How often to look whether a fetch is due: by the wall clock, so a sleeping tab or tablet catches up when it wakes. */
+const CHECK_EVERY_MS = 10_000
 
 /**
  * The top of the Energy tab: the dials (today's peak, the whole house, the busiest room or area, the daily target), the
@@ -27,13 +29,19 @@ export function LivePowerSection() {
   const [today, setToday] = useState<EnergyDashboard | null>(null)
   const [busiest, setBusiest] = useState<Busiest>(NO_BUSIEST)
   const busiestRef = useRef(busiest)
-  const [totals, setTotals] = useState<EnergyTotals | null>(null)
+  const [totals, setTotals] = useState<ReceivedTotals | null>(null)
   /** The house's readings of the last half hour, for the trip meter's 5-minute average. */
   const [readings, setReadings] = useState<{ at: number; watts: number | null }[]>([])
 
   useEffect(() => {
     let cancelled = false
-    const loadEvery5 = () => {
+    let lastFetch = 0
+    let latestTotals: ReceivedTotals | null = null
+    // Spreads the midnight fetches out over the minute after midnight.
+    const jitter = 5_000 + Math.random() * 20_000
+    const loadDayFigures = () => {
+      lastFetch = Date.now()
+      window.dispatchEvent(new Event(DAY_FIGURES_EVENT))
       powerApi.summary().then(
         (s) => {
           if (cancelled) return
@@ -43,11 +51,25 @@ export function LivePowerSection() {
         },
         () => {},
       )
-      totalsApi.get().then((t) => !cancelled && setTotals(t), () => {})
+      totalsApi.get().then(
+        (t) => {
+          if (cancelled) return
+          latestTotals = { ...t, receivedAt: Date.now() }
+          setTotals(latestTotals)
+        },
+        () => {},
+      )
       energyApi.dashboard('today').then((d) => !cancelled && setToday(d), () => {})
     }
-    loadEvery5()
-    const timer = window.setInterval(loadEvery5, TODAY_EVERY_MS)
+    loadDayFigures()
+    // Every five minutes, and just after the household's midnight, by the wall clock.
+    const timer = window.setInterval(() => {
+      if (Date.now() >= nextFetchAt(lastFetch, latestTotals, TODAY_EVERY_MS, jitter)) loadDayFigures()
+    }, CHECK_EVERY_MS)
+    // Back from sleep or a hidden tab: fetch at once.
+    const onVisible = () => document.visibilityState === 'visible' && Date.now() - lastFetch > CHECK_EVERY_MS && loadDayFigures()
+    document.addEventListener('visibilitychange', onVisible)
+    let wasConnected = true
     const stop = followPower(
       (p) => {
         setLive(p)
@@ -59,11 +81,16 @@ export function LivePowerSection() {
         busiestRef.current = next
         setBusiest(next)
       },
-      () => {},
+      (connected) => {
+        // Reconnected after losing the service: the day may have moved on meanwhile.
+        if (connected && !wasConnected) loadDayFigures()
+        wasConnected = connected
+      },
     )
     return () => {
       cancelled = true
       window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisible)
       stop()
     }
   }, [])

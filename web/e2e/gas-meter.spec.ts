@@ -122,7 +122,7 @@ test('the gas counter shows less with ▼ and is not shown before a whole day', 
   await page.unrouteAll({ behavior: 'ignoreErrors' })
   await serve(page, { gas: null })
   await page.reload()
-  await expect(page.getByTestId('odometer-kwh')).toBeVisible()
+  await expect(page.getByTestId('usage-counter')).toBeVisible()
   await expect(page.getByTestId('gas-day')).toHaveCount(0)
 })
 

@@ -90,7 +90,8 @@ function history(range: string, to: number | null) {
 
 async function serve(page: Page, opts: { me?: typeof jane; first?: object; target?: Target; peak?: object | null; totals?: () => object; recent?: object[] } = {}) {
   const sockets: WebSocketRoute[] = []
-  const asked: { range: string; to: string | null }[] = []
+  // History requests, and every /api path asked for in order.
+  const asked = Object.assign([] as { range: string; to: string | null }[], { paths: [] as string[] })
   await page.routeWebSocket('**/ws', () => {})
   await page.routeWebSocket('**/ws/power', (ws) => {
     sockets.push(ws)
@@ -99,6 +100,7 @@ async function serve(page: Page, opts: { me?: typeof jane; first?: object; targe
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url())
     const { pathname } = url
+    asked.paths.push(pathname)
     if (pathname === '/api/auth/me') return route.fulfill({ json: opts.me ?? jane })
     if (pathname === '/api/rooms') return route.fulfill({ json: [] })
     if (pathname === '/api/status') return route.fulfill({ json: STATUS })
@@ -335,8 +337,8 @@ test("the trip counter ticks up with the house's use", async ({ page }) => {
   const { push } = await serve(page, { first: steady(1200), totals: () => ({ ...TOTALS, today: { kwh: recorded, cost: recorded * 27 } }) })
   await page.goto('/energy')
   const trip = page.getByTestId('trip-kwh')
-  const counter = page.getByTestId('usage-today')
-  await expect(counter).toContainText('Usage today')
+  const counter = page.getByTestId('usage-counter')
+  await expect(page.getByTestId('usage-label')).toHaveText('Usage today')
   await expect(trip).toHaveAttribute('data-value', '8.2000')
   await expect(page.getByTestId('trip-cost')).toHaveText('£2.21')
   // A minute at 1200 W is 0.02 kWh.
@@ -351,36 +353,135 @@ test("the trip counter ticks up with the house's use", async ({ page }) => {
   recorded = 9.5
   await page.clock.fastForward(5 * 60_000)
   await expect.poll(async () => Number(await trip.getAttribute('data-value'))).toBeGreaterThanOrEqual(9.5)
-  // Tapped, it shows the cost in pounds to four decimals, and tapped again the usage; remembered.
-  await counter.click()
-  await expect(counter).toContainText('Cost today')
+  // The "£" switch shows the cost in pounds to four decimals, and "kWh" the usage again; remembered.
+  await page.getByRole('button', { name: 'Show cost' }).click()
+  await expect(page.getByTestId('usage-label')).toHaveText('Cost today')
   const pounds = page.getByTestId('trip-pounds')
   await expect(pounds).toHaveAttribute('data-value', /^2\.\d{4}$/)
   await expect(pounds).toHaveAttribute('aria-label', /^£2\.\d{4}$/)
   await page.reload()
-  await expect(page.getByTestId('usage-today')).toContainText('Cost today')
-  await page.getByTestId('usage-today').click()
-  await expect(page.getByTestId('usage-today')).toContainText('Usage today')
+  await expect(page.getByTestId('usage-label')).toHaveText('Cost today')
+  await page.getByRole('button', { name: 'Show usage' }).click()
+  await expect(page.getByTestId('usage-label')).toHaveText('Usage today')
+  await expect(counter).toHaveAttribute('data-shows', 'kwh')
 })
 
 // BDD: The odometer totals the day, week, month or year
 test('the odometer totals the day, week, month or year', async ({ page }) => {
   await serve(page, { first: { ...live(0, { Kitchen: 0, Utility: 0 }), watts: 0 } })
   await page.goto('/energy')
-  const odometer = page.getByTestId('odometer-kwh')
-  const periods = page.getByRole('group', { name: 'Odometer period' })
-  await periods.getByRole('button', { name: 'Year' }).click()
-  await expect(odometer).toHaveAttribute('data-value', '2100.0')
-  await expect(page.getByTestId('odometer-cost')).toHaveText('£567.00')
-  await periods.getByRole('button', { name: 'Month' }).click()
-  await expect(odometer).toHaveAttribute('data-value', '190.0')
-  await periods.getByRole('button', { name: 'Day' }).click()
-  await expect(odometer).toHaveAttribute('data-value', '8.2')
-  // Remembered.
-  await periods.getByRole('button', { name: 'Week' }).click()
+  // The usage counter shows any of them; there is no separate odometer.
+  await expect(page.getByTestId('odometer-kwh')).toHaveCount(0)
+  await page.getByTestId('trip-kwh').click()
+  await expect(page.getByTestId('trip-kwh')).toHaveAttribute('data-value', '51.0000')
+})
+
+// BDD: The usage counter shows the day, week, month or year
+test('the usage counter shows the day, week, month or year', async ({ page }) => {
+  await serve(page, { first: { ...live(0, { Kitchen: 0, Utility: 0 }), watts: 0 } })
+  await page.goto('/energy')
+  const label = page.getByTestId('usage-label')
+  const kwh = page.getByTestId('trip-kwh')
+  await expect(label).toHaveText('Usage today')
+  await expect(kwh).toHaveAttribute('data-value', '8.2000')
+  await kwh.click()
+  await expect(label).toHaveText('Usage this week')
+  await expect(kwh).toHaveAttribute('data-value', '51.0000')
+  await expect(page.getByTestId('trip-cost')).toHaveText('£13.77')
+  await kwh.click()
+  await expect(label).toHaveText('Usage this month')
+  await expect(kwh).toHaveAttribute('data-value', '190.000')
+  await kwh.click()
+  await expect(label).toHaveText('Usage this year')
+  await expect(kwh).toHaveAttribute('data-value', '2100.000')
+  // In pounds with the "£" switch.
+  await page.getByRole('button', { name: 'Show cost' }).click()
+  await expect(label).toHaveText('Cost this year')
+  await expect(page.getByTestId('trip-pounds')).toHaveAttribute('data-value', '567.000')
+  await page.getByRole('button', { name: 'Show usage' }).click()
+  // Remembered; then back round to today. Today vs yesterday compares today whatever the counter shows.
   await page.reload()
-  await expect(page.getByRole('group', { name: 'Odometer period' }).getByRole('button', { name: 'Week' })).toHaveAttribute('aria-pressed', 'true')
-  await expect(page.getByTestId('odometer-kwh')).toHaveAttribute('data-value', '51.0')
+  await expect(page.getByTestId('usage-label')).toHaveText('Usage this year')
+  await expect(page.getByTestId('vs-yesterday')).toHaveText('▲ 1.2 kWh vs yesterday')
+  await page.getByTestId('trip-kwh').click()
+  await expect(page.getByTestId('usage-label')).toHaveText('Usage today')
+  // No separate odometer.
+  await expect(page.getByRole('group', { name: 'Odometer period' })).toHaveCount(0)
+})
+
+/** Totals for the household day [day], ending at the next midnight (London is UTC in November). */
+function dayTotals(day: string, today: number, extra: object = {}) {
+  const next = new Date(`${day}T00:00:00Z`)
+  next.setUTCDate(next.getUTCDate() + 1)
+  return { ...TOTALS, today: { kwh: today, cost: today * 27 }, day, dayEndsAt: next.toISOString().replace('.000Z', 'Z'), ...extra }
+}
+
+// BDD: The usage counter starts again at the household's midnight
+test("the usage counter starts again at the household's midnight", async ({ page }) => {
+  // 23:59 on Tuesday 10 November, household time; the browser is told nothing else.
+  await page.clock.install({ time: new Date('2026-11-10T23:59:00Z') })
+  let totals = () => dayTotals('2026-11-10', 19.412, { week: { kwh: 60, cost: 1620 } })
+  const steady = { ...live(1200, { Kitchen: 900, Utility: 300 }), watts: 1200 }
+  const { push } = await serve(page, { first: steady, totals: () => totals() })
+  await page.goto('/energy')
+  const kwh = page.getByTestId('trip-kwh')
+  await expect(kwh).toHaveAttribute('data-value', '19.4120')
+  // Midnight passes; the service still answers with the old day until its next sample.
+  await page.clock.fastForward(61_000)
+  push(steady)
+  await expect.poll(async () => Number(await kwh.getAttribute('data-value'))).toBeLessThan(0.01)
+  // Totals for the day it has left are ignored; the new day's are taken though lower than last night's figure.
+  totals = () => dayTotals('2026-11-11', 0.1)
+  await page.clock.fastForward(5 * 60_000)
+  push(steady)
+  await expect.poll(async () => Number(await kwh.getAttribute('data-value'))).toBeGreaterThanOrEqual(0.1)
+  await expect.poll(async () => Number(await kwh.getAttribute('data-value'))).toBeLessThan(1)
+  // The week carries on (Wednesday is not Monday) without counting yesterday's roll twice.
+  await kwh.click()
+  await expect.poll(async () => Number(await kwh.getAttribute('data-value'))).toBeLessThan(61)
+})
+
+test("the usage counter turns over at the household's midnight whatever the browser's clock says", async ({ page }) => {
+  // The browser's clock is an hour slow: the service says it is 23:59 when the browser thinks 22:59.
+  await page.clock.install({ time: new Date('2026-11-10T22:59:00Z') })
+  // Asked for once on opening (the browser's 22:59), when the service's time is 23:59.
+  const totals = () => dayTotals('2026-11-10', 19.412, { at: '2026-11-10T23:59:00Z' })
+  await serve(page, { first: { ...live(0, { Kitchen: 0, Utility: 0 }), watts: 0 }, totals })
+  await page.goto('/energy')
+  const kwh = page.getByTestId('trip-kwh')
+  await expect(kwh).toHaveAttribute('data-value', '19.4120')
+  await page.clock.fastForward(61_000)
+  await expect(kwh).toHaveAttribute('data-value', '0.0000')
+})
+
+// BDD: The dashboard reloads its day figures at the household's midnight
+test("the dashboard reloads its day figures at the household's midnight", async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-11-10T23:59:00Z') })
+  let day = '2026-11-10'
+  const { asked } = await serve(page, { first: { ...live(0, { Kitchen: 0, Utility: 0 }), watts: 0 }, totals: () => dayTotals(day, day === '2026-11-10' ? 19.4 : 0.1) })
+  await page.goto('/energy')
+  await expect(page.getByTestId('trip-kwh')).toHaveAttribute('data-value', '19.4000')
+  const before = asked.paths.filter((p) => p === '/api/energy/totals').length
+  const dashboards = asked.paths.filter((p) => p === '/api/dashboard').length
+  // Within a minute of midnight, well before the next five-minute fetch, it asks again.
+  day = '2026-11-11'
+  await page.clock.fastForward(90_000)
+  await expect.poll(() => asked.paths.filter((p) => p === '/api/energy/totals').length).toBeGreaterThan(before)
+  expect(asked.paths.filter((p) => p === '/api/power').length).toBeGreaterThan(0)
+  // Today's dashboard for the dials and for Use and cost.
+  await expect.poll(() => asked.paths.filter((p) => p === '/api/dashboard').length).toBeGreaterThanOrEqual(dashboards + 2)
+  await expect(page.getByTestId('trip-kwh')).toHaveAttribute('data-value', /^0\.1/)
+})
+
+test('the dashboard fetches its day figures again when it comes back to the foreground', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-11-10T23:59:00Z') })
+  const { asked } = await serve(page, { first: { ...live(0, { Kitchen: 0, Utility: 0 }), watts: 0 }, totals: () => dayTotals('2026-11-10', 1) })
+  await page.goto('/energy')
+  await expect(page.getByTestId('trip-kwh')).toBeVisible()
+  await page.clock.fastForward(20_000)
+  const before = asked.paths.filter((p) => p === '/api/energy/totals').length
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
+  await expect.poll(() => asked.paths.filter((p) => p === '/api/energy/totals').length).toBeGreaterThan(before)
 })
 
 // BDD: Today is compared with yesterday at the same time
