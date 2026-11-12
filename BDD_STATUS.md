@@ -1,6 +1,6 @@
 # BDD Status
 
-Checked 469 scenario(s) across 150 test file(s).
+Checked 470 scenario(s) across 150 test file(s).
 
 
 ## Feature: Service foundation
@@ -262,6 +262,7 @@ Checked 469 scenario(s) across 150 test file(s).
 - [x] A silent sensor falls back to the valves
 - [x] An offline sensor falls back to the valves
 - [x] A sensor that reports again takes over again
+- [x] A sensor's silence is timed from when Zigbee2MQTT last heard it
 - [x] Sensors that leave Zigbee2MQTT are dropped from their room
 - [x] Room sensors survive a restart and are resent to valves
 - [x] Offline room sensors are reported to Uptime Kuma
@@ -635,4 +636,4 @@ Checked 469 scenario(s) across 150 test file(s).
 - [x] Deliveries are searched in the app
 
 ---
-**469/469 scenarios covered.**
+**470/470 scenarios covered.**

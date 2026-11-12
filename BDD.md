@@ -1271,6 +1271,13 @@ Engineering rules (apply to every scenario):
             Then "Bedroom 3 TRV" is sent {"temperature_sensor_select":"external","external_temperature_input":20.5}
             And room "Bedroom 3" shows current 20.5 and temperature source "sensor"
 
+        Scenario: A sensor's silence is timed from when Zigbee2MQTT last heard it
+            Given room "Bedroom 3" with sensor "Landing Smoke"
+            When the sensor's state arrives with "last_seen" 61 minutes ago, as a retained message does after a restart
+            Then "Landing Smoke" is offline on the next tick
+            And the same message arriving again does not bring it back
+            But a message with a newer "last_seen" does
+
         Scenario: Sensors that leave Zigbee2MQTT are dropped from their room
             Given sensor "Landing Smoke" is in room "Bedroom 3"
             When the bridge device list no longer contains "Landing Smoke"

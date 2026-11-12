@@ -11,6 +11,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.longOrNull
 import org.slf4j.LoggerFactory
 import java.time.Clock
 import java.time.Duration
@@ -109,8 +110,12 @@ class SensorRegistry(
         val updated = synchronized(this) {
             val current = sensors[name] ?: return
             val state = parse(payload) as? JsonObject ?: return
-            lastHeard[name] = clock.instant()
-            val recovered = silent.remove(name)
+            // Zigbee2MQTT's last_seen says when the sensor itself was last heard, which a retained
+            // message replayed after a restart would otherwise hide; only a newer one brings it back.
+            val heard = lastSeen(state["last_seen"]) ?: clock.instant()
+            val newer = lastHeard[name]?.let { heard.isAfter(it) } ?: true
+            lastHeard[name] = heard
+            val recovered = newer && silent.remove(name)
             current.copy(
                 online = if (recovered) true else current.online,
                 temperature = (state["temperature"] as? JsonPrimitive)?.doubleOrNull ?: current.temperature,
@@ -135,6 +140,15 @@ class SensorRegistry(
     private fun notify(sensor: Sensor) {
         stateListeners.forEach { it(sensor) }
         changes.emit(Change.SensorChanged(sensor.name))
+    }
+
+    /** Zigbee2MQTT's `last_seen` (ISO 8601 or epoch millis, per its `advanced.last_seen` option), never in the future. */
+    private fun lastSeen(value: JsonElement?): Instant? {
+        val primitive = value as? JsonPrimitive ?: return null
+        val seen = primitive.longOrNull?.let(Instant::ofEpochMilli)
+            ?: runCatching { java.time.OffsetDateTime.parse(primitive.content).toInstant() }.getOrNull()
+            ?: return null
+        return minOf(seen, clock.instant())
     }
 
     private fun parse(payload: String) = runCatching { Json.parseToJsonElement(payload) }.getOrNull()

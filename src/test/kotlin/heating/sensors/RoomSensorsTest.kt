@@ -286,6 +286,26 @@ class RoomSensorsTest {
         assertEquals(emptyList(), bedroom3.notices)
     }
 
+    // BDD: A sensor's silence is timed from when Zigbee2MQTT last heard it
+    @Test
+    fun `a sensor's silence is timed from when zigbee2mqtt last heard it`() {
+        val t = TestHeating()
+        bedroom3(t, reading = null)
+        val stale = t.clock.instant().minus(Duration.ofMinutes(61))
+        val retained = """{"temperature":21.5,"last_seen":"$stale"}"""
+        t.bus.receive("zigbee2mqtt/Landing Smoke", retained, retained = true)
+        t.app.tick()
+        assertEquals(false, sensors(t).single().online)
+        assertEquals(internal, t.sentTo("Bedroom 3 TRV").last())
+
+        t.bus.receive("zigbee2mqtt/Landing Smoke", retained, retained = true)
+        assertEquals(false, sensors(t).single().online)
+
+        t.sensorState("Landing Smoke", """{"temperature":20.5,"last_seen":"${t.clock.instant()}"}""")
+        assertEquals(true, sensors(t).single().online)
+        assertEquals(external(20.5), t.sentTo("Bedroom 3 TRV").last())
+    }
+
     // BDD: Sensors that leave Zigbee2MQTT are dropped from their room
     @Test
     fun `sensors that leave zigbee2mqtt are dropped from their room`() {
