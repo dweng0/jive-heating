@@ -16,11 +16,13 @@
   --line: #222d3a;
   --fg: #e9eef3;
   --muted: #8794a3;
-  --solar: #f5c542;
-  --battery: #3ddc84;
-  --grid: #9aa5b1;
-  --home: #4aa3ff;
-  --warn: #f59f5a;
+  --solar: #3ddc84;
+  --battery: #4aa3ff;
+  --grid: #f59f5a;
+  --home: #e3e9f0;
+  --ok: #3ddc84;
+  --focus: #4aa3ff;
+  --warn: #ff6b6b;
   --font: 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 * { box-sizing: border-box; }
@@ -36,7 +38,7 @@ header { display: flex; flex-wrap: wrap; align-items: center; justify-content: s
 .title { display: flex; align-items: baseline; gap: 12px; }
 h1 { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.01em; }
 .status { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
-.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--battery); box-shadow: 0 0 0 0 var(--battery); animation: pulse 2.4s infinite; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 0 var(--ok); animation: pulse 2.4s infinite; }
 .status.stale .dot { background: var(--warn); animation: none; }
 .status.stale { color: var(--warn); }
 @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(61,220,132,.55); } 70% { box-shadow: 0 0 0 8px rgba(61,220,132,0); } 100% { box-shadow: 0 0 0 0 rgba(61,220,132,0); } }
@@ -44,7 +46,7 @@ h1 { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.01em; }
 .seg { display: inline-flex; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
 .seg button { font: inherit; font-size: 13px; font-weight: 600; color: var(--muted); background: none; border: 0; padding: 7px 16px; border-radius: 999px; cursor: pointer; }
 .seg button[aria-pressed="true"] { background: var(--surface-2); color: var(--fg); }
-button:focus-visible { outline: 2px solid var(--home); outline-offset: 2px; }
+button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
 .chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
 .chips::-webkit-scrollbar { display: none; }
@@ -165,7 +167,7 @@ aside { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
 <script>
 (() => {
-const C = { solar: '#f5c542', battery: '#3ddc84', grid: '#9aa5b1', home: '#4aa3ff' };
+const C = { solar: '#3ddc84', battery: '#4aa3ff', grid: '#f59f5a', home: '#e3e9f0' };
 const NAMES = { solar: 'Solar', battery: 'Battery', grid: 'Grid', home: 'Home' };
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const INTERVAL = 10000;
@@ -577,10 +579,13 @@ function buildHouse() {
   roof({ x0: -5, x1: 5, z0: 6.5, z1: 10, y: 2.3, rise: 1.7, axis: 'x' });
   const garUp = V(0, 1.7, -1.75).normalize();
   onSlope(V(0, 2.3, 10), X, garUp, Array.from({ length: 7 }, (_, i) => [-2.6 + i * 1.02, 1.15]), 1.0, 1.68, panelP, panelFrame);   // garage: 7 portrait in one row
-  box(0.72, 1.8, 0.32, std(0xf1f3f5, { roughness: .45 }), 3.2, 0.92, 6.9);   // GoodWe ESA tower
+  const towerMat = std(0xf1f3f5, { roughness: .45, emissive: new THREE.Color(C.battery), emissiveIntensity: 0 });
+  box(0.72, 1.8, 0.32, towerMat, 3.2, 0.92, 6.9);   // GoodWe ESA tower
   for (const y of [0.55, 1.0, 1.45]) box(0.73, 0.012, 0.33, std(0xc9ced4), 3.2, y, 6.9, false);
   const led = box(0.04, 0.9, 0.02, new THREE.MeshBasicMaterial({ color: C.battery }), 3.2, 1.05, 7.07, false);
-  const garageGlow = new THREE.PointLight(0x3ddc84, 0, 7); garageGlow.position.set(3.2, 1.7, 8.2); scene.add(garageGlow);
+  const garageGlow = new THREE.PointLight(0x4aa3ff, 0, 7); garageGlow.position.set(3.2, 1.7, 8.2); scene.add(garageGlow);
+  const panelGlow = [[-7.4, 5.3, -0.6], [0.5, 4.6, 10.4]].map(([x, y, z]) => { const l = new THREE.PointLight(0x3ddc84, 0, 7, 2); l.position.set(x, y, z); scene.add(l); return l; });
+  const GREEN = new THREE.Color(C.solar), WHITE = new THREE.Color(0xffffff);
 
   // windows and doors
   win3(-10.03, 1.5, -2.0, 0.6, 0.7, 'w', 1);                      // small gable window
@@ -768,7 +773,7 @@ function buildHouse() {
   const TARGET = V(-3, 1.4, 2.6);
   function runEdge(e, w, dt) {
     const on = Math.min(1, w / 250) * alive;
-    e.line.material.opacity = on * 0.3;
+    e.line.material.opacity = on * (0.2 + 0.4 * (0.5 + 0.5 * Math.sin(performance.now() * 0.0045 + e.len)));
     e.mat.opacity = on;
     e.mat.size = 0.55 + 0.65 * Math.sqrt(Math.min(w, 7400) / 7400);
     const speed = w < 5 ? 0 : 1.6 + 5.5 * Math.sqrt(Math.min(w, 7400) / 7400);   // metres per second
@@ -794,15 +799,20 @@ function buildHouse() {
     for (const k of EDGE_KEYS) runEdge(three.edges[k], cur[k], dt);
     const T = totals();
     for (const f of Object.values(FEED)) runEdge(f.edge, T.solar * f.share, dt);
-    panelP.emissiveIntensity = panelL.emissiveIntensity = Math.min(1, T.solar / 7400) * 0.04 * alive;
+    const sf = Math.min(1, T.solar / 7400) * alive;   // panels take a green hue that deepens with output
+    panelP.emissiveIntensity = panelL.emissiveIntensity = 0.02 + sf * 0.3;
+    panelFrame.emissive.copy(WHITE).lerp(GREEN, Math.min(1, sf * 1.6)); panelFrame.emissiveIntensity = 0.12 + sf * 0.55;
+    for (const l of panelGlow) l.intensity = sf * 1.1;
+    const full = reading && reading.batteryPct != null ? reading.batteryPct / 100 : 0;   // battery glows bluer the fuller it is
+    towerMat.emissiveIntensity = full * 0.6 * alive;
     winC.emissiveIntensity = winB.emissiveIntensity = dark * 0.95;
     glass.emissiveIntensity = 0.03 + dark * 0.4;
     sun.intensity = 0.85 - 0.8 * dark; hemi.intensity = 0.24 - 0.17 * dark; rim.intensity = 0.3 - 0.2 * dark;
     for (const m of allMats) m.envMapIntensity = m.userData.env * (1 - 0.88 * dark);
     for (const l of roomLights) l.intensity = dark * 0.9;
     const battActive = T.battIn + T.battOut > 50;
-    led.material.color.set(battActive ? C.battery : '#2a3a33');
-    garageGlow.intensity = battActive ? 0.9 * alive : 0.15;
+    led.material.color.set(battActive ? C.battery : '#26323f');
+    garageGlow.intensity = (0.12 + full * 1.2) * alive;
 
     const hasSolar = reading ? reading.hasSolar : true;
     const pct = reading && reading.batteryPct != null ? reading.batteryPct : null;
