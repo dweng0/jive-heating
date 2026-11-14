@@ -346,7 +346,7 @@ function buildHouse() {
   renderer.outputEncoding = THREE.sRGBEncoding;
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0x0a0e13, 70, 140);
-  const camera = new THREE.PerspectiveCamera(30, 1, 0.5, 300);
+  const camera = new THREE.PerspectiveCamera(30, 1, 4, 220);
   const V = (x, y, z) => new THREE.Vector3(x, y, z);
 
   const hemi = new THREE.HemisphereLight(0x8fa8c4, 0x05070a, 0.24); scene.add(hemi);
@@ -522,7 +522,7 @@ function buildHouse() {
       const c = origin.clone().addScaledVector(along, a).addScaledVector(up, b).addScaledVector(n, 0.07);
       if (frame) { const f = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.04), frame); f.position.copy(c); f.quaternion.copy(q); f.castShadow = true; scene.add(f); }
       const p = new THREE.Mesh(new THREE.BoxGeometry(w - 0.13, h - 0.13, 0.05), mat);
-      p.position.copy(c).addScaledVector(n, 0.012); p.quaternion.copy(q); scene.add(p);
+      p.position.copy(c).addScaledVector(n, 0.045); p.quaternion.copy(q); scene.add(p);
     }
   }
 
@@ -605,9 +605,12 @@ function buildHouse() {
   flat(5, 6.8, 0x12201a, 9.9, -1.6);                              // front lawn
   box(0.25, 0.7, 6.8, brick, 12.6, 0.35, -1.6);                   // garden wall with fence panels
   const iron = std(0x0c0e11, { roughness: .5, metalness: .6 });
-  for (let z = -4.7; z < 1.6; z += 0.17) if (Math.abs(z + 1.6) > 0.25) box(0.03, 0.8, 0.03, iron, 12.6, 1.1, z, false);
-  box(0.04, 0.04, 6.4, iron, 12.6, 1.38, -1.6, false); box(0.04, 0.04, 6.4, iron, 12.6, 0.78, -1.6, false);
-  for (const z of [-5, -1.6, 1.8]) box(0.46, 0.07, 0.46, std(0x8f8a84), 12.6, 1.585, z);
+  box(0.06, 0.75, 6.4, redWood, 12.6, 1.08, -1.6);
+  const cap = std(0x8f8a84);
+  box(7.4, 0.7, 0.25, brick, 8.9, 0.35, 10.7);                    // garage side of the drive: brick wall, pillars, black railings
+  for (let x = 5.5; x < 12.4; x += 0.17) if (Math.abs(x - 8.9) > 0.25) box(0.03, 0.8, 0.03, iron, x, 1.1, 10.7, false);
+  box(7.0, 0.04, 0.04, iron, 8.9, 1.38, 10.7, false); box(7.0, 0.04, 0.04, iron, 8.9, 0.78, 10.7, false);
+  for (const x of [5.2, 8.9, 12.6]) { box(0.36, 1.55, 0.36, brick, x, 0.775, 10.7); box(0.46, 0.07, 0.46, cap, x, 1.585, 10.7); }
   const wood = std(0xffffff, { roughness: .85, map: canvasTex(128, 128, (g, w, h) => {
     for (let i = 0; i < 8; i++) { g.fillStyle = `hsl(${26 + rnd() * 8},${32 + rnd() * 10}%,${40 + rnd() * 10}%)`; g.fillRect(i * 16, 0, 16, h); g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(i * 16, 0, 1.5, h); }
     speckle(g, w, h, 500, .12);
