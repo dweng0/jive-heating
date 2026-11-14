@@ -530,7 +530,7 @@ function buildHouse() {
   const flat = (w, d, color, x, z, y = 0.012) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), groundMat(color, w, d)); m.rotation.x = -Math.PI / 2; m.position.set(x, y, z); m.receiveShadow = true; scene.add(m); };
   const ground = new THREE.Mesh(new THREE.CircleGeometry(36, 72), std(0x0b1016, { roughness: 1 }));
   ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
-  flat(11, 17, 0x12201a, -11.5, 2.5);          // lawn
+  flat(9.5, 19, 0x12201a, -10.75, 4.5);          // lawn
   flat(1.6, 13, 0x20262d, -7.2, 2.5, 0.015);   // patio along the back
   flat(4.5, 5, 0x2b2a25, -7.4, 9.6, 0.015);    // gravel yard behind the garage
   flat(7, 10, 0x161b21, 9, 7);                 // drive at the front
@@ -619,6 +619,18 @@ function buildHouse() {
   box(7.3, 1.65, 0.05, wood, 8.85, 0.825, -5.05);
   box(7.3, 0.05, 0.09, post, 8.85, 1.67, -5.05);
   for (let x = 5.2; x < 12.4; x += 1.825) box(0.1, 1.75, 0.1, post, x, 0.875, -5.05);
+  // back garden squared off with 6 ft (1.83 m) fence panels
+  function fence(x0, z0, x1, z1) {
+    const alongX = z0 === z1, len = alongX ? x1 - x0 : z1 - z0, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+    box(alongX ? len : 0.05, 1.83, alongX ? 0.05 : len, wood, cx, 0.915, cz);
+    box(alongX ? len : 0.09, 0.05, alongX ? 0.09 : len, post, cx, 1.85, cz);
+    const n = Math.round(len / 1.83);
+    for (let i = 0; i <= n; i++) box(0.1, 1.93, 0.1, post, alongX ? x0 + len * i / n : cx, 0.965, alongX ? cz : z0 + len * i / n);
+  }
+  fence(-15.5, -5.05, -10.1, -5.05);   // north, up to the kitchen gable
+  fence(-15.5, -5.05, -15.5, 14);      // west, end of the garden
+  fence(-15.5, 14, 5.2, 14);           // south
+  fence(5.2, 10.9, 5.2, 14);           // return to the railings wall by the garage
   for (const z of [-5, -1.6, 1.8]) box(0.36, 1.55, 0.36, brick, 12.6, 0.775, z);
 
 
@@ -629,7 +641,7 @@ function buildHouse() {
   // everything away from the house fades into the background, so the house is the focal point
   {
     const t = canvasTex(256, 256, (g, w, h) => {
-      const r = g.createRadialGradient(w / 2, h / 2, w / 2 * 0.17, w / 2, h / 2, w / 2 * 0.31);
+      const r = g.createRadialGradient(w / 2, h / 2, w / 2 * 0.2, w / 2, h / 2, w / 2 * 0.36);
       r.addColorStop(0, 'rgba(255,255,255,0)'); r.addColorStop(1, 'rgba(255,255,255,1)');
       g.fillStyle = r; g.fillRect(0, 0, w, h);
     });
