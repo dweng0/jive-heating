@@ -77,11 +77,11 @@ button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .pane { position: relative; flex: 0 0 100%; height: 100%; }
 @media (prefers-reduced-motion: reduce) { .track { transition: none; } }
 #labels { position: absolute; inset: 0; pointer-events: none; }
-.label { position: absolute; left: 0; top: 0; transform: translate(-50%, -100%); text-align: center; white-space: nowrap; transition: opacity .8s; }
+.label { position: absolute; left: 0; top: 0; transform: translate(-50%, -100%); text-align: center; white-space: nowrap; transition: opacity .8s; padding: 6px 12px 7px; border-radius: 14px; background: rgba(10,14,19,.55); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
 .label .k { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .label .v { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1; letter-spacing: -0.01em; }
 .label .s { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.label.off { opacity: .35; }
+.label.off { opacity: .55; }
 #svgwrap { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 12px; }
 #svgwrap svg { width: 100%; height: 100%; max-width: 520px; }
 .stalenote {
@@ -89,7 +89,7 @@ button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
   background: rgba(17,23,31,.9); border: 1px solid var(--line); color: var(--fg);
   font-size: 13px; padding: 8px 14px; border-radius: 999px; white-space: nowrap;
 }
-.hint { pointer-events: none; position: absolute; right: 14px; top: 12px; font-size: 11px; color: var(--muted); opacity: .7; }
+.hint { text-shadow: 0 1px 3px rgba(0,0,0,.8); color: #dfe6ee; opacity: .85; pointer-events: none; position: absolute; right: 14px; top: 12px; font-size: 11px; color: var(--muted); opacity: .7; }
 
 aside { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 18px; }
@@ -120,6 +120,7 @@ aside { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
   </header>
 
   <div class="chips" role="group" aria-label="Example readings" id="chips"></div>
+  <div class="chips" role="group" aria-label="Weather" id="wx"></div>
 
   <div class="main">
     <div class="stagecol">
@@ -152,7 +153,7 @@ aside { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
         <h2>Where it's going</h2>
         <div class="circuits" id="circuits"></div>
       </div>
-      <p class="foot">Prototype with simulated readings. The house is modelled from your photos, seen from the garden. A new reading arrives every 10 seconds and the flow eases to it. Drag the house to turn it, pinch or scroll to zoom, and use the buttons under the picture to switch to the diagram. Pick an example above, or stop the readings to see the stale state.</p>
+      <p class="foot">Prototype with simulated readings. The house is modelled from your photos, seen from the garden. A new reading arrives every 10 seconds and the flow eases to it. The second row of buttons changes the weather; the evening and overnight examples change the time of day. Drag the house to turn it, pinch or scroll to zoom, and use the buttons under the picture to switch to the diagram. Pick an example above, or stop the readings to see the stale state.</p>
     </aside>
   </div>
 </div>
@@ -165,6 +166,7 @@ aside { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/objects/Sky.js"></script>
 <script>
 (() => {
 const C = { solar: '#3ddc84', battery: '#4aa3ff', grid: '#f59f5a', home: '#e3e9f0' };
@@ -180,7 +182,7 @@ const SCEN = {
   laundry: { label: 'Cloudy, washing on', dark: 0.15, pct: 52, solar: true,
              flows: { 'solar>home': 1300, 'battery>home': 1100, 'grid>home': 350 },
              circuits: { 'Tumble dryer': 2100, Fridge: 95, Office: 190, Oven: 0, Dishwasher: 0 } },
-  evening: { label: 'Evening cooking', dark: 0.7, pct: 41, solar: true,
+  evening: { label: 'Evening cooking', dark: 0.55, pct: 41, solar: true,
              flows: { 'solar>home': 150, 'battery>home': 2400, 'grid>home': 1300 },
              circuits: { Oven: 2300, Dishwasher: 0, Fridge: 110, Office: 60, 'Tumble dryer': 0 } },
   night:   { label: 'Overnight cheap rate', dark: 1, pct: 30, solar: true,
@@ -211,6 +213,8 @@ const phase = Object.fromEntries(EDGE_KEYS.map(k => [k, Math.random()]));
 let curCircuits = {};
 let alive = 1; // 1 live, eases to 0.15 when stale
 let dark = 0;  // 0 day, 1 night; eases to the example's value
+const WX = { clear: { label: 'Clear sky', cloud: 0, rain: 0 }, cloudy: { label: 'Passing cloud', cloud: 0.55, rain: 0 }, overcast: { label: 'Overcast', cloud: 1, rain: 0 }, rain: { label: 'Rain', cloud: 1, rain: 1 } };
+let wxKey = 'clear', cloud = 0, rainAmt = 0;
 let pctShown = 0;
 
 function target(k) {
@@ -241,7 +245,7 @@ for (const [k, s] of Object.entries(SCEN)) {
   const b = document.createElement('button');
   b.className = 'chip'; b.textContent = s.label; b.id = 'scen-' + k;
   b.setAttribute('aria-pressed', k === scenKey);
-  b.onclick = () => { scenKey = k; stale = false; syncChips(); receive(); };
+  b.onclick = () => { scenKey = k; stale = false; if (k === 'laundry') wxKey = 'cloudy'; if (k === 'sunny') wxKey = 'clear'; syncChips(); receive(); };
   chipsEl.appendChild(b);
 }
 const sep = document.createElement('span'); sep.className = 'sep'; chipsEl.appendChild(sep);
@@ -249,7 +253,15 @@ const stopBtn = document.createElement('button');
 stopBtn.className = 'chip stop'; stopBtn.id = 'stopReadings'; stopBtn.textContent = 'Stop readings';
 stopBtn.onclick = () => { stale = !stale; syncChips(); if (!stale) receive(); };
 chipsEl.appendChild(stopBtn);
+const wxEl = document.getElementById('wx');
+for (const [k, w] of Object.entries(WX)) {
+  const b = document.createElement('button');
+  b.className = 'chip'; b.textContent = w.label; b.id = 'wx-' + k;
+  b.onclick = () => { wxKey = k; syncChips(); };
+  wxEl.appendChild(b);
+}
 function syncChips() {
+  for (const k of Object.keys(WX)) document.getElementById('wx-' + k).setAttribute('aria-pressed', k === wxKey);
   for (const k of Object.keys(SCEN)) document.getElementById('scen-' + k).setAttribute('aria-pressed', k === scenKey);
   stopBtn.setAttribute('aria-pressed', stale);
   stopBtn.textContent = stale ? 'Resume readings' : 'Stop readings';
@@ -341,24 +353,26 @@ function buildHouse() {
   // Panels: south slope of the rear (north) wing, around its roof windows, and the south slope of the garage.
   const BATT_KWH = 16;
   const canvas = document.getElementById('gl');
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(Math.max(devicePixelRatio, 1.5), 2));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.outputEncoding = THREE.sRGBEncoding;
   const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(0x0a0e13, 70, 140);
+  scene.fog = new THREE.FogExp2(0x8fa3b8, 0.005);
   const camera = new THREE.PerspectiveCamera(30, 1, 4, 220);
   const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  const LOW = matchMedia('(pointer: coarse)').matches || innerWidth < 700;   // phones: lighter settings
+  const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
-  const hemi = new THREE.HemisphereLight(0x8fa8c4, 0x05070a, 0.24); scene.add(hemi);
-  const sun = new THREE.DirectionalLight(0xffe9cc, 0.85);
-  sun.position.set(-10, 26, 22); sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
-  Object.assign(sun.shadow.camera, { left: -26, right: 26, top: 26, bottom: -26, near: 1, far: 90 });
-  sun.shadow.bias = -0.0006;
-  scene.add(sun);
-  const rim = new THREE.DirectionalLight(0x4aa3ff, 0.3); rim.position.set(15, 8, -15); scene.add(rim);
+  const hemi = new THREE.HemisphereLight(0xbfd4ee, 0x2a2622, 0.2); scene.add(hemi);
+  const sun = new THREE.DirectionalLight(0xfff1dc, 1.5);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(LOW ? 2048 : 4096, LOW ? 2048 : 4096);
+  Object.assign(sun.shadow.camera, { left: -28, right: 28, top: 28, bottom: -28, near: 1, far: 160 });
+  sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.04;
+  scene.add(sun, sun.target);
+  const moon = new THREE.DirectionalLight(0x8fb0ff, 0); moon.position.set(14, 30, -12); scene.add(moon);
 
   // ---- procedural textures (drawn in code, no image downloads) ----
   let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
@@ -371,15 +385,19 @@ function buildHouse() {
   }
   const speckle = (g, w, h, n, a) => { for (let i = 0; i < n; i++) { g.fillStyle = `rgba(${rnd() < .5 ? '0,0,0' : '255,255,255'},${rnd() * a})`; g.fillRect(rnd() * w, rnd() * h, 1 + rnd() * 2, 1 + rnd() * 2); } };
   const brickDraw = height => (g, w, h) => {
-    g.fillStyle = height ? '#3a3a3a' : '#b9ada0'; g.fillRect(0, 0, w, h);
-    const bw = w / 4, bh = h / 8;
+    g.fillStyle = height ? '#2c2c2c' : '#a2978b'; g.fillRect(0, 0, w, h);
+    if (!height) speckle(g, w, h, 5000, .25);
+    const bw = w / 4, bh = h / 8, m = w / 150, seen = {};
     for (let r = 0; r < 8; r++) for (let c = -1; c < 4; c++) {
-      const x = c * bw + (r % 2 ? bw / 2 : 0), y = r * bh;
-      if (height) { const v = 190 + rnd() * 50 | 0; g.fillStyle = `rgb(${v},${v},${v})`; }
-      else g.fillStyle = `hsl(${9 + rnd() * 10},${48 + rnd() * 16}%,${44 + rnd() * 16}%)`;
-      g.fillRect(x + 2, y + 2, bw - 4, bh - 4);
+      const x = c * bw + (r % 2 ? bw / 2 : 0), y = r * bh, key = r + ',' + (c + 4) % 4;
+      if (!seen[key]) {
+        const v = 185 + rnd() * 55 | 0, burnt = rnd() < .14;
+        seen[key] = height ? `rgb(${v},${v},${v})` : `hsl(${7 + rnd() * 13},${burnt ? 28 : 44 + rnd() * 20}%,${burnt ? 27 + rnd() * 8 : 38 + rnd() * 17}%)`;
+      }
+      g.fillStyle = seen[key]; g.fillRect(x + m, y + m, bw - 2 * m, bh - 2 * m);
+      if (!height) { const gr = g.createLinearGradient(0, y, 0, y + bh); gr.addColorStop(0, 'rgba(255,255,255,.10)'); gr.addColorStop(1, 'rgba(0,0,0,.18)'); g.fillStyle = gr; g.fillRect(x + m, y + m, bw - 2 * m, bh - 2 * m); }
     }
-    speckle(g, w, h, 1400, height ? .25 : .16);
+    speckle(g, w, h, 7000, height ? .22 : .17);
   };
   const tileDraw = height => (g, w, h) => {
     const tw = w / 4, th = h / 4;
@@ -404,16 +422,49 @@ function buildHouse() {
   };
   const noiseTex = canvasTex(128, 128, (g, w, h) => { g.fillStyle = '#d0d0d0'; g.fillRect(0, 0, w, h); speckle(g, w, h, 2600, .4); });
 
+  // one soft noise texture drives cloud shadows (red) and large-scale weathering on walls and roofs (green)
+  const fbmTex = canvasTex(256, 256, (g, N) => {
+    const grid = n => { const a = new Float32Array(n * n).map(() => rnd()); const at = (i, j) => a[((j % n + n) % n) * n + (i % n + n) % n];
+      return (x, y) => { const fx = x / N * n, fy = y / N * n, x0 = Math.floor(fx), y0 = Math.floor(fy), tx = fx - x0, ty = fy - y0, sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty);
+        return (at(x0, y0) * (1 - sx) + at(x0 + 1, y0) * sx) * (1 - sy) + (at(x0, y0 + 1) * (1 - sx) + at(x0 + 1, y0 + 1) * sx) * sy; }; };
+    const mk = () => { const o = [4, 8, 16, 32].map(grid); return (x, y) => o[0](x, y) * .5 + o[1](x, y) * .27 + o[2](x, y) * .15 + o[3](x, y) * .08; };
+    const A = mk(), B = mk(), id = g.createImageData(N, N);
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) { const i = (y * N + x) * 4; id.data[i] = A(x, y) * 255; id.data[i + 1] = B(x, y) * 255; id.data[i + 3] = 255; }
+    g.putImageData(id, 0, 0);
+  });
+  function normalFrom(tex, k) {   // normal map from a height drawing, so brick and tile relief catches the light properly
+    const src = tex.image, w = src.width, h = src.height, d = src.getContext('2d').getImageData(0, 0, w, h).data;
+    const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d'), o = g.createImageData(w, h);
+    const H = (x, y) => d[(((y + h) % h) * w + (x + w) % w) * 4] / 255;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const dx = (H(x + 1, y) - H(x - 1, y)) * k, dy = (H(x, y + 1) - H(x, y - 1)) * k, l = Math.hypot(dx, dy, 1), i = (y * w + x) * 4;
+      o.data[i] = (-dx / l * .5 + .5) * 255; o.data[i + 1] = (dy / l * .5 + .5) * 255; o.data[i + 2] = (1 / l * .5 + .5) * 255; o.data[i + 3] = 255;
+    }
+    g.putImageData(o, 0, 0);
+    const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = maxAniso; return t;
+  }
+  const cloudU = { uCloudTex: { value: fbmTex }, uCloudOff: { value: new THREE.Vector2() }, uCloudAmt: { value: 0 } };
   const allMats = [];
-  const keep = m => { m.userData.env = m.envMapIntensity; allMats.push(m); return m; };
-  const std = (color, o = {}) => keep(new THREE.MeshStandardMaterial(Object.assign({ color, roughness: .9, metalness: 0, side: THREE.DoubleSide, envMapIntensity: .5 }, o)));
+  const keep = m => {
+    m.envMapIntensity *= 0.42; m.userData.env = m.envMapIntensity; m.userData.rough = m.roughness; m.userData.col = m.color.clone(); allMats.push(m);
+    m.onBeforeCompile = sh => {   // every surface: drifting cloud shadows on direct light, plus weathering on textured ones
+      Object.assign(sh.uniforms, cloudU, { uGrime: { value: m.userData.grime || 0 } });
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWPos;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform sampler2D uCloudTex; uniform vec2 uCloudOff; uniform float uCloudAmt; uniform float uGrime;')
+        .replace('#include <map_fragment>', '#include <map_fragment>\ndiffuseColor.rgb *= mix(1.0, 0.6 + 0.75 * texture2D(uCloudTex, vWPos.xz * 0.045 + vWPos.y * 0.07).g, uGrime);')
+        .replace('#include <aomap_fragment>', 'float cloudSh = 1.0 - uCloudAmt * smoothstep(0.42, 0.6, texture2D(uCloudTex, vWPos.xz * 0.011 + uCloudOff).r);\nreflectedLight.directDiffuse *= cloudSh; reflectedLight.directSpecular *= cloudSh;\n#include <aomap_fragment>');
+    };
+    return m;
+  };
+  const std = (color, o = {}) => keep(new THREE.MeshStandardMaterial(Object.assign({ color, roughness: .9, metalness: 0, side: THREE.DoubleSide, envMapIntensity: .6 }, o)));
   const textured = (draw, mpr, o = {}) => {
-    const m = std(0xffffff, Object.assign({ map: canvasTex(256, 256, draw(false), true), bumpMap: canvasTex(256, 256, draw(true)), bumpScale: 0.035 }, o));
-    m.userData.uv = mpr; return m;   // metres covered by one repeat of the texture
+    const m = std(0xffffff, Object.assign({ map: canvasTex(512, 512, draw(false), true), normalMap: normalFrom(canvasTex(512, 512, draw(true)), 2.6) }, o));
+    m.userData.uv = mpr; m.userData.grime = 1; m.userData.wet = .55; return m;   // uv = metres covered by one repeat of the texture
   };
   const brick = textured(brickDraw, [0.9, 0.6]);
   const tile = textured(tileDraw, [1.32, 1.36], { roughness: .78 });
-  const darkTile = std(0xb4aaa6, { map: tile.map, bumpMap: tile.bumpMap, bumpScale: .035, roughness: .78 }); darkTile.userData.uv = tile.userData.uv;
+  const darkTile = std(0xb4aaa6, { map: tile.map, normalMap: tile.normalMap, roughness: .78 }); darkTile.userData.uv = tile.userData.uv; darkTile.userData.grime = 1; darkTile.userData.wet = .55;
   const white = std(0xd9dde2, { roughness: .5 });
   const nbBrick = std(0x7d5a4e, { transparent: true, opacity: .55 }), nbTile = std(0x9a8d76, { transparent: true, opacity: .55 });
   const winDraw = (style, glow) => (g, w, h) => {
@@ -429,32 +480,72 @@ function buildHouse() {
   const panelL = std(0xffffff, Object.assign({ map: canvasTex(256, 128, panelDraw(12, 6), true) }, panelOpts));   // landscape
   const panelFrame = std(0xdfe5ec, { metalness: .5, roughness: .35, envMapIntensity: 1, emissive: new THREE.Color(0xffffff), emissiveIntensity: .12 });
   const frameMat = std(0x8f99a5, { metalness: .7, roughness: .35, envMapIntensity: 1 });
-  const groundMat = (color, w, d) => { const t = noiseTex.clone(); t.needsUpdate = true; t.repeat.set(w / 2.5, d / 2.5); return std(color, { roughness: 1, map: t, bumpMap: t, bumpScale: .02 }); };
+  const groundMat = (color, w, d) => { const t = noiseTex.clone(); t.needsUpdate = true; t.repeat.set(w / 2.5, d / 2.5); const m = std(color, { roughness: 1, map: t, bumpMap: t, bumpScale: .02 }); m.userData.wet = 1; return m; };
 
-  // sky for surfaces to reflect: nothing looks glossy without something to mirror
-  {
-    const sky = new THREE.Scene();
-    const t = canvasTex(512, 256, (g, w, h) => {
-      const gr = g.createLinearGradient(0, 0, 0, h);
-      gr.addColorStop(0, '#0d1b30'); gr.addColorStop(.48, '#40618a'); gr.addColorStop(.52, '#1a222c'); gr.addColorStop(1, '#050608');
-      g.fillStyle = gr; g.fillRect(0, 0, w, h);
-      const s = g.createRadialGradient(w * .3, h * .2, 0, w * .3, h * .2, 70);
-      s.addColorStop(0, 'rgba(255,240,215,1)'); s.addColorStop(.2, 'rgba(255,225,180,.6)'); s.addColorStop(1, 'rgba(255,220,170,0)');
-      g.fillStyle = s; g.fillRect(0, 0, w, h);
-    }, true);
-    sky.add(new THREE.Mesh(new THREE.SphereGeometry(40, 32, 16), new THREE.MeshBasicMaterial({ map: t, side: THREE.BackSide })));
-    const pm = new THREE.PMREMGenerator(renderer); scene.environment = pm.fromScene(sky, 0.02).texture; pm.dispose();
-  }
+  // ---- sky, weather and the image pipeline ----
+  const sky = THREE.Sky ? new THREE.Sky() : null, sunDir = V(0, 1, 0), fogC = new THREE.Color(), tmpC = new THREE.Color();
+  const domeU = { tex: { value: fbmTex }, cover: { value: 0 }, col: { value: new THREE.Color(1, 1, 1) }, off: { value: new THREE.Vector2() } };
+  const domeMat = new THREE.ShaderMaterial({ uniforms: domeU, side: THREE.BackSide, transparent: true, depthWrite: false,
+    vertexShader: 'varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: `uniform sampler2D tex; uniform float cover; uniform vec3 col; uniform vec2 off; varying vec3 vDir;
+      void main(){ vec3 d = normalize(vDir); vec2 uv = d.xz / (abs(d.y) + 0.3) * 0.22 + off;
+        float n = texture2D(tex, uv).r * 0.65 + texture2D(tex, uv * 2.7 - off * 1.7).g * 0.35;
+        float t = mix(0.78, 0.12, cover); float a = smoothstep(t, t + 0.16, n) * smoothstep(-0.04, 0.1, d.y);
+        gl_FragColor = vec4(col * (0.62 + 0.6 * n), a); }` });
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(180, 32, 16), domeMat); scene.add(dome);
+  const stars = (() => {
+    const p = new Float32Array(900 * 3);
+    for (let i = 0; i < 900; i++) { const a = rnd() * 6.283, y = rnd() * .95 + .03, r = Math.sqrt(1 - y * y); p[i * 3] = Math.cos(a) * r * 170; p[i * 3 + 1] = y * 170; p[i * 3 + 2] = Math.sin(a) * r * 170; }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(p, 3));
+    const m = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xffffff, size: 1.6, sizeAttenuation: false, transparent: true, opacity: 0, depthWrite: false, fog: false }));
+    scene.add(m); return m;
+  })();
+  const envScene = new THREE.Scene(), pmrem = new THREE.PMREMGenerator(renderer);
+  const envGround = new THREE.Mesh(new THREE.CircleGeometry(24, 24), new THREE.MeshBasicMaterial({ side: THREE.DoubleSide })); envGround.rotation.x = -Math.PI / 2; envGround.position.y = -0.6; envScene.add(envGround);
+  if (sky) {
+    // the stock sky shader makes the sun disc thousands of times brighter than the sky, which floods the reflections; cap it
+    const fs = sky.material.fragmentShader, capped = fs.replace(/gl_FragColor = vec4\( retColor, 1\.0 \);/, 'gl_FragColor = vec4( min( retColor, vec3( 1.3 ) ), 1.0 );');
+    if (capped === fs) console.warn('sky cap not applied'); sky.material.fragmentShader = capped;
+    sky.scale.setScalar(5000); scene.add(sky);
+    Object.assign(sky.material.uniforms.mieCoefficient, { value: 0.005 }); sky.material.uniforms.mieDirectionalG.value = 0.8;
+    const s2 = new THREE.Sky(); s2.material = sky.material; s2.scale.setScalar(50); envScene.add(s2);
+  } else scene.background = fogC;
+  // clouds for the reflection map: opaque and cut out, written through three's encoder (the map is stored in a packed HDR format)
+  const envDomeMat = new THREE.ShaderMaterial({ uniforms: domeU, side: THREE.BackSide, vertexShader: domeMat.vertexShader,
+    fragmentShader: domeMat.fragmentShader.replace('gl_FragColor = vec4(col * (0.62 + 0.6 * n), a); }', 'if (a < 0.5) discard; gl_FragColor = vec4(col * (0.62 + 0.6 * n), 1.0);\n#include <encodings_fragment>\n}') });
+  if (envDomeMat.fragmentShader === domeMat.fragmentShader) console.warn('env dome shader not patched');
+  envScene.add(new THREE.Mesh(new THREE.SphereGeometry(20, 24, 12), envDomeMat));
+  let envRT = null, baked = { dark: -1, cloud: -1, t: -1e9 };
 
-  // glow: bright things (flow dots, lit windows, the battery light, sun glints) bleed light. Skipped if the extra scripts did not load.
-  const BG = new THREE.Color(0.0045, 0.007, 0.011); scene.background = BG;
-  let composer = null;
-  if (THREE.EffectComposer && THREE.UnrealBloomPass && THREE.GammaCorrectionShader) {
-    composer = new THREE.EffectComposer(renderer);
+  // rain
+  const RAIN_N = LOW ? 1200 : 3200, rainSeed = new Float32Array(RAIN_N * 3).map(() => rnd()), rainPos = new Float32Array(RAIN_N * 6);
+  const rainGeo = new THREE.BufferGeometry(); rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
+  const rain = new THREE.LineSegments(rainGeo, new THREE.LineBasicMaterial({ color: 0xd4e2f0, transparent: true, opacity: 0, depthWrite: false, fog: false }));
+  rain.frustumCulled = false; rain.visible = false; scene.add(rain);
+  let wetNow = 0;
+
+  // image pipeline: HDR render, glow on anything brighter than white, then film-style tone curve, vignette and a touch of grain
+  const fadeMat = new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, fog: false });
+  let composer = null, finalPass = null;
+  if (THREE.EffectComposer && THREE.UnrealBloomPass && THREE.ShaderPass) {
+    const gl2 = renderer.capabilities.isWebGL2, hdr = gl2 && !!renderer.extensions.get('EXT_color_buffer_float');
+    const opts = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat, type: hdr ? THREE.HalfFloatType : THREE.UnsignedByteType };
+    const rt = gl2 && !LOW && THREE.WebGLMultisampleRenderTarget ? new THREE.WebGLMultisampleRenderTarget(4, 4, opts) : new THREE.WebGLRenderTarget(4, 4, opts);
+    composer = new THREE.EffectComposer(renderer, rt);
     composer.setPixelRatio(renderer.getPixelRatio());
     composer.addPass(new THREE.RenderPass(scene, camera));
-    composer.addPass(new THREE.UnrealBloomPass(new THREE.Vector2(512, 512), 0.7, 0.55, 0.9));
-    composer.addPass(new THREE.ShaderPass(THREE.GammaCorrectionShader));
+    composer.addPass(new THREE.UnrealBloomPass(new THREE.Vector2(512, 512), 0.35, 0.5, 1.7));
+    finalPass = new THREE.ShaderPass({
+      uniforms: { tDiffuse: { value: null }, exposure: { value: 1 }, time: { value: 0 } },
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: `uniform sampler2D tDiffuse; uniform float exposure, time; varying vec2 vUv;
+        void main(){ vec3 c = texture2D(tDiffuse, vUv).rgb * exposure;
+          c = clamp((c * (2.51 * c + 0.03)) / (c * (2.43 * c + 0.59) + 0.14), 0.0, 1.0); c = pow(c, vec3(1.0 / 2.2));
+          c = mix(vec3(dot(c, vec3(0.299, 0.587, 0.114))), c, 1.14); c = mix(c, c * c * (3.0 - 2.0 * c), 0.25);
+          vec2 d = vUv - 0.5; c *= 1.0 - dot(d, d) * 0.6;
+          c += (fract(sin(dot(vUv * 913.7 + time, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) * 0.022;
+          gl_FragColor = vec4(c, 1.0); }` });
+    composer.addPass(finalPass);
   }
 
   const _a = V(0, 0, 0), _b = V(0, 0, 0), _c = V(0, 0, 0), _n = V(0, 0, 0), _u = V(0, 0, 0), _v = V(0, 0, 0), UP = V(0, 1, 0);
@@ -530,12 +621,12 @@ function buildHouse() {
 
   // ground: dark disc, lawn, gravel yard, drive
   const flat = (w, d, color, x, z, y = 0.012) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), groundMat(color, w, d)); m.rotation.x = -Math.PI / 2; m.position.set(x, y, z); m.receiveShadow = true; scene.add(m); };
-  const ground = new THREE.Mesh(new THREE.CircleGeometry(36, 72), std(0x0b1016, { roughness: 1 }));
+  const ground = new THREE.Mesh(new THREE.CircleGeometry(36, 72), groundMat(0x47583a, 72, 72));
   ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
-  flat(9.5, 19, 0x12201a, -10.75, 4.5);          // lawn
-  flat(1.6, 13, 0x20262d, -7.2, 2.5, 0.015);   // patio along the back
-  flat(4.5, 5, 0x2b2a25, -7.4, 9.6, 0.015);    // gravel yard behind the garage
-  flat(7, 10, 0x161b21, 9, 7);                 // drive at the front
+  flat(9.5, 19, 0x3f7034, -10.75, 4.5);          // lawn
+  flat(1.6, 13, 0x8a8c8c, -7.2, 2.5, 0.015);   // patio along the back
+  flat(4.5, 5, 0x9a9384, -7.4, 9.6, 0.015);    // gravel yard behind the garage
+  flat(7, 10, 0x34373b, 9, 7);                 // drive at the front
 
   // main house + the neighbour's half (semi-detached, faded)
   box(8, 2.4, 10, brick, 1, 1.2, 0);
@@ -620,14 +711,14 @@ function buildHouse() {
     peb.repeat.set(7.3 / 1.1, 7.0 / 1.1);
     const m = new THREE.Mesh(new THREE.PlaneGeometry(7.3, 7.0), std(0xffffff, { map: peb, bumpMap: peb, bumpScale: .04, roughness: .7 }));
     m.rotation.x = -Math.PI / 2; m.position.set(8.8, 0.014, -1.5); m.receiveShadow = true; scene.add(m);
-    flat(1.4, 4.0, 0x161b21, 8.0, 0.0, 0.02); flat(2.2, 1.4, 0x161b21, 6.2, -1.3, 0.02);
+    flat(1.4, 4.0, 0x34373b, 8.0, 0.0, 0.02); flat(2.2, 1.4, 0x34373b, 6.2, -1.3, 0.02);
     const paver = std(0x9a5a48, { roughness: .8 });
     box(0.12, 0.05, 4.1, paver, 8.76, 0.03, -0.05); box(3.6, 0.05, 0.12, paver, 6.96, 0.03, -2.06); box(3.7, 0.05, 0.12, paver, 10.6, 0.03, 2.0);
     const peb2 = peb.clone(); peb2.needsUpdate = true; peb2.repeat.set(7.3 / 1.1, 2.0 / 1.1);   // pebble strip between the drive and the garage-side wall
     const m2 = new THREE.Mesh(new THREE.PlaneGeometry(7.3, 2.0), std(0xffffff, { map: peb2, bumpMap: peb2, bumpScale: .04, roughness: .7 }));
     m2.rotation.x = -Math.PI / 2; m2.position.set(8.9, 0.014, 13.0); m2.receiveShadow = true; scene.add(m2);
     box(7.3, 0.05, 0.12, paver, 8.9, 0.03, 12.0);
-    box(6.9, 1.0, 0.9, groundMat(0x1f3a2a, 7, 1), 8.8, 0.5, -4.45);   // hedge in front of the fence
+    box(6.9, 1.0, 0.9, groundMat(0x2c5a30, 7, 1), 8.8, 0.5, -4.45);   // hedge in front of the fence
   }
   const iron = std(0x0c0e11, { roughness: .5, metalness: .6 });
   // street wall: brick with red fence panels and capped pillars, running the full width with a car-wide gap opposite the garage door
@@ -669,14 +760,28 @@ function buildHouse() {
     const l = new THREE.PointLight(0xffb873, 0, 6, 2); l.position.set(x, y, z); scene.add(l); return l;
   });
 
-  // everything away from the house fades into the background, so the house is the focal point
+  // street side context: pavement, kerb, road and a street light (to the right as you face the house)
+  flat(1.7, 27, 0x8d8f90, 13.65, 4.5, 0.02); box(0.14, 0.14, 27, std(0xa2a4a5), 14.55, 0.07, 4.5); flat(7.5, 27, 0x2e3033, 18.3, 4.5, 0.013);
+  const lampMat = std(0x8d949b, { metalness: .7, roughness: .45 });
+  { const p = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, 6.2, 12), lampMat); p.position.set(13.3, 3.1, -3.8); p.castShadow = true; scene.add(p); }
+  box(1.0, 0.06, 0.06, lampMat, 13.75, 6.2, -3.8); box(0.55, 0.1, 0.22, lampMat, 14.2, 6.17, -3.8);
+  const lampLens = box(0.4, 0.02, 0.16, new THREE.MeshBasicMaterial({ color: 0x555555 }), 14.2, 6.11, -3.8, false);
+  const lampSpot = new THREE.SpotLight(0xffd9a8, 0, 28, 1.05, 0.7, 1.3); lampSpot.position.set(14.2, 6.08, -3.8); lampSpot.target.position.set(12.4, 0, -2.6);
+  if (!LOW) { lampSpot.castShadow = true; lampSpot.shadow.mapSize.set(1024, 1024); lampSpot.shadow.bias = -0.002; }
+  scene.add(lampSpot, lampSpot.target);
+  const lampGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: 0xffd9a8, blending: THREE.AdditiveBlending, transparent: true, opacity: 0, depthWrite: false, fog: false }));
+  lampGlow.scale.setScalar(2.2); lampGlow.position.set(14.2, 6.05, -3.8); scene.add(lampGlow);
+  const lampCone = new THREE.Mesh(new THREE.ConeGeometry(4.4, 6, 28, 1, true), new THREE.MeshBasicMaterial({ color: 0xffd9a8, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+  lampCone.position.set(13.9, 3.08, -3.6); scene.add(lampCone);
+
+  // everything away from the house fades into the haze, so the house is the focal point
   {
     const t = canvasTex(256, 256, (g, w, h) => {
-      const r = g.createRadialGradient(w / 2, h / 2, w / 2 * 0.2, w / 2, h / 2, w / 2 * 0.36);
+      const r = g.createRadialGradient(w / 2, h / 2, w / 2 * 0.15, w / 2, h / 2, w / 2 * 0.27);
       r.addColorStop(0, 'rgba(255,255,255,0)'); r.addColorStop(1, 'rgba(255,255,255,1)');
       g.fillStyle = r; g.fillRect(0, 0, w, h);
     });
-    const fade = new THREE.Mesh(new THREE.CircleGeometry(70, 64), new THREE.MeshBasicMaterial({ color: BG, map: t, transparent: true, depthWrite: false, fog: false }));
+    const fade = new THREE.Mesh(new THREE.CircleGeometry(110, 64), fadeMat); fadeMat.map = t;
     fade.rotation.x = -Math.PI / 2; fade.position.set(0.5, 0.03, 2.5); fade.renderOrder = -1; scene.add(fade);
   }
 
@@ -710,7 +815,7 @@ function buildHouse() {
     const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve.getPoints(160)),
       new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0, depthWrite: false }));
     const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(n * 3), 3));
-    const mat = new THREE.PointsMaterial({ map: tex, color, size: 0.6, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true });
+    const mat = new THREE.PointsMaterial({ map: tex, color: color.clone().multiplyScalar(2.6), size: 0.6, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true });
     scene.add(line, new THREE.Points(geo, mat));
     return { curve, len, n, line, geo, mat, dist: Math.random() * len };
   }
@@ -805,11 +910,47 @@ function buildHouse() {
     for (const l of panelGlow) l.intensity = sf * 1.1;
     const full = reading && reading.batteryPct != null ? reading.batteryPct / 100 : 0;   // battery glows bluer the fuller it is
     towerMat.emissiveIntensity = full * 0.6 * alive;
-    winC.emissiveIntensity = winB.emissiveIntensity = dark * 0.95;
-    glass.emissiveIntensity = 0.03 + dark * 0.4;
-    sun.intensity = 0.85 - 0.8 * dark; hemi.intensity = 0.24 - 0.17 * dark; rim.intensity = 0.3 - 0.2 * dark;
-    for (const m of allMats) m.envMapIntensity = m.userData.env * (1 - 0.88 * dark);
-    for (const l of roomLights) l.intensity = dark * 0.9;
+    // ---- time of day and weather ----
+    const sm = dark * dark * (3 - 2 * dark), elDeg = 40 - 54 * sm, sEl = elDeg * Math.PI / 180, az = 0.4 - 1.85 * dark;   // sun: 52° up at midday, swinging west and under the horizon at night
+    sunDir.set(Math.sin(az) * Math.cos(sEl), Math.sin(sEl), Math.cos(az) * Math.cos(sEl));
+    const up = smooth(-2, 10, elDeg), low = 1 - smooth(4, 30, elDeg), lit = 1 - smooth(0, 14, elDeg);
+    sun.position.copy(TARGET).addScaledVector(sunDir, 80); sun.target.position.copy(TARGET);
+    sun.color.setRGB(1, 0.95 - 0.36 * low, 0.86 - 0.6 * low);
+    sun.intensity = 1.9 * up * (1 - 0.85 * cloud);
+    moon.intensity = 0.2 * (1 - up); hemi.intensity = 0.03 + 0.1 * up * (1 + 0.8 * cloud);
+    fogC.setRGB(0.62, 0.72, 0.84).lerp(tmpC.setRGB(0.5, 0.53, 0.57), cloud).lerp(tmpC.setRGB(0.82, 0.5, 0.34), low * up * (1 - cloud) * 0.7).multiplyScalar(0.035 + 0.965 * smooth(-10, 8, elDeg));
+    scene.fog.color.copy(fogC); fadeMat.color.copy(fogC); scene.fog.density = 0.004 + 0.003 * cloud + 0.005 * rainAmt;
+    if (sky) { const U = sky.material.uniforms; U.sunPosition.value.copy(sunDir); U.turbidity.value = 3 + 10 * cloud; U.rayleigh.value = Math.max(0.3, 1.5 + 1.5 * low - 0.9 * cloud); }
+    domeU.cover.value = cloud; domeU.off.value.x += dt * 0.004; domeU.off.value.y += dt * 0.0015;
+    domeU.col.value.setRGB(0.95, 0.96, 0.98).lerp(tmpC.setRGB(0.5, 0.53, 0.58), cloud * cloud).lerp(tmpC.setRGB(1.0, 0.62, 0.42), low * up * 0.6).multiplyScalar(0.03 + 0.97 * smooth(-10, 8, elDeg));
+    dome.position.copy(camera.position); stars.position.copy(camera.position); stars.material.opacity = (1 - smooth(-12, -2, elDeg)) * (1 - cloud) * 0.9;
+    cloudU.uCloudOff.value.x += dt * 0.006; cloudU.uCloudOff.value.y += dt * 0.002;
+    cloudU.uCloudAmt.value = 0.85 * Math.pow(Math.sin(Math.PI * Math.min(1, cloud)), 0.7) * up;
+    if ((Math.abs(dark - baked.dark) > 0.015 || Math.abs(cloud - baked.cloud) > 0.03) && t - baked.t > 250) {   // re-light reflections when the sky changes
+      envGround.material.color.setRGB(0.2, 0.2, 0.19).multiplyScalar(0.05 + up * (1 - 0.5 * cloud));
+      const rt = pmrem.fromScene(envScene, 0, 0.1, 200); scene.environment = rt.texture; if (envRT) envRT.dispose(); envRT = rt;
+      baked = { dark, cloud, t };
+    }
+    // rain streaks and wet surfaces
+    wetNow += (rainAmt - wetNow) * (1 - Math.exp(-dt / (rainAmt > wetNow ? 2.5 : 9)));
+    for (const m of allMats) if (m.userData.wet) { const w = wetNow * m.userData.wet; m.roughness = m.userData.rough * (1 - w * 0.85); m.color.copy(m.userData.col).multiplyScalar(1 - w * 0.4); m.envMapIntensity = m.userData.env * (1 + w * 2.2); }
+    rain.visible = rainAmt > 0.02;
+    if (rain.visible) {
+      rain.material.opacity = 0.2 * rainAmt * (0.25 + 0.75 * Math.max(up, 0.25));
+      const T0 = t * 0.001;
+      for (let i = 0; i < RAIN_N; i++) {
+        const y = 24 - ((T0 * (17 + rainSeed[i * 3 + 2] * 7) + rainSeed[i * 3 + 1] * 24) % 24), x = -26 + rainSeed[i * 3] * 50 - (24 - y) * 0.16, z = -20 + ((rainSeed[i * 3 + 1] * 7919) % 1) * 46;
+        rainPos[i * 6] = x; rainPos[i * 6 + 1] = y; rainPos[i * 6 + 2] = z; rainPos[i * 6 + 3] = x + 0.13; rainPos[i * 6 + 4] = y + 0.8; rainPos[i * 6 + 5] = z;
+      }
+      rainGeo.attributes.position.needsUpdate = true;
+    }
+    // lights that come on at dusk
+    winC.emissiveIntensity = winB.emissiveIntensity = lit * 2.4;
+    glass.emissiveIntensity = 0.02 + lit * 0.7;
+    for (const l of roomLights) l.intensity = lit * 2.2;
+    lampSpot.intensity = lit * 2.6; lampGlow.material.opacity = lit; lampCone.material.opacity = lit * (0.03 + 0.07 * rainAmt + 0.02 * cloud);
+    lampLens.material.color.setRGB(0.33 + lit * 5, 0.33 + lit * 4, 0.33 + lit * 2.6);
+    if (finalPass) { finalPass.uniforms.time.value = (t * 0.001) % 100; finalPass.uniforms.exposure.value = 0.5 + 0.55 * (1 - up); }
     const battActive = T.battIn + T.battOut > 50;
     led.material.color.set(battActive ? C.battery : '#26323f');
     garageGlow.intensity = (0.12 + full * 1.2) * alive;
@@ -932,6 +1073,7 @@ function loop(t) {
   const ease = 1 - Math.exp(-dt / 0.55);       // ~1.5 s to settle on a new reading
   alive += ((stale ? 0.15 : 1) - alive) * (1 - Math.exp(-dt / 0.8));
   dark += (SCEN[scenKey].dark - dark) * (1 - Math.exp(-dt / 1.2));
+  cloud += (WX[wxKey].cloud - cloud) * (1 - Math.exp(-dt / 1.6)); rainAmt += (WX[wxKey].rain - rainAmt) * (1 - Math.exp(-dt / 1.6));
   for (const k of EDGE_KEYS) {
     cur[k] = Math.max(0, cur[k] + (target(k) - cur[k]) * ease);
     phase[k] = (phase[k] + speedFor(cur[k]) * alive * (reduced ? 0.4 : 1) * dt) % 1;
