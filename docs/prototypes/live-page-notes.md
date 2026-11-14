@@ -41,7 +41,9 @@ Three.js r128 (UMD build plus `examples/js` add-ons from a CDN), all textures dr
 - Panels take a green hue with output; battery tower and garage glow blue with charge level; flow lines pulse in the source colour.
 - Phones get lighter settings (smaller shadow map, no multisampling, fewer rain streaks).
 - Roof tiles: each tile gets its own shade, with dirt streaks running down the slope, moss patches and lichen specks, all generated in the shader from world position so no two areas match.
-- Effects panel under the picture: switches for shadows, glow, cloud shadows, moss and weathering, and vignette and grain.
+- Effects panel under the picture: switches for shadows, glow, cloud shadows, moss and weathering, vignette and grain, and 3D grass.
+- 3D grass: about 60,000 instanced tufts of five blades over the whole back garden (12,000 lighter tufts on phones). Blades sway in a wind that picks up with cloud and rain, take cloud shadows, show mowing stripes and patchy colour, grow longer along the fences, and keep off the patio, gravel yard, garage and anything standing on the lawn. They receive shadows but don't cast them.
+- `#cam=yaw,elevation,zoom` on the URL fixes the camera for comparing changes (e.g. `#cam=-1.2,0.5,0.55` looks at the lawn from the garden end).
 
 ## To wire to real data
 
@@ -53,7 +55,7 @@ Three.js r128 (UMD build plus `examples/js` add-ons from a CDN), all textures dr
 ## Up for discussion
 
 - **Power flow lines**: current paths run along the ground and through the garage. Routes, thickness, how much they should stand out by day, and whether the dots or the pulse should carry the motion are all open.
-- **Grass**: real 3D blades or tufts instead of a flat textured lawn.
+- **Grass**: first pass is in (see above). Open: blade height and colour, whether the front gets any, and whether blades should cast shadows (costly).
 - **Roof variety**: a first pass is in (see below). Open: how much moss, whether it should favour the north slopes and shaded areas, and the same treatment for brick, fences and paving.
 - **Effect toggles**: a first pass is in (see below). Open: toggles for the remaining effects as they are added, a single quality setting for phones, and remembering the choice.
 - **Missing post-processing** against the reference chain: ambient occlusion, screen-space reflections on wet surfaces, depth of field, sharpening, temporal anti-aliasing (multisampling is used instead).

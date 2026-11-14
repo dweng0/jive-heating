@@ -630,7 +630,7 @@ function buildHouse() {
   const flat = (w, d, color, x, z, y = 0.012) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), groundMat(color, w, d)); m.rotation.x = -Math.PI / 2; m.position.set(x, y, z); m.receiveShadow = true; scene.add(m); };
   const ground = new THREE.Mesh(new THREE.CircleGeometry(36, 72), groundMat(0x47583a, 72, 72));
   ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
-  flat(9.5, 19, 0x3f7034, -10.75, 4.5);          // lawn
+  flat(9.5, 19, 0x2d5527, -10.75, 4.5);          // lawn (darker: it shows between the grass tufts)
   flat(1.6, 13, 0x8a8c8c, -7.2, 2.5, 0.015);   // patio along the back
   flat(4.5, 5, 0x9a9384, -7.4, 9.6, 0.015);    // gravel yard behind the garage
   flat(7, 10, 0x34373b, 9, 7);                 // drive at the front
@@ -847,6 +847,7 @@ function buildHouse() {
   const HOME_YAW = -0.8, HOME_EL = 0.5;
   const orb = { yaw: HOME_YAW, el: HOME_EL, zoom: 1, tYaw: HOME_YAW, tEl: HOME_EL, tZoom: 1, touched: false };
   const ptrs = new Map(); let pinch0 = 0, zoom0 = 1, lastTap = 0, lastTouch = -1e9;
+  { const m = /cam=([-\d.]+),([-\d.]+),([-\d.]+)/.exec(location.hash); if (m) { orb.yaw = orb.tYaw = +m[1]; orb.el = orb.tEl = +m[2]; orb.zoom = orb.tZoom = +m[3]; lastTouch = 1e12; } }   // #cam=yaw,el,zoom: a fixed view for comparing changes
   const clampEl = v => Math.max(0.12, Math.min(1.35, v));
   const clampZoom = v => Math.max(0.45, Math.min(1.6, v));
   function markTouched() { orb.touched = true; lastTouch = performance.now(); three.syncReset(); }
@@ -898,12 +899,76 @@ function buildHouse() {
     e.geo.attributes.position.needsUpdate = true;
   }
 
+  // 3D grass: instanced tufts of tapered blades over the lawn, swaying in the wind; gaps show the flat lawn beneath
+  const grassU = { uTime: { value: 0 }, uWind: { value: 0.6 } };
+  const grass = (() => {
+    const BLADES = 5, SEG = LOW ? 2 : 3, pos = [], col = [], nrm = [], idx = [];   // phones: fewer bends per blade
+    for (let b = 0; b < BLADES; b++) {   // one tuft: blades leaning out from a common root, a few segments each so they can bend
+      const a = b / BLADES * Math.PI * 2 + Math.random() * 0.8, r = 0.02 + Math.random() * 0.035, ox = Math.cos(a) * r, oz = Math.sin(a) * r;
+      const h = 0.08 + Math.random() * 0.06, w = 0.022 + Math.random() * 0.012, lean = 0.25 + Math.random() * 0.35, base = pos.length / 3;
+      const tx = -Math.sin(a), tz = Math.cos(a);   // blade faces across its lean
+      for (let s = 0; s <= SEG; s++) {
+        const f = s / SEG, y = f * h, out = lean * h * f * f, half = w * (1 - f * 0.92) / 2;
+        const cx = ox + Math.cos(a) * out, cz = oz + Math.sin(a) * out;
+        pos.push(cx - tx * half, y, cz - tz * half, cx + tx * half, y, cz + tz * half);
+        const sh = 0.74 + 0.36 * f, tr = sh * (1 + 0.06 * f), tb = sh * (1 - 0.12 * f);   // dark at the root, sunlit yellow-green at the tip
+        col.push(tr, sh, tb, tr, sh, tb);
+        nrm.push(0, 1, 0, 0, 1, 0);      // lit like the ground so the lawn reads as one surface
+      }
+      for (let s = 0; s < SEG; s++) { const i = base + s * 2; idx.push(i, i + 1, i + 2, i + 1, i + 3, i + 2); }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    geo.setIndex(idx);
+    const mat = std(0xffffff, { vertexColors: true, roughness: .85, envMapIntensity: .5 }); mat.userData.wet = .6;
+    const base = mat.onBeforeCompile;
+    mat.onBeforeCompile = sh => {
+      base(sh); Object.assign(sh.uniforms, grassU);
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float uTime; uniform float uWind;')
+        .replace('#include <project_vertex>', `vec4 wp = modelMatrix * instanceMatrix * vec4(transformed, 1.0);
+          float hh = transformed.y / 0.14, gust = sin(wp.x * 0.35 + wp.z * 0.2 - uTime * 1.6) * 0.5 + 0.5;
+          vec2 sway = vec2(0.8, 0.35) * (gust * 0.7 + 0.15 * sin(uTime * 4.0 + wp.x * 3.1 + wp.z * 2.3)) * uWind * hh * hh * 0.07;
+          wp.xz += sway; wp.y -= dot(sway, sway) * 3.0;
+          vWPos = wp.xyz;
+          vec4 mvPosition = viewMatrix * wp; gl_Position = projectionMatrix * mvPosition;`);
+    };
+    // where it may grow: the lawn, minus the patio, the gravel yard and anything standing on it
+    const keepOut = [[-8.05, -6.35, -4.1, 9.1], [-9.7, -5.1, 7.05, 12.15], [-5.2, 5.2, 6.3, 10.2], [-3.1, 5.2, 5, 6.4]];   // patio, gravel yard, inside the garage, side passage
+    scene.updateMatrixWorld(true);
+    const bb = new THREE.Box3();
+    scene.traverse(o => {
+      if (!o.isMesh || o === ground) return;   // sky and cloud dome are skipped by size below
+      bb.setFromObject(o);
+      if (bb.min.y < 0.4 && bb.max.y - bb.min.y > 0.1 && bb.max.x - bb.min.x < 25 && bb.max.x > -15.5 && bb.min.x < 5.2 && bb.max.z > -5 && bb.min.z < 14)
+        keepOut.push([bb.min.x - 0.06, bb.max.x + 0.06, bb.min.z - 0.06, bb.max.z + 0.06]);
+    });
+    const N = LOW ? 12000 : 60000, mesh = new THREE.InstancedMesh(geo, mat, N), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s = V(1, 1, 1), p = V(0, 0, 0), c = new THREE.Color();
+    let n = 0;
+    for (let tries = 0; n < N && tries < N * 3; tries++) {
+      const x = -15.4 + Math.random() * 20.5, z = -4.95 + Math.random() * 18.9;
+      if (keepOut.some(([x0, x1, z0, z1]) => x > x0 && x < x1 && z > z0 && z < z1)) continue;
+      const edge = Math.min(x + 15.5, z + 5.05, 14 - z);   // longer, unmown grass along the fences
+      const k = (0.8 + Math.random() * 0.6) * (1 + 0.6 * Math.max(0, 1 - edge / 0.4));
+      q.setFromAxisAngle(V(0, 1, 0), Math.random() * Math.PI * 2); s.set(k, k, k); p.set(x, 0.012, z);
+      mesh.setMatrixAt(n, m4.compose(p, q, s));
+      c.setHSL(0.27 + Math.random() * 0.05, 0.34 + Math.random() * 0.12, 0.19 + Math.random() * 0.07);
+      c.offsetHSL(0, 0, (Math.sin(x * Math.PI / 0.85) > 0 ? 0.045 : -0.045) + 0.04 * (Math.sin(x * 0.9 + z * 0.4) * Math.sin(z * 0.7 - x * 0.3)));   // mowing stripes and patchy growth
+      if (Math.random() < 0.05) c.offsetHSL(-0.06, -0.1, 0.07);   // a few dry, straw-coloured tufts
+      mesh.setColorAt(n++, c);
+    }
+    mesh.count = n; mesh.receiveShadow = true; mesh.frustumCulled = false;
+    scene.add(mesh); return mesh;
+  })();
+  FX.grass = true;
+
   // effects panel: switch each effect off to compare, or to lighten the load on a slow phone
   {
     const fxEl = document.getElementById('fx'), fxBtn = document.getElementById('fxBtn');
     fxBtn.onclick = () => { fxEl.hidden = !fxEl.hidden; fxBtn.setAttribute('aria-expanded', !fxEl.hidden); };
-    const apply = () => { if (bloomPass) bloomPass.enabled = FX.glow; if (finalPass) finalPass.uniforms.fx.value = FX.lens ? 1 : 0; fxU.uFx.value = FX.weather ? 1 : 0; sun.castShadow = FX.shadows; };
-    for (const [k, label] of [['shadows', 'Shadows'], ['glow', 'Glow'], ['clouds', 'Cloud shadows'], ['weather', 'Moss and weathering'], ['lens', 'Vignette and grain']]) {
+    const apply = () => { if (bloomPass) bloomPass.enabled = FX.glow; if (finalPass) finalPass.uniforms.fx.value = FX.lens ? 1 : 0; fxU.uFx.value = FX.weather ? 1 : 0; sun.castShadow = FX.shadows; grass.visible = FX.grass; };
+    for (const [k, label] of [['shadows', 'Shadows'], ['glow', 'Glow'], ['clouds', 'Cloud shadows'], ['weather', 'Moss and weathering'], ['lens', 'Vignette and grain'], ['grass', '3D grass']]) {
       const l = document.createElement('label'), c = document.createElement('input');
       c.type = 'checkbox'; c.checked = FX[k]; c.id = 'fx-' + k; c.onchange = () => { FX[k] = c.checked; apply(); };
       l.append(c, label); fxEl.appendChild(l);
@@ -942,6 +1007,7 @@ function buildHouse() {
     domeU.cover.value = cloud; domeU.off.value.x += dt * 0.004; domeU.off.value.y += dt * 0.0015;
     domeU.col.value.setRGB(0.95, 0.96, 0.98).lerp(tmpC.setRGB(0.5, 0.53, 0.58), cloud * cloud).lerp(tmpC.setRGB(1.0, 0.62, 0.42), low * up * 0.6).multiplyScalar(0.03 + 0.97 * smooth(-10, 8, elDeg));
     dome.position.copy(camera.position); stars.position.copy(camera.position); stars.material.opacity = (1 - smooth(-12, -2, elDeg)) * (1 - cloud) * 0.9;
+    grassU.uTime.value += dt; grassU.uWind.value = 0.5 + 0.9 * cloud + 0.8 * rainAmt;
     cloudU.uCloudOff.value.x += dt * 0.006; cloudU.uCloudOff.value.y += dt * 0.002;
     cloudU.uCloudAmt.value = (FX.clouds ? 0.85 : 0) * Math.pow(Math.sin(Math.PI * Math.min(1, cloud)), 0.7) * up;
     if ((Math.abs(dark - baked.dark) > 0.015 || Math.abs(cloud - baked.cloud) > 0.03) && t - baked.t > 250) {   // re-light reflections when the sky changes
