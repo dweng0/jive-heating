@@ -172,19 +172,19 @@ const INTERVAL = 10000;
 
 // ---------- simulated data (the shape the service would send) ----------
 const SCEN = {
-  sunny:   { label: 'Sunny midday', pct: 64, solar: true,
+  sunny:   { label: 'Sunny midday', dark: 0, pct: 64, solar: true,
              flows: { 'solar>home': 900, 'solar>battery': 2600, 'solar>grid': 1700 },
              circuits: { Fridge: 90, Office: 210, Oven: 0, Dishwasher: 0, 'Tumble dryer': 0 } },
-  laundry: { label: 'Cloudy, washing on', pct: 52, solar: true,
+  laundry: { label: 'Cloudy, washing on', dark: 0.15, pct: 52, solar: true,
              flows: { 'solar>home': 1300, 'battery>home': 1100, 'grid>home': 350 },
              circuits: { 'Tumble dryer': 2100, Fridge: 95, Office: 190, Oven: 0, Dishwasher: 0 } },
-  evening: { label: 'Evening cooking', pct: 41, solar: true,
+  evening: { label: 'Evening cooking', dark: 0.7, pct: 41, solar: true,
              flows: { 'solar>home': 150, 'battery>home': 2400, 'grid>home': 1300 },
              circuits: { Oven: 2300, Dishwasher: 0, Fridge: 110, Office: 60, 'Tumble dryer': 0 } },
-  night:   { label: 'Overnight cheap rate', pct: 30, solar: true,
+  night:   { label: 'Overnight cheap rate', dark: 1, pct: 30, solar: true,
              flows: { 'grid>home': 380, 'grid>battery': 3000 },
              circuits: { Fridge: 85, Dishwasher: 0, Office: 0, Oven: 0, 'Tumble dryer': 0 } },
-  today:   { label: 'Today, no inverter yet', pct: null, solar: false,
+  today:   { label: 'Today, no inverter yet', dark: 0, pct: null, solar: false,
              flows: { 'grid>home': 640 },
              circuits: { Fridge: 95, Office: 180, Oven: 0, Dishwasher: 0, 'Tumble dryer': 0 } },
 };
@@ -208,6 +208,7 @@ const cur = Object.fromEntries(EDGE_KEYS.map(k => [k, 0]));
 const phase = Object.fromEntries(EDGE_KEYS.map(k => [k, Math.random()]));
 let curCircuits = {};
 let alive = 1; // 1 live, eases to 0.15 when stale
+let dark = 0;  // 0 day, 1 night; eases to the example's value
 let pctShown = 0;
 
 function target(k) {
@@ -348,7 +349,7 @@ function buildHouse() {
   const camera = new THREE.PerspectiveCamera(30, 1, 0.5, 300);
   const V = (x, y, z) => new THREE.Vector3(x, y, z);
 
-  scene.add(new THREE.HemisphereLight(0x8fa8c4, 0x05070a, 0.24));
+  const hemi = new THREE.HemisphereLight(0x8fa8c4, 0x05070a, 0.24); scene.add(hemi);
   const sun = new THREE.DirectionalLight(0xffe9cc, 0.85);
   sun.position.set(-10, 26, 22); sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
@@ -395,13 +396,15 @@ function buildHouse() {
     speckle(g, w, h, 900, height ? .2 : .12);
   };
   const panelDraw = (cols, rows) => (g, w, h) => {
-    g.fillStyle = '#05070b'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#020304'; g.fillRect(0, 0, w, h);
     const m = 5, cw = (w - 2 * m) / cols, ch = (h - 2 * m) / rows;
-    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) { g.fillStyle = `hsl(222,${40 + rnd() * 10}%,${9 + rnd() * 3}%)`; g.fillRect(m + c * cw + 1, m + r * ch + 1, cw - 2, ch - 2); }
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) { g.fillStyle = `hsl(225,18%,${5 + rnd() * 1.5}%)`; g.fillRect(m + c * cw + 1, m + r * ch + 1, cw - 2, ch - 2); }
   };
   const noiseTex = canvasTex(128, 128, (g, w, h) => { g.fillStyle = '#d0d0d0'; g.fillRect(0, 0, w, h); speckle(g, w, h, 2600, .4); });
 
-  const std = (color, o = {}) => new THREE.MeshStandardMaterial(Object.assign({ color, roughness: .9, metalness: 0, side: THREE.DoubleSide, envMapIntensity: .5 }, o));
+  const allMats = [];
+  const keep = m => { m.userData.env = m.envMapIntensity; allMats.push(m); return m; };
+  const std = (color, o = {}) => keep(new THREE.MeshStandardMaterial(Object.assign({ color, roughness: .9, metalness: 0, side: THREE.DoubleSide, envMapIntensity: .5 }, o)));
   const textured = (draw, mpr, o = {}) => {
     const m = std(0xffffff, Object.assign({ map: canvasTex(256, 256, draw(false), true), bumpMap: canvasTex(256, 256, draw(true)), bumpScale: 0.035 }, o));
     m.userData.uv = mpr; return m;   // metres covered by one repeat of the texture
@@ -411,10 +414,18 @@ function buildHouse() {
   const darkTile = std(0xb4aaa6, { map: tile.map, bumpMap: tile.bumpMap, bumpScale: .035, roughness: .78 }); darkTile.userData.uv = tile.userData.uv;
   const white = std(0xd9dde2, { roughness: .5 });
   const nbBrick = std(0x7d5a4e, { transparent: true, opacity: .55 }), nbTile = std(0x9a8d76, { transparent: true, opacity: .55 });
-  const win = std(0x131a24, { emissive: new THREE.Color(0xffd29a), emissiveIntensity: .5, roughness: .06, metalness: .2, envMapIntensity: .7 });
-  const panelOpts = { roughness: .32, metalness: .1, envMapIntensity: .2, emissive: new THREE.Color(C.solar), emissiveIntensity: 0 };
+  const winDraw = (style, glow) => (g, w, h) => {
+    g.fillStyle = glow ? '#ffd9a0' : '#39424d'; g.fillRect(0, 0, w, h);
+    const fold = (x0, x1) => { for (let x = x0; x < x1; x += 6) { const l = (glow ? 60 : 80) + Math.sin(x * .9) * 7; g.fillStyle = `hsl(${glow ? 30 : 38},${glow ? 75 : 22}%,${l}%)`; g.fillRect(x, 0, 6, h); } };
+    if (style === 'curtain') { fold(0, w * .26); fold(w * .74, w); }
+    else for (let y = 0; y < h * .6; y += 8) { g.fillStyle = glow ? '#f2b56a' : '#d9d4c8'; g.fillRect(0, y, w, 6); g.fillStyle = glow ? '#c98a45' : '#9e9a90'; g.fillRect(0, y + 6, w, 2); }
+  };
+  const winMat = style => std(0xffffff, { map: canvasTex(128, 128, winDraw(style, false), true), emissiveMap: canvasTex(128, 128, winDraw(style, true), true), emissive: new THREE.Color(0xffffff), emissiveIntensity: 0, roughness: .08, metalness: .1, envMapIntensity: .8 });
+  const winC = winMat('curtain'), winB = winMat('blind'), win = winC;
+  const panelOpts = { roughness: .5, metalness: .25, envMapIntensity: .35, emissive: new THREE.Color(C.solar), emissiveIntensity: 0 };
   const panelP = std(0xffffff, Object.assign({ map: canvasTex(128, 256, panelDraw(6, 12), true) }, panelOpts));   // portrait
   const panelL = std(0xffffff, Object.assign({ map: canvasTex(256, 128, panelDraw(12, 6), true) }, panelOpts));   // landscape
+  const panelFrame = std(0xdfe5ec, { metalness: .5, roughness: .35, envMapIntensity: 1, emissive: new THREE.Color(0xffffff), emissiveIntensity: .12 });
   const frameMat = std(0x8f99a5, { metalness: .7, roughness: .35, envMapIntensity: 1 });
   const groundMat = (color, w, d) => { const t = noiseTex.clone(); t.needsUpdate = true; t.repeat.set(w / 2.5, d / 2.5); return std(color, { roughness: 1, map: t, bumpMap: t, bumpScale: .02 }); };
 
@@ -475,11 +486,11 @@ function buildHouse() {
     const m = new THREE.Mesh(g, mat); m.castShadow = true; m.receiveShadow = true; scene.add(m); return worldUV(m);
   }
   // window: white frame, glossy pane that glows from inside, glazing bars and a sill. face = which way it looks (e/w/n/s)
-  function win3(cx, cy, cz, w, h, face, bars = 2, sill = true) {
+  function win3(cx, cy, cz, w, h, face, bars = 2, sill = true, mat = winC) {
     const xf = face === 'e' || face === 'w', s = face === 'e' || face === 's' ? 1 : -1;
     const B = (along, hh, d, mat, off, dy = 0, da = 0) => xf ? box(d, hh, along, mat, cx + s * off, cy + dy, cz + da, false) : box(along, hh, d, mat, cx + da, cy + dy, cz + s * off, false);
     B(w + 0.14, h + 0.14, 0.06, white, 0);
-    B(w, h, 0.07, win, 0.006);
+    B(w, h, 0.07, mat, 0.006);
     for (let i = 1; i < bars; i++) B(0.05, h, 0.09, white, 0.006, 0, -w / 2 + w * i / bars);
     if (sill) B(w + 0.26, 0.06, 0.18, white, 0.05, -h / 2 - 0.1);
   }
@@ -510,7 +521,7 @@ function buildHouse() {
     for (const [a, b] of list) {
       const c = origin.clone().addScaledVector(along, a).addScaledVector(up, b).addScaledVector(n, 0.07);
       if (frame) { const f = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.04), frame); f.position.copy(c); f.quaternion.copy(q); f.castShadow = true; scene.add(f); }
-      const p = new THREE.Mesh(new THREE.BoxGeometry(w - 0.06, h - 0.06, 0.05), mat);
+      const p = new THREE.Mesh(new THREE.BoxGeometry(w - 0.13, h - 0.13, 0.05), mat);
       p.position.copy(c).addScaledVector(n, 0.012); p.quaternion.copy(q); scene.add(p);
     }
   }
@@ -537,14 +548,14 @@ function buildHouse() {
   roof({ x0: -10, x1: 1, z0: -5, z1: -0.2, y: 2.4, rise: 2.6, axis: 'x', end0: 'gable', end1: 'open' });
   const wingUp = V(0, 2.6, -2.4).normalize(), X = V(1, 0, 0);
   // kitchen roof: 3 columns x 2 rows portrait at the garden end, then 2 landscape in the top row
-  onSlope(V(0, 2.4, -0.2), X, wingUp, [[-9.3, 0.94], [-8.28, 0.94], [-7.26, 0.94], [-9.3, 2.64], [-8.28, 2.64], [-7.26, 2.64]], 1.0, 1.68, panelP, frameMat);
-  onSlope(V(0, 2.4, -0.2), X, wingUp, [[-5.9, 2.98], [-4.2, 2.98]], 1.68, 1.0, panelL, frameMat);
+  onSlope(V(0, 2.4, -0.2), X, wingUp, [[-9.3, 0.94], [-8.28, 0.94], [-7.26, 0.94], [-9.3, 2.64], [-8.28, 2.64], [-7.26, 2.64]], 1.0, 1.68, panelP, panelFrame);
+  onSlope(V(0, 2.4, -0.2), X, wingUp, [[-5.9, 2.98], [-4.2, 2.98]], 1.68, 1.0, panelL, panelFrame);
   box(0.1, 0.8, 0.5, white, -10.05, 1.1, -3.5);                   // meter box
   box(0.8, 2.0, 0.05, white, -6.7, 1.0, -0.17, false);           // back door
 
   // conservatory in the corner
   box(3, 0.6, 2.2, brick, -4.5, 0.3, 0.9);
-  const glass = new THREE.MeshPhysicalMaterial({ color: 0xd6e8f0, transparent: true, opacity: .2, roughness: .02, metalness: 0, clearcoat: 1, clearcoatRoughness: .02, envMapIntensity: 3, side: THREE.DoubleSide, depthWrite: false, emissive: new THREE.Color(0xffd29a), emissiveIntensity: .05 });
+  const glass = keep(new THREE.MeshPhysicalMaterial({ color: 0xd6e8f0, transparent: true, opacity: .2, roughness: .02, metalness: 0, clearcoat: 1, clearcoatRoughness: .02, envMapIntensity: 3, side: THREE.DoubleSide, depthWrite: false, emissive: new THREE.Color(0xffd29a), emissiveIntensity: .05 }));
   box(3, 1.7, 2.2, glass, -4.5, 1.45, 0.9, false);
   for (const [x, z] of [[-6, -0.2], [-6, 2], [-3, 2]]) box(0.08, 1.7, 0.08, white, x, 1.45, z);
   roof({ x0: -6, x1: -3, z0: -0.2, z1: 2, y: 2.3, rise: 0.8, axis: 'z', end0: 'hip', end1: 'hip', oh: 0.1, mat: std(0xcfe0e6, { transparent: true, opacity: .38, roughness: .08, envMapIntensity: 1.5, depthWrite: false }) });
@@ -565,7 +576,7 @@ function buildHouse() {
   box(0.05, 1.9, 2.4, white, 5.02, 0.95, 8.25, false);           // garage door
   roof({ x0: -5, x1: 5, z0: 6.5, z1: 10, y: 2.3, rise: 1.7, axis: 'x' });
   const garUp = V(0, 1.7, -1.75).normalize();
-  onSlope(V(0, 2.3, 10), X, garUp, Array.from({ length: 7 }, (_, i) => [-2.6 + i * 1.02, 1.15]), 1.0, 1.68, panelP, frameMat);   // garage: 7 portrait in one row
+  onSlope(V(0, 2.3, 10), X, garUp, Array.from({ length: 7 }, (_, i) => [-2.6 + i * 1.02, 1.15]), 1.0, 1.68, panelP, panelFrame);   // garage: 7 portrait in one row
   box(0.72, 1.8, 0.32, std(0xf1f3f5, { roughness: .45 }), 3.2, 0.92, 6.9);   // GoodWe ESA tower
   for (const y of [0.55, 1.0, 1.45]) box(0.73, 0.012, 0.33, std(0xc9ced4), 3.2, y, 6.9, false);
   const led = box(0.04, 0.9, 0.02, new THREE.MeshBasicMaterial({ color: C.battery }), 3.2, 1.05, 7.07, false);
@@ -573,16 +584,16 @@ function buildHouse() {
 
   // windows and doors
   win3(-10.03, 1.5, -2.0, 0.6, 0.7, 'w', 1);                      // small gable window
-  win3(-8, 1.5, -0.17, 1.3, 0.9, 's');                            // kitchen window
+  win3(-8, 1.5, -0.17, 1.3, 0.9, 's', 2, true, winB);                            // kitchen window
   win3(-6.53, 1.05, 3.75, 1.4, 2.0, 'w', 2, false);               // French doors
-  win3(-5.02, 1.3, 8.25, 1.8, 0.9, 'w', 3);                       // office window
+  win3(-5.02, 1.3, 8.25, 1.8, 0.9, 'w', 3, true, winB);                       // office window
   for (const y of [0.45, 0.9, 1.35]) box(0.07, 0.025, 2.36, std(0xb9c0c8), 5.03, y, 8.25, false);   // garage door ribs
 
   // front (street side): bay windows, front door, wing window, side gate, garden wall
   win3(7.22, 1.35, 0.55, 1.1, 1.2, 'e'); win3(7.22, 1.35, 2.45, 1.1, 1.2, 'e');
   win3(5.02, 1.35, -3.3, 1.8, 1.2, 'e', 3);
   box(0.06, 2.15, 1.15, std(0x14181d), 5.02, 1.08, -1.3, false);  // recessed porch
-  box(0.06, 2.0, 0.85, white, 5.04, 1.0, -1.3, false);            // front door
+  box(0.06, 2.0, 0.85, std(0xf4f6f8, { roughness: .4 }), 5.04, 1.0, -1.3, false);            // front door
   box(0.06, 0.45, 0.3, win, 5.06, 1.5, -1.3, false);
   box(0.7, 0.08, 1.3, std(0x3a3f45), 5.35, 0.04, -1.3);           // step
   const redWood = std(0x7a2a22, { roughness: .7 });
@@ -593,28 +604,24 @@ function buildHouse() {
   }
   flat(5, 6.8, 0x12201a, 9.9, -1.6);                              // front lawn
   box(0.25, 0.7, 6.8, brick, 12.6, 0.35, -1.6);                   // garden wall with fence panels
-  box(0.06, 0.75, 6.4, redWood, 12.6, 1.08, -1.6);
+  const iron = std(0x0c0e11, { roughness: .5, metalness: .6 });
+  for (let z = -4.7; z < 1.6; z += 0.17) if (Math.abs(z + 1.6) > 0.25) box(0.03, 0.8, 0.03, iron, 12.6, 1.1, z, false);
+  box(0.04, 0.04, 6.4, iron, 12.6, 1.38, -1.6, false); box(0.04, 0.04, 6.4, iron, 12.6, 0.78, -1.6, false);
+  for (const z of [-5, -1.6, 1.8]) box(0.46, 0.07, 0.46, std(0x8f8a84), 12.6, 1.585, z);
+  const wood = std(0xffffff, { roughness: .85, map: canvasTex(128, 128, (g, w, h) => {
+    for (let i = 0; i < 8; i++) { g.fillStyle = `hsl(${26 + rnd() * 8},${32 + rnd() * 10}%,${40 + rnd() * 10}%)`; g.fillRect(i * 16, 0, 16, h); g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(i * 16, 0, 1.5, h); }
+    speckle(g, w, h, 500, .12);
+  }, true) }); wood.userData.uv = [1.2, 1.7];
+  const post = std(0x5a4632);
+  box(7.3, 1.65, 0.05, wood, 8.85, 0.825, -5.05);
+  box(7.3, 0.05, 0.09, post, 8.85, 1.67, -5.05);
+  for (let x = 5.2; x < 12.4; x += 1.825) box(0.1, 1.75, 0.1, post, x, 0.875, -5.05);
   for (const z of [-5, -1.6, 1.8]) box(0.36, 1.55, 0.36, brick, 12.6, 0.775, z);
 
-  // car on the drive, nose towards the garage
-  {
-    const car = new THREE.Group();
-    const ext = (pts, depth, mat, bevel) => {
-      const s = new THREE.Shape(); pts.forEach(([x, y], i) => i ? s.lineTo(x, y) : s.moveTo(x, y));
-      const g = new THREE.ExtrudeGeometry(s, { depth, bevelEnabled: !!bevel, bevelSize: bevel, bevelThickness: bevel, bevelSegments: 3 });
-      g.translate(0, 0, -depth / 2);
-      const m = new THREE.Mesh(g, mat); m.castShadow = true; car.add(m);
-    };
-    const paint = new THREE.MeshPhysicalMaterial({ color: 0x1b222b, metalness: .6, roughness: .28, clearcoat: 1, clearcoatRoughness: .08, envMapIntensity: 1.6 });
-    ext([[-2.05, .38], [-2.1, .78], [-1.45, .93], [-.75, 1.42], [.95, 1.46], [1.85, 1.02], [2.1, .96], [2.05, .38]], 1.6, paint, .09);
-    ext([[-1.3, .97], [-.72, 1.37], [.9, 1.41], [1.68, 1.03]], 1.8, std(0x070a0e, { roughness: .05, metalness: .6, envMapIntensity: 2 }));
-    const tyre = std(0x0b0c0e, { roughness: .8 });
-    for (const x of [-1.35, 1.35]) for (const z of [-0.8, 0.8]) {
-      const w = new THREE.Mesh(new THREE.CylinderGeometry(.34, .34, .24, 18), tyre); w.rotation.x = Math.PI / 2; w.position.set(x, .34, z); w.castShadow = true; car.add(w);
-    }
-    for (const z of [-0.6, 0.6]) { const l = new THREE.Mesh(new THREE.BoxGeometry(.04, .1, .34), new THREE.MeshBasicMaterial({ color: 0x5a0f0c })); l.position.set(2.2, .86, z); car.add(l); }
-    car.position.set(9.4, 0, 8.25); scene.add(car);
-  }
+
+  const roomLights = [[-8, 1.4, 0.5], [-7.3, 1.2, 3.75], [8, 1.4, 1.5], [5.8, 1.4, -3.3], [-5.8, 1.3, 8.25]].map(([x, y, z]) => {
+    const l = new THREE.PointLight(0xffb873, 0, 6, 2); l.position.set(x, y, z); scene.add(l); return l;
+  });
 
   // everything away from the house fades into the background, so the house is the focal point
   {
@@ -647,8 +654,8 @@ function buildHouse() {
   };
   P['battery>grid'] = [...P['grid>battery']].reverse();
   const FEED = {   // solar arriving at the inverter from each roof, shared by panel count
-    garage: { share: 7 / 15, pts: [V(-2.8, 3.15, 9.3), V(1.6, 3.15, 9.3), V(2.6, 2.35, 10.2), V(3.0, 1.6, 9.9), HUB] },
-    wing:   { share: 8 / 15, pts: [V(-3.8, 3.75, -1.3), V(-9.6, 3.75, -1.3), V(-10.25, 2.4, 0.0), V(-10.4, 0.05, 0.3), V(-9.1, 0.05, 4.5), V(-7.5, 0.05, 10.0), V(-5.6, 0.05, 10.9), V(2.2, 0.05, 10.9), V(2.9, 0.3, 10.0), HUB] },
+    garage: { share: 7 / 15, pts: [V(-2.9, 3.32, 9.38), V(3.3, 3.32, 9.38), V(4.0, 3.0, 9.72), V(3.7, 2.25, 10.32), V(3.1, 1.4, 9.95), HUB] },
+    wing:   { share: 8 / 15, pts: [V(-3.5, 4.78, -2.02), V(-6.4, 4.78, -2.02), V(-7.4, 3.97, -1.23), V(-9.7, 3.92, -1.21), V(-10.38, 2.9, -0.5), V(-10.45, 0.05, 0.3), V(-9.1, 0.05, 4.5), V(-7.5, 0.05, 10.0), V(-5.6, 0.05, 10.9), V(2.2, 0.05, 10.9), V(2.9, 0.3, 10.0), HUB] },
   };
   const tex = glowTexture();
   function makeEdge(pts, color) {
@@ -747,7 +754,11 @@ function buildHouse() {
     const T = totals();
     for (const f of Object.values(FEED)) runEdge(f.edge, T.solar * f.share, dt);
     panelP.emissiveIntensity = panelL.emissiveIntensity = Math.min(1, T.solar / 7400) * 0.04 * alive;
-    win.emissiveIntensity = (0.06 + Math.min(1, T.home / 3000) * 0.5) * (0.5 + alive / 2);
+    winC.emissiveIntensity = winB.emissiveIntensity = dark * 0.95;
+    glass.emissiveIntensity = 0.03 + dark * 0.4;
+    sun.intensity = 0.85 - 0.8 * dark; hemi.intensity = 0.24 - 0.17 * dark; rim.intensity = 0.3 - 0.2 * dark;
+    for (const m of allMats) m.envMapIntensity = m.userData.env * (1 - 0.88 * dark);
+    for (const l of roomLights) l.intensity = dark * 0.9;
     const battActive = T.battIn + T.battOut > 50;
     led.material.color.set(battActive ? C.battery : '#2a3a33');
     garageGlow.intensity = battActive ? 0.9 * alive : 0.15;
@@ -869,6 +880,7 @@ function loop(t) {
   const dt = Math.max(0, Math.min(0.1, (t - last) / 1000)); last = t;
   const ease = 1 - Math.exp(-dt / 0.55);       // ~1.5 s to settle on a new reading
   alive += ((stale ? 0.15 : 1) - alive) * (1 - Math.exp(-dt / 0.8));
+  dark += (SCEN[scenKey].dark - dark) * (1 - Math.exp(-dt / 1.2));
   for (const k of EDGE_KEYS) {
     cur[k] = Math.max(0, cur[k] + (target(k) - cur[k]) * ease);
     phase[k] = (phase[k] + speedFor(cur[k]) * alive * (reduced ? 0.4 : 1) * dt) % 1;
