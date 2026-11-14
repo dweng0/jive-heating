@@ -422,7 +422,7 @@ function buildHouse() {
   };
   const winMat = style => std(0xffffff, { map: canvasTex(128, 128, winDraw(style, false), true), emissiveMap: canvasTex(128, 128, winDraw(style, true), true), emissive: new THREE.Color(0xffffff), emissiveIntensity: 0, roughness: .08, metalness: .1, envMapIntensity: .8 });
   const winC = winMat('curtain'), winB = winMat('blind'), win = winC;
-  const panelOpts = { roughness: .78, metalness: 0, envMapIntensity: .3, emissive: new THREE.Color(C.solar), emissiveIntensity: 0 };
+  const panelOpts = { roughness: .6, metalness: .08, envMapIntensity: .35, emissive: new THREE.Color(C.solar), emissiveIntensity: 0 };
   const panelP = std(0xffffff, Object.assign({ map: canvasTex(128, 256, panelDraw(6, 12), true) }, panelOpts));   // portrait
   const panelL = std(0xffffff, Object.assign({ map: canvasTex(256, 128, panelDraw(12, 6), true) }, panelOpts));   // landscape
   const panelFrame = std(0xdfe5ec, { metalness: .5, roughness: .35, envMapIntensity: 1, emissive: new THREE.Color(0xffffff), emissiveIntensity: .12 });
