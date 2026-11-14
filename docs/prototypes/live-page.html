@@ -550,8 +550,8 @@ function buildHouse() {
   roof({ x0: -10, x1: 1, z0: -5, z1: -0.2, y: 2.4, rise: 2.6, axis: 'x', end0: 'gable', end1: 'open' });
   const wingUp = V(0, 2.6, -2.4).normalize(), X = V(1, 0, 0);
   // kitchen roof: 3 columns x 2 rows portrait at the garden end, then 2 landscape in the top row
-  onSlope(V(0, 2.4, -0.2), X, wingUp, [[-9.3, 0.94], [-8.28, 0.94], [-7.26, 0.94], [-9.3, 2.64], [-8.28, 2.64], [-7.26, 2.64]], 1.0, 1.68, panelP, panelFrame);
-  onSlope(V(0, 2.4, -0.2), X, wingUp, [[-5.9, 2.98], [-4.2, 2.98]], 1.68, 1.0, panelL, panelFrame);
+  onSlope(V(0, 2.4, -0.2), X, wingUp, [[-9.25, 0.94], [-7.93, 0.94], [-6.61, 0.94], [-9.25, 2.64], [-7.93, 2.64], [-6.61, 2.64]], 1.3, 1.68, panelP, panelFrame);
+  onSlope(V(0, 2.4, -0.2), X, wingUp, [[-4.82, 2.8], [-2.58, 2.8]], 2.2, 1.3, panelL, panelFrame);
   box(0.1, 0.8, 0.5, white, -10.05, 1.1, -3.5);                   // meter box
   box(0.8, 2.0, 0.05, white, -6.7, 1.0, -0.17, false);           // back door
 
@@ -578,7 +578,7 @@ function buildHouse() {
   box(0.05, 1.9, 2.4, white, 5.02, 0.95, 8.25, false);           // garage door
   roof({ x0: -5, x1: 5, z0: 6.5, z1: 10, y: 2.3, rise: 1.7, axis: 'x' });
   const garUp = V(0, 1.7, -1.75).normalize();
-  onSlope(V(0, 2.3, 10), X, garUp, Array.from({ length: 7 }, (_, i) => [-2.6 + i * 1.02, 1.15]), 1.0, 1.68, panelP, panelFrame);   // garage: 7 portrait in one row
+  onSlope(V(0, 2.3, 10), X, garUp, Array.from({ length: 7 }, (_, i) => [-4.02 + i * 1.34, 1.2]), 1.32, 2.2, panelP, panelFrame);   // garage: 7 portrait in one row
   const towerMat = std(0xf1f3f5, { roughness: .45, emissive: new THREE.Color(C.battery), emissiveIntensity: 0 });
   box(0.72, 1.8, 0.32, towerMat, 3.2, 0.92, 6.9);   // GoodWe ESA tower
   for (const y of [0.55, 1.0, 1.45]) box(0.73, 0.012, 0.33, std(0xc9ced4), 3.2, y, 6.9, false);
@@ -700,8 +700,8 @@ function buildHouse() {
   };
   P['battery>grid'] = [...P['grid>battery']].reverse();
   const FEED = {   // solar arriving at the inverter from each roof, shared by panel count
-    garage: { share: 7 / 15, pts: [V(-2.9, 3.32, 9.38), V(3.3, 3.32, 9.38), V(4.0, 3.0, 9.72), V(3.7, 2.25, 10.32), V(3.1, 1.4, 9.95), HUB] },
-    wing:   { share: 8 / 15, pts: [V(-3.5, 4.78, -2.02), V(-6.4, 4.78, -2.02), V(-7.4, 3.97, -1.23), V(-9.7, 3.92, -1.21), V(-10.38, 2.9, -0.5), V(-10.45, 0.05, 0.3), V(-9.1, 0.05, 4.5), V(-7.5, 0.05, 10.0), V(-5.6, 0.05, 10.9), V(2.2, 0.05, 10.9), V(2.9, 0.3, 10.0), HUB] },
+    garage: { share: 7 / 15, pts: [V(-4.2, 3.32, 9.33), V(3.5, 3.32, 9.33), V(4.0, 3.0, 9.72), V(3.7, 2.25, 10.32), V(3.1, 1.4, 9.95), HUB] },
+    wing:   { share: 8 / 15, pts: [V(-1.8, 4.66, -1.92), V(-5.8, 4.66, -1.92), V(-7.4, 3.97, -1.23), V(-9.7, 3.92, -1.21), V(-10.38, 2.9, -0.5), V(-10.45, 0.05, 0.3), V(-9.1, 0.05, 4.5), V(-7.5, 0.05, 10.0), V(-5.6, 0.05, 10.9), V(2.2, 0.05, 10.9), V(2.9, 0.3, 10.0), HUB] },
   };
   const tex = glowTexture();
   function makeEdge(pts, color) {
@@ -800,7 +800,7 @@ function buildHouse() {
     const T = totals();
     for (const f of Object.values(FEED)) runEdge(f.edge, T.solar * f.share, dt);
     const sf = Math.min(1, T.solar / 7400) * alive;   // panels take a green hue that deepens with output
-    panelP.emissiveIntensity = panelL.emissiveIntensity = 0.02 + sf * 0.3;
+    panelP.emissiveIntensity = panelL.emissiveIntensity = 0.01 + sf * 0.14;
     panelFrame.emissive.copy(WHITE).lerp(GREEN, Math.min(1, sf * 1.6)); panelFrame.emissiveIntensity = 0.12 + sf * 0.55;
     for (const l of panelGlow) l.intensity = sf * 1.1;
     const full = reading && reading.batteryPct != null ? reading.batteryPct / 100 : 0;   // battery glows bluer the fuller it is
