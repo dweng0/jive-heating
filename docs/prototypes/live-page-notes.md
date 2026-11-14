@@ -65,8 +65,11 @@ Three.js r128 (UMD build plus `examples/js` add-ons from a CDN), all textures dr
 - **Grid supply**: overhead or underground, and where the meter is.
 - **Floorplan**: would correct room and extension sizes.
 
+## Specified
+
+- BDD scenarios are in `BDD.md`: Feature "Live view" (flows on `/ws/power`, allocation order solar to home, then battery, then grid; pre-inverter; stale; the tab itself) and Feature "App updates" (version in `GET /api/app` from Gradle's `output-metadata.json`, update banner, download and install, stable release key). Weather and real sun position are on the Deferred list.
+
 ## Not started
 
-- BDD scenarios for the Live page and for in-app updates (the project is BDD-first; scenarios go in `BDD.md` before code).
 - The service-side edges contract.
 - A release signing key for the Android app, needed for in-app updates.

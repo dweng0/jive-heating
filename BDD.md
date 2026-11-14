@@ -3341,7 +3341,110 @@ Engineering rules (apply to every scenario):
             And opening one shows the event that caused it
             And deliveries are kept 30 days, and members get 403 on GET /api/deliveries
 
+    Feature: Live view
+        As someone with energy access
+        I want to see where the house's power is coming from and going to right now
+        So that I can tell at a glance whether the sun, the battery or the grid is running the house
+
+        Live is a tab of its own beside Energy, which stays as it is. It has two views of the same readings, switched with
+        House and Diagram buttons under the picture: a 3D model of the house, and a flat flow diagram. The design is the
+        prototype in docs/prototypes/live-page.html, with notes in docs/prototypes/live-page-notes.md.
+        Solar is 15 panels, 7.4 kWp, through an 8 kW inverter; the battery is 16 kWh usable. Colours: solar green, battery
+        blue, grid orange, home white; a stopped reading is red.
+        The service works out the flows; clients only draw the edges they are sent. Until the inverter is connected the
+        only source is the grid, from the house meter.
+
+        Scenario: Live power carries the flows between sources and the home
+            Given the inverter reports solar 5200 W and battery charging at 2600 W at 64%, and the home uses 900 W
+            When admin "jane" opens the live power channel at /ws/power
+            Then the message has flows, each with from, to and watts: solar to home 900, solar to battery 2600 and solar to
+                grid 1700
+            And it has batteryPct 64
+            And from and to are one of solar, battery, grid and home, watts is never below 0, and a flow of 0 W is left out
+
+        Scenario: Solar serves the home first, then the battery, then the grid
+            Given solar 1500 W, the home using 2400 W and the battery discharging at 600 W
+            Then the flows are solar to home 1500, battery to home 600 and grid to home 300
+            And the battery never sends to the grid while the home is drawing from the grid
+
+        Scenario: The battery charges from the grid overnight
+            Given solar 0 W, the home using 370 W and the battery charging at 3100 W at 30%
+            Then the flows are grid to home 370 and grid to battery 3100
+
+        Scenario: Before the inverter is connected only the grid shows
+            Given no inverter is set up and the house meter reports 1200 W
+            Then the live power message has flows grid to home 1200 and batteryPct null
+            And the Live tab shows solar and battery as "Not connected" with no flow lines to them
+
+        Scenario: Stopped readings fade the flows
+            Given the house meter or the inverter has not reported for 2 minutes
+            Then the live power message has no flows
+            And the Live tab says "Readings stopped" with the time of the last one, the flow lines fade out and the picture
+                turns grey
+            And when readings return the flows come back without reopening the tab
+
+        Scenario: The Live tab shows the house with its flows
+            Given someone with energy access opens the Live tab on the web app or the Android app
+            Then it shows the 3D house, turning very slowly, that can be dragged to turn and pinched or scrolled to zoom
+            And a line pulses from each source to where its power goes, in the source's colour, as fast as its watts
+            And labels show solar, battery, grid and home watts, and the battery's percentage and kWh left
+            And the panels glow greener with solar output and the battery tower bluer the fuller it is
+            And "Diagram" switches to the flat flow diagram of the same readings, and the choice is remembered
+            And members without energy access have no Live tab
+
+        Scenario: Readings ease instead of jumping
+            Given a flow shows 500 W
+            When a reading of 3000 W arrives
+            Then the line's speed and the label move to 3000 W over about a second and a half
+
+        Scenario: The Live tab says where the home's power came from
+            Given the flows are solar to home 600, battery to home 300 and grid to home 100
+            Then a "Home powered by" ring shows 60% solar, 30% battery and 10% grid, and "90% your own" in the middle
+            And a "Where it's going" list shows each room and monitored device's live watts, then "Everything else"
+
+        Scenario: Effects can be turned down on a slow phone
+            Given the Live tab is open on the 3D house
+            When the household opens "Effects" under the picture
+            Then there are switches for shadows, glow, cloud shadows, moss and weathering, vignette and grain, and 3D grass
+            And each takes effect at once, and phones start with lighter settings
+
+    Feature: App updates
+        As the household
+        I want the Android app to update itself from the service
+        So that a new version reaches our phones without a cable
+
+        The app is sideloaded, so updates come from the service's own copy of the APK (see "Signed-in people can download
+        the Android app"). Android only installs an update signed with the same key, so release builds are signed with
+        one stable release key.
+
+        Scenario: The service says which app version it holds
+            Given the ANDROID_APK file has Gradle's output-metadata.json beside it with versionCode 42 and versionName "0.9.0"
+            When a signed-in client sends GET /api/app
+            Then the body has the Android app's size, versionCode 42 and versionName "0.9.0"
+            And without output-metadata.json versionCode and versionName are null and the app offers no update
+
+        Scenario: The app offers a newer version
+            Given the app is version code 41 and the service holds 42, "0.9.0"
+            When the household opens the Android app, or Account, after at least an hour since the last check
+            Then a banner says "Version 0.9.0 is ready" with "Update"
+            And with the same or an older version on the service there is no banner, and Account says "Up to date"
+
+        Scenario: Updating downloads and installs the new version
+            Given the banner offers version 0.9.0
+            When the household taps "Update"
+            Then the app downloads GET /api/app/android with its progress shown, and hands it to Android's installer
+            And if the app may not install apps yet, it opens the setting to allow it and carries on when allowed
+            And a failed download says "Update failed" with "Try again", and the old version keeps working
+
+        Scenario: Release builds are signed with the stable key
+            Given the release key's path and passwords are set in the build's environment
+            When the release APK is built
+            Then it is signed with that key, so each new build installs over the last
+            And without the key the release build fails with a message naming the missing setting, never signing with a
+                debug key
+
 # Deferred (not to be built yet)
+# - Live view: weather and the sun's real position on the 3D house (source not chosen: Home Assistant or computed)
 # - Mirror schedules to the valve weekly_schedule as a fallback when the service is down
 # - Open-window alerts (TRVZB exposes the setting, not a state; needs inference)
 # - Valve temperature calibration offsets (revisit if rooms without a sensor read badly)
