@@ -602,7 +602,24 @@ function buildHouse() {
     const gate = new THREE.Mesh(new THREE.ExtrudeGeometry(s, { depth: 0.08, bevelEnabled: false }), redWood);
     gate.rotation.y = Math.PI / 2; gate.position.set(4.86, 0, 5.78); gate.castShadow = true; scene.add(gate);   // arched side gate
   }
-  flat(5, 6.8, 0x12201a, 9.9, -1.6);                              // front lawn
+  {   // front garden: Scottish pebble, with a tarmac path to the door edged in brick pavers
+    const peb = canvasTex(256, 256, (g, w, h) => {
+      g.fillStyle = '#57524c'; g.fillRect(0, 0, w, h);
+      const pal = ['#c9c2b8', '#a7a29b', '#8d8880', '#d8b9a8', '#b98f7c', '#e3ddd2', '#77726c', '#c7a98f', '#9aa0a6'];
+      for (let i = 0; i < 1200; i++) {
+        const x = rnd() * w, y = rnd() * h, r = 4 + rnd() * 6, ry = r * (.6 + rnd() * .3), rot = rnd() * 3.14;
+        g.fillStyle = pal[rnd() * pal.length | 0]; g.strokeStyle = 'rgba(0,0,0,.4)';
+        for (const [ox, oy] of [[0, 0], [w, 0], [-w, 0], [0, h], [0, -h]]) { g.beginPath(); g.ellipse(x + ox, y + oy, r, ry, rot, 0, 6.3); g.fill(); g.stroke(); }
+      }
+    }, true);
+    peb.repeat.set(7.3 / 1.1, 7.0 / 1.1);
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(7.3, 7.0), std(0xffffff, { map: peb, bumpMap: peb, bumpScale: .04, roughness: .7 }));
+    m.rotation.x = -Math.PI / 2; m.position.set(8.8, 0.014, -1.5); m.receiveShadow = true; scene.add(m);
+    flat(1.4, 4.0, 0x161b21, 8.0, 0.0, 0.02); flat(2.2, 1.4, 0x161b21, 6.2, -1.3, 0.02);
+    const paver = std(0x9a5a48, { roughness: .8 });
+    box(0.12, 0.05, 4.1, paver, 8.76, 0.03, -0.05); box(3.6, 0.05, 0.12, paver, 6.96, 0.03, -2.06); box(3.7, 0.05, 0.12, paver, 10.6, 0.03, 2.0);
+    box(6.9, 1.0, 0.9, groundMat(0x1f3a2a, 7, 1), 8.8, 0.5, -4.45);   // hedge in front of the fence
+  }
   box(0.25, 0.7, 6.8, brick, 12.6, 0.35, -1.6);                   // garden wall with fence panels
   const iron = std(0x0c0e11, { roughness: .5, metalness: .6 });
   box(0.06, 0.75, 6.4, redWood, 12.6, 1.08, -1.6);
@@ -616,7 +633,8 @@ function buildHouse() {
     speckle(g, w, h, 500, .12);
   }, true) }); wood.userData.uv = [1.2, 1.7];
   const post = std(0x5a4632);
-  box(7.3, 1.65, 0.05, wood, 8.85, 0.825, -5.05);
+  const redFence = std(0xcf6f62, { roughness: .85, map: wood.map }); redFence.userData.uv = wood.userData.uv;   // red-stained, as in the photo
+  box(7.3, 1.65, 0.05, redFence, 8.85, 0.825, -5.05);
   box(7.3, 0.05, 0.09, post, 8.85, 1.67, -5.05);
   for (let x = 5.2; x < 12.4; x += 1.825) box(0.1, 1.75, 0.1, post, x, 0.875, -5.05);
   // back garden squared off with 6 ft (1.83 m) fence panels
