@@ -40,6 +40,8 @@ Three.js r128 (UMD build plus `examples/js` add-ons from a CDN), all textures dr
 - Windows: curtains or blinds by day, warm glow and light spill at night. Street light comes on at dusk.
 - Panels take a green hue with output; battery tower and garage glow blue with charge level; flow lines pulse in the source colour.
 - Phones get lighter settings (smaller shadow map, no multisampling, fewer rain streaks).
+- Roof tiles: each tile gets its own shade, with dirt streaks running down the slope, moss patches and lichen specks, all generated in the shader from world position so no two areas match.
+- Effects panel under the picture: switches for shadows, glow, cloud shadows, moss and weathering, and vignette and grain.
 
 ## To wire to real data
 
@@ -52,8 +54,8 @@ Three.js r128 (UMD build plus `examples/js` add-ons from a CDN), all textures dr
 
 - **Power flow lines**: current paths run along the ground and through the garage. Routes, thickness, how much they should stand out by day, and whether the dots or the pulse should carry the motion are all open.
 - **Grass**: real 3D blades or tufts instead of a flat textured lawn.
-- **Roof variety**: moss, lichen, dirt streaks and colour variation so tiles do not all look the same. (First pass of moss and streaks is in progress.)
-- **Effect toggles**: a settings overlay to switch each effect on and off for comparison and for slow phones. (First pass in progress.)
+- **Roof variety**: a first pass is in (see below). Open: how much moss, whether it should favour the north slopes and shaded areas, and the same treatment for brick, fences and paving.
+- **Effect toggles**: a first pass is in (see below). Open: toggles for the remaining effects as they are added, a single quality setting for phones, and remembering the choice.
 - **Missing post-processing** against the reference chain: ambient occlusion, screen-space reflections on wet surfaces, depth of field, sharpening, temporal anti-aliasing (multisampling is used instead).
 - **Surroundings**: beyond the garden is plain ground fading to haze. Options are neighbouring roofs as simple shapes, hedges and trees, or keep it empty so the house stays the focus.
 - **Phone performance**: untested on a real device. May need a quality setting.

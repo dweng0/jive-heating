@@ -74,6 +74,9 @@ button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .viewbar { display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 12px; }
 .reset { font: inherit; font-size: 12px; color: var(--muted); background: none; border: 0; padding: 6px 8px; cursor: pointer; }
 .reset[hidden] { display: none; }
+.fx { display: flex; flex-wrap: wrap; gap: 8px 18px; justify-content: center; margin-top: 10px; font-size: 13px; color: var(--muted); }
+.fx label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.fx input { accent-color: var(--focus); }
 .pane { position: relative; flex: 0 0 100%; height: 100%; }
 @media (prefers-reduced-motion: reduce) { .track { transition: none; } }
 #labels { position: absolute; inset: 0; pointer-events: none; }
@@ -138,7 +141,9 @@ aside { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
         <button id="vDiagram" aria-pressed="false">Diagram</button>
       </div>
       <button class="reset" id="resetView" hidden>Reset view</button>
+      <button class="reset" id="fxBtn" aria-expanded="false">Effects</button>
     </div>
+    <div class="fx" id="fx" hidden></div>
     </div>
 
     <aside>
@@ -443,16 +448,17 @@ function buildHouse() {
     g.putImageData(o, 0, 0);
     const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = maxAniso; return t;
   }
+  const FX = { glow: true, lens: true, clouds: true, weather: true, shadows: true }, fxU = { uFx: { value: 1 } };   // effect switches
   const cloudU = { uCloudTex: { value: fbmTex }, uCloudOff: { value: new THREE.Vector2() }, uCloudAmt: { value: 0 } };
   const allMats = [];
   const keep = m => {
     m.envMapIntensity *= 0.42; m.userData.env = m.envMapIntensity; m.userData.rough = m.roughness; m.userData.col = m.color.clone(); allMats.push(m);
     m.onBeforeCompile = sh => {   // every surface: drifting cloud shadows on direct light, plus weathering on textured ones
-      Object.assign(sh.uniforms, cloudU, { uGrime: { value: m.userData.grime || 0 } });
+      Object.assign(sh.uniforms, cloudU, fxU, { uGrime: { value: m.userData.grime || 0 }, uMoss: { value: m.userData.moss || 0 } });
       sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWPos;')
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform sampler2D uCloudTex; uniform vec2 uCloudOff; uniform float uCloudAmt; uniform float uGrime;')
-        .replace('#include <map_fragment>', '#include <map_fragment>\ndiffuseColor.rgb *= mix(1.0, 0.6 + 0.75 * texture2D(uCloudTex, vWPos.xz * 0.045 + vWPos.y * 0.07).g, uGrime);')
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform sampler2D uCloudTex; uniform vec2 uCloudOff; uniform float uCloudAmt; uniform float uGrime; uniform float uMoss; uniform float uFx;')
+        .replace('#include <map_fragment>', "#include <map_fragment>\ndiffuseColor.rgb *= mix(1.0, 0.6 + 0.75 * texture2D(uCloudTex, vWPos.xz * 0.045 + vWPos.y * 0.07).g, uGrime * uFx);\n#ifdef USE_UV\nif (uMoss * uFx > 0.0) {\n  float rv = floor(vUv.y * 4.0); vec2 cell = vec2(floor(vUv.x * 4.0 - (1.0 - mod(rv, 2.0)) * 0.5), rv);\n  float hsh = fract(sin(dot(cell, vec2(127.1, 311.7))) * 43758.5453);\n  diffuseColor.rgb *= 0.8 + 0.4 * hsh; diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.1, 0.95, 0.85), step(0.8, hsh));\n  float streak = texture2D(uCloudTex, vec2((vWPos.x + vWPos.z) * 0.55, vWPos.y * 0.04)).g;\n  diffuseColor.rgb *= 1.0 - 0.38 * smoothstep(0.5, 0.72, streak);\n  float mn = texture2D(uCloudTex, vWPos.xz * 0.09 + vWPos.y * 0.11).r, mf = texture2D(uCloudTex, vWPos.xz * 0.95).g;\n  float moss = smoothstep(0.56, 0.66, mn * 0.66 + mf * 0.34 + (3.4 - vWPos.y) * 0.035) * uMoss;\n  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.12, 0.16, 0.065) * (0.6 + 0.8 * mf), moss * 0.7);\n  float lichen = smoothstep(0.7, 0.735, texture2D(uCloudTex, vWPos.xz * 1.9 + 0.37).r);\n  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.72, 0.72, 0.56), lichen * 0.55);\n}\n#endif\n")
         .replace('#include <aomap_fragment>', 'float cloudSh = 1.0 - uCloudAmt * smoothstep(0.42, 0.6, texture2D(uCloudTex, vWPos.xz * 0.011 + uCloudOff).r);\nreflectedLight.directDiffuse *= cloudSh; reflectedLight.directSpecular *= cloudSh;\n#include <aomap_fragment>');
     };
     return m;
@@ -463,8 +469,8 @@ function buildHouse() {
     m.userData.uv = mpr; m.userData.grime = 1; m.userData.wet = .55; return m;   // uv = metres covered by one repeat of the texture
   };
   const brick = textured(brickDraw, [0.9, 0.6]);
-  const tile = textured(tileDraw, [1.32, 1.36], { roughness: .78 });
-  const darkTile = std(0xb4aaa6, { map: tile.map, normalMap: tile.normalMap, roughness: .78 }); darkTile.userData.uv = tile.userData.uv; darkTile.userData.grime = 1; darkTile.userData.wet = .55;
+  const tile = textured(tileDraw, [1.32, 1.36], { roughness: .78 }); tile.userData.moss = 1;
+  const darkTile = std(0xd6cdc6, { map: tile.map, normalMap: tile.normalMap, roughness: .78 }); darkTile.userData.uv = tile.userData.uv; darkTile.userData.grime = 1; darkTile.userData.wet = .55; darkTile.userData.moss = 1;
   const white = std(0xd9dde2, { roughness: .5 });
   const nbBrick = std(0x7d5a4e, { transparent: true, opacity: .55 }), nbTile = std(0x9a8d76, { transparent: true, opacity: .55 });
   const winDraw = (style, glow) => (g, w, h) => {
@@ -526,7 +532,7 @@ function buildHouse() {
 
   // image pipeline: HDR render, glow on anything brighter than white, then film-style tone curve, vignette and a touch of grain
   const fadeMat = new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, fog: false });
-  let composer = null, finalPass = null;
+  let composer = null, finalPass = null, bloomPass = null;
   if (THREE.EffectComposer && THREE.UnrealBloomPass && THREE.ShaderPass) {
     const gl2 = renderer.capabilities.isWebGL2, hdr = gl2 && !!renderer.extensions.get('EXT_color_buffer_float');
     const opts = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat, type: hdr ? THREE.HalfFloatType : THREE.UnsignedByteType };
@@ -534,16 +540,16 @@ function buildHouse() {
     composer = new THREE.EffectComposer(renderer, rt);
     composer.setPixelRatio(renderer.getPixelRatio());
     composer.addPass(new THREE.RenderPass(scene, camera));
-    composer.addPass(new THREE.UnrealBloomPass(new THREE.Vector2(512, 512), 0.35, 0.5, 1.7));
+    bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(512, 512), 0.35, 0.5, 1.7); composer.addPass(bloomPass);
     finalPass = new THREE.ShaderPass({
-      uniforms: { tDiffuse: { value: null }, exposure: { value: 1 }, time: { value: 0 } },
+      uniforms: { tDiffuse: { value: null }, exposure: { value: 1 }, time: { value: 0 }, fx: { value: 1 } },
       vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-      fragmentShader: `uniform sampler2D tDiffuse; uniform float exposure, time; varying vec2 vUv;
+      fragmentShader: `uniform sampler2D tDiffuse; uniform float exposure, time, fx; varying vec2 vUv;
         void main(){ vec3 c = texture2D(tDiffuse, vUv).rgb * exposure;
           c = clamp((c * (2.51 * c + 0.03)) / (c * (2.43 * c + 0.59) + 0.14), 0.0, 1.0); c = pow(c, vec3(1.0 / 2.2));
           c = mix(vec3(dot(c, vec3(0.299, 0.587, 0.114))), c, 1.14); c = mix(c, c * c * (3.0 - 2.0 * c), 0.25);
-          vec2 d = vUv - 0.5; c *= 1.0 - dot(d, d) * 0.6;
-          c += (fract(sin(dot(vUv * 913.7 + time, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) * 0.022;
+          vec2 d = vUv - 0.5; c *= 1.0 - dot(d, d) * 0.6 * fx;
+          c += (fract(sin(dot(vUv * 913.7 + time, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) * 0.022 * fx;
           gl_FragColor = vec4(c, 1.0); }` });
     composer.addPass(finalPass);
   }
@@ -891,6 +897,17 @@ function buildHouse() {
     e.geo.attributes.position.needsUpdate = true;
   }
 
+  // effects panel: switch each effect off to compare, or to lighten the load on a slow phone
+  {
+    const fxEl = document.getElementById('fx'), fxBtn = document.getElementById('fxBtn');
+    fxBtn.onclick = () => { fxEl.hidden = !fxEl.hidden; fxBtn.setAttribute('aria-expanded', !fxEl.hidden); };
+    const apply = () => { if (bloomPass) bloomPass.enabled = FX.glow; if (finalPass) finalPass.uniforms.fx.value = FX.lens ? 1 : 0; fxU.uFx.value = FX.weather ? 1 : 0; sun.castShadow = FX.shadows; };
+    for (const [k, label] of [['shadows', 'Shadows'], ['glow', 'Glow'], ['clouds', 'Cloud shadows'], ['weather', 'Moss and weathering'], ['lens', 'Vignette and grain']]) {
+      const l = document.createElement('label'), c = document.createElement('input');
+      c.type = 'checkbox'; c.checked = FX[k]; c.id = 'fx-' + k; c.onchange = () => { FX[k] = c.checked; apply(); };
+      l.append(c, label); fxEl.appendChild(l);
+    }
+  }
   Object.assign(three, { renderer, scene, camera });
   three.frame = (t, dt) => {
     // very slow turntable (one lap in ~4 min); pauses while the user is handling it, carries on 6 s after they let go
@@ -925,7 +942,7 @@ function buildHouse() {
     domeU.col.value.setRGB(0.95, 0.96, 0.98).lerp(tmpC.setRGB(0.5, 0.53, 0.58), cloud * cloud).lerp(tmpC.setRGB(1.0, 0.62, 0.42), low * up * 0.6).multiplyScalar(0.03 + 0.97 * smooth(-10, 8, elDeg));
     dome.position.copy(camera.position); stars.position.copy(camera.position); stars.material.opacity = (1 - smooth(-12, -2, elDeg)) * (1 - cloud) * 0.9;
     cloudU.uCloudOff.value.x += dt * 0.006; cloudU.uCloudOff.value.y += dt * 0.002;
-    cloudU.uCloudAmt.value = 0.85 * Math.pow(Math.sin(Math.PI * Math.min(1, cloud)), 0.7) * up;
+    cloudU.uCloudAmt.value = (FX.clouds ? 0.85 : 0) * Math.pow(Math.sin(Math.PI * Math.min(1, cloud)), 0.7) * up;
     if ((Math.abs(dark - baked.dark) > 0.015 || Math.abs(cloud - baked.cloud) > 0.03) && t - baked.t > 250) {   // re-light reflections when the sky changes
       envGround.material.color.setRGB(0.2, 0.2, 0.19).multiplyScalar(0.05 + up * (1 - 0.5 * cloud));
       const rt = pmrem.fromScene(envScene, 0, 0.1, 200); scene.environment = rt.texture; if (envRT) envRT.dispose(); envRT = rt;
