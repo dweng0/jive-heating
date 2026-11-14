@@ -725,6 +725,9 @@ function buildHouse() {
     const m2 = new THREE.Mesh(new THREE.PlaneGeometry(7.3, 2.0), std(0xffffff, { map: peb2, bumpMap: peb2, bumpScale: .04, roughness: .7 }));
     m2.rotation.x = -Math.PI / 2; m2.position.set(8.9, 0.014, 13.0); m2.receiveShadow = true; scene.add(m2);
     box(7.3, 0.05, 0.12, paver, 8.9, 0.03, 12.0);
+    const peb3 = peb.clone(); peb3.needsUpdate = true; peb3.repeat.set(10.3 / 1.1, 3.8 / 1.1);   // Scottish pebble down the garden side of the garage
+    const m3 = new THREE.Mesh(new THREE.PlaneGeometry(10.3, 3.8), std(0xffffff, { map: peb3, bumpMap: peb3, bumpScale: .04, roughness: .7 }));
+    m3.rotation.x = -Math.PI / 2; m3.position.set(0.05, 0.014, 12.05); m3.receiveShadow = true; scene.add(m3);
     box(6.9, 1.0, 0.9, groundMat(0x2c5a30, 7, 1), 8.8, 0.5, -4.45);   // hedge in front of the fence
   }
   const iron = std(0x0c0e11, { roughness: .5, metalness: .6 });
@@ -935,7 +938,7 @@ function buildHouse() {
           vec4 mvPosition = viewMatrix * wp; gl_Position = projectionMatrix * mvPosition;`);
     };
     // where it may grow: the lawn, minus the patio, the gravel yard and anything standing on it
-    const keepOut = [[-8.05, -6.35, -4.1, 9.1], [-9.7, -5.1, 7.05, 12.15], [-5.2, 5.2, 6.3, 10.2], [-3.1, 5.2, 5, 6.4]];   // patio, gravel yard, inside the garage, side passage
+    const keepOut = [[-8.05, -6.35, -4.1, 9.1], [-9.7, -5.1, 7.05, 12.15], [-5.2, 5.2, 6.3, 10.2], [-3.1, 5.2, 5, 6.4], [-5.2, 5.2, 10.1, 14]];   // patio, gravel yard, inside the garage, pebbles beside it, side passage
     scene.updateMatrixWorld(true);
     const bb = new THREE.Box3();
     scene.traverse(o => {
