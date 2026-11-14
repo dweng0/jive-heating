@@ -219,8 +219,8 @@ const phase = Object.fromEntries(EDGE_KEYS.map(k => [k, Math.random()]));
 let curCircuits = {};
 let alive = 1; // 1 live, eases to 0.15 when stale
 let dark = 0;  // 0 day, 1 night; eases to the example's value
-const WX = { clear: { label: 'Clear sky', cloud: 0, rain: 0 }, cloudy: { label: 'Passing cloud', cloud: 0.55, rain: 0 }, overcast: { label: 'Overcast', cloud: 1, rain: 0 }, rain: { label: 'Rain', cloud: 1, rain: 1 } };
-let wxKey = 'clear', cloud = 0, rainAmt = 0;
+const WX = { clear: { label: 'Clear sky', cloud: 0, rain: 0 }, cloudy: { label: 'Passing cloud', cloud: 0.55, rain: 0 }, overcast: { label: 'Overcast', cloud: 1, rain: 0 }, rain: { label: 'Rain', cloud: 1, rain: 1 }, snow: { label: 'Snow', cloud: 0.9, rain: 0, snow: 1 }, frost: { label: 'Frost', cloud: 0, rain: 0, frost: 1 } };
+let wxKey = 'clear', cloud = 0, rainAmt = 0, snowAmt = 0, frostAmt = 0;
 let pctShown = 0;
 
 function target(k) {
@@ -450,16 +450,28 @@ function buildHouse() {
     const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = maxAniso; return t;
   }
   const FX = { glow: true, lens: true, clouds: true, weather: true, shadows: true }, fxU = { uFx: { value: 1 } };   // effect switches
-  const cloudU = { uCloudTex: { value: fbmTex }, uCloudOff: { value: new THREE.Vector2() }, uCloudAmt: { value: 0 } };
+  const cloudU = { uCloudTex: { value: fbmTex }, uCloudOff: { value: new THREE.Vector2() }, uCloudAmt: { value: 0 }, uSnow: { value: 0 }, uFrost: { value: 0 } };
   const allMats = [];
   const keep = m => {
     m.envMapIntensity *= 0.42; m.userData.env = m.envMapIntensity; m.userData.rough = m.roughness; m.userData.col = m.color.clone(); allMats.push(m);
     m.onBeforeCompile = sh => {   // every surface: drifting cloud shadows on direct light, plus weathering on textured ones
-      Object.assign(sh.uniforms, cloudU, fxU, { uGrime: { value: m.userData.grime || 0 }, uMoss: { value: m.userData.moss || 0 } });
+      Object.assign(sh.uniforms, cloudU, fxU, { uGrime: { value: m.userData.grime || 0 }, uMoss: { value: m.userData.moss || 0 }, uCover: { value: m.userData.noSnow ? 0 : 1 } });
       sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWPos;')
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform sampler2D uCloudTex; uniform vec2 uCloudOff; uniform float uCloudAmt; uniform float uGrime; uniform float uMoss; uniform float uFx;')
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform sampler2D uCloudTex; uniform vec2 uCloudOff; uniform float uCloudAmt; uniform float uGrime; uniform float uMoss; uniform float uFx; uniform float uSnow; uniform float uFrost; uniform float uCover;')
         .replace('#include <map_fragment>', "#include <map_fragment>\ndiffuseColor.rgb *= mix(1.0, 0.6 + 0.75 * texture2D(uCloudTex, vWPos.xz * 0.045 + vWPos.y * 0.07).g, uGrime * uFx);\n#ifdef USE_UV\nif (uMoss * uFx > 0.0) {\n  float rv = floor(vUv.y * 4.0); vec2 cell = vec2(floor(vUv.x * 4.0 - (1.0 - mod(rv, 2.0)) * 0.5), rv);\n  float hsh = fract(sin(dot(cell, vec2(127.1, 311.7))) * 43758.5453);\n  diffuseColor.rgb *= 0.8 + 0.4 * hsh; diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.1, 0.95, 0.85), step(0.8, hsh));\n  float streak = texture2D(uCloudTex, vec2((vWPos.x + vWPos.z) * 0.55, vWPos.y * 0.04)).g;\n  diffuseColor.rgb *= 1.0 - 0.38 * smoothstep(0.5, 0.72, streak);\n  float mn = texture2D(uCloudTex, vWPos.xz * 0.09 + vWPos.y * 0.11).r, mf = texture2D(uCloudTex, vWPos.xz * 0.95).g;\n  float moss = smoothstep(0.56, 0.66, mn * 0.66 + mf * 0.34 + (3.4 - vWPos.y) * 0.035) * uMoss;\n  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.12, 0.16, 0.065) * (0.6 + 0.8 * mf), moss * 0.7);\n  float lichen = smoothstep(0.7, 0.735, texture2D(uCloudTex, vWPos.xz * 1.9 + 0.37).r);\n  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.72, 0.72, 0.56), lichen * 0.55);\n}\n#endif\n")
+        .replace('#include <emissivemap_fragment>', `if (uCover * (uSnow + uFrost) > 0.001) {   // settled snow on upward faces; frost rime speckled over everything
+  float upN = inverseTransformDirection(normal, viewMatrix).y;
+  float sn = texture2D(uCloudTex, vWPos.xz * 0.21 + vWPos.y * 0.13).r, sf = texture2D(uCloudTex, vWPos.xz * 2.3 + vWPos.y * 1.7).g;
+  float snowC = smoothstep(0.25, 0.6, upN + (sn - 0.5) * 0.7 - (1.0 - uSnow) * 0.9) * uSnow;
+  snowC = max(snowC, smoothstep(0.32, 0.0, vWPos.y) * smoothstep(0.55, 1.0, uSnow) * 0.85);   // drifted against the foot of walls and fences
+  float fr = texture2D(uCloudTex, vWPos.xz * 1.37 + vWPos.y * 0.9).g * 0.55 + texture2D(uCloudTex, vWPos.zx * 3.71 + 0.31).r * 0.45;
+  float frostC = uFrost * clamp(0.08 + 0.75 * max(upN, 0.0), 0.0, 1.0) * smoothstep(0.38, 0.7, fr + (sn - 0.5) * 0.25);
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.8, 0.85, 0.9), frostC * 0.62);
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.95, 0.98) * (0.94 + 0.06 * sf), snowC);
+  roughnessFactor = mix(roughnessFactor, 0.9, snowC); roughnessFactor = mix(roughnessFactor, 0.45, frostC * 0.6);
+}
+#include <emissivemap_fragment>`)
         .replace('#include <aomap_fragment>', 'float cloudSh = 1.0 - uCloudAmt * smoothstep(0.42, 0.6, texture2D(uCloudTex, vWPos.xz * 0.011 + uCloudOff).r);\nreflectedLight.directDiffuse *= cloudSh; reflectedLight.directSpecular *= cloudSh;\n#include <aomap_fragment>');
     };
     return m;
@@ -481,10 +493,11 @@ function buildHouse() {
     else for (let y = 0; y < h * .6; y += 8) { g.fillStyle = glow ? '#f2b56a' : '#d9d4c8'; g.fillRect(0, y, w, 6); g.fillStyle = glow ? '#c98a45' : '#9e9a90'; g.fillRect(0, y + 6, w, 2); }
   };
   const winMat = style => std(0xffffff, { map: canvasTex(128, 128, winDraw(style, false), true), emissiveMap: canvasTex(128, 128, winDraw(style, true), true), emissive: new THREE.Color(0xffffff), emissiveIntensity: 0, roughness: .08, metalness: .1, envMapIntensity: .8 });
-  const winC = winMat('curtain'), winB = winMat('blind'), win = winC;
+  const winC = winMat('curtain'), winB = winMat('blind'), win = winC; winC.userData.noSnow = winB.userData.noSnow = true;   // glass stays clear
   const panelOpts = { roughness: .6, metalness: .08, envMapIntensity: .35, emissive: new THREE.Color(C.solar), emissiveIntensity: 0 };
   const panelP = std(0xffffff, Object.assign({ map: canvasTex(128, 256, panelDraw(6, 12), true) }, panelOpts));   // portrait
   const panelL = std(0xffffff, Object.assign({ map: canvasTex(256, 128, panelDraw(12, 6), true) }, panelOpts));   // landscape
+  panelP.userData.noSnow = panelL.userData.noSnow = true;   // snow slides off the panels
   const panelFrame = std(0xdfe5ec, { metalness: .5, roughness: .35, envMapIntensity: 1, emissive: new THREE.Color(0xffffff), emissiveIntensity: .12 });
   const frameMat = std(0x8f99a5, { metalness: .7, roughness: .35, envMapIntensity: 1 });
   const groundMat = (color, w, d) => { const t = noiseTex.clone(); t.needsUpdate = true; t.repeat.set(w / 2.5, d / 2.5); const m = std(color, { roughness: 1, map: t, bumpMap: t, bumpScale: .02 }); m.userData.wet = 1; return m; };
@@ -530,6 +543,13 @@ function buildHouse() {
   const rain = new THREE.LineSegments(rainGeo, new THREE.LineBasicMaterial({ color: 0xd4e2f0, transparent: true, opacity: 0, depthWrite: false, fog: false }));
   rain.frustumCulled = false; rain.visible = false; scene.add(rain);
   let wetNow = 0;
+  // snowflakes: soft round points drifting down
+  const SNOW_N = LOW ? 1500 : 4500, snowSeed = new Float32Array(SNOW_N * 4).map(() => rnd()), snowPos = new Float32Array(SNOW_N * 3);
+  const snowGeo = new THREE.BufferGeometry(); snowGeo.setAttribute('position', new THREE.BufferAttribute(snowPos, 3));
+  const flakeTex = canvasTex(32, 32, (g, w, h) => { const gr = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.5, 'rgba(255,255,255,.6)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, w, h); });
+  const snowfall = new THREE.Points(snowGeo, new THREE.PointsMaterial({ color: 0xffffff, map: flakeTex, size: 0.16, sizeAttenuation: true, transparent: true, opacity: 0, depthWrite: false, fog: false }));
+  snowfall.frustumCulled = false; snowfall.visible = false; scene.add(snowfall);
+  let snowNow = 0, frostNow = 0;
 
   // image pipeline: HDR render, glow on anything brighter than white, then film-style tone curve, vignette and a touch of grain
   const fadeMat = new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, fog: false });
@@ -903,7 +923,7 @@ function buildHouse() {
   }
 
   // 3D grass: instanced tufts of tapered blades over the lawn, swaying in the wind; gaps show the flat lawn beneath
-  const grassU = { uTime: { value: 0 }, uWind: { value: 0.6 } };
+  const grassU = { uTime: { value: 0 }, uWind: { value: 0.6 }, uBury: { value: 0 } };
   const grass = (() => {
     const BLADES = 5, SEG = LOW ? 2 : 3, pos = [], col = [], nrm = [], idx = [];   // phones: fewer bends per blade
     for (let b = 0; b < BLADES; b++) {   // one tuft: blades leaning out from a common root, a few segments each so they can bend
@@ -929,8 +949,9 @@ function buildHouse() {
     const base = mat.onBeforeCompile;
     mat.onBeforeCompile = sh => {
       base(sh); Object.assign(sh.uniforms, grassU);
-      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float uTime; uniform float uWind;')
-        .replace('#include <project_vertex>', `vec4 wp = modelMatrix * instanceMatrix * vec4(transformed, 1.0);
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float uTime; uniform float uWind; uniform float uBury;')
+        .replace('#include <project_vertex>', `transformed.y *= 1.0 - uBury;   // sinks into lying snow
+          vec4 wp = modelMatrix * instanceMatrix * vec4(transformed, 1.0);
           float hh = transformed.y / 0.14, gust = sin(wp.x * 0.35 + wp.z * 0.2 - uTime * 1.6) * 0.5 + 0.5;
           vec2 sway = vec2(0.8, 0.35) * (gust * 0.7 + 0.15 * sin(uTime * 4.0 + wp.x * 3.1 + wp.z * 2.3)) * uWind * hh * hh * 0.07;
           wp.xz += sway; wp.y -= dot(sway, sway) * 3.0;
@@ -1010,7 +1031,7 @@ function buildHouse() {
     domeU.cover.value = cloud; domeU.off.value.x += dt * 0.004; domeU.off.value.y += dt * 0.0015;
     domeU.col.value.setRGB(0.95, 0.96, 0.98).lerp(tmpC.setRGB(0.5, 0.53, 0.58), cloud * cloud).lerp(tmpC.setRGB(1.0, 0.62, 0.42), low * up * 0.6).multiplyScalar(0.03 + 0.97 * smooth(-10, 8, elDeg));
     dome.position.copy(camera.position); stars.position.copy(camera.position); stars.material.opacity = (1 - smooth(-12, -2, elDeg)) * (1 - cloud) * 0.9;
-    grassU.uTime.value += dt; grassU.uWind.value = 0.5 + 0.9 * cloud + 0.8 * rainAmt;
+    grassU.uTime.value += dt; grassU.uWind.value = (0.5 + 0.9 * cloud + 0.8 * rainAmt) * (1 - 0.8 * Math.max(snowNow, frostNow));
     cloudU.uCloudOff.value.x += dt * 0.006; cloudU.uCloudOff.value.y += dt * 0.002;
     cloudU.uCloudAmt.value = (FX.clouds ? 0.85 : 0) * Math.pow(Math.sin(Math.PI * Math.min(1, cloud)), 0.7) * up;
     if ((Math.abs(dark - baked.dark) > 0.015 || Math.abs(cloud - baked.cloud) > 0.03) && t - baked.t > 250) {   // re-light reflections when the sky changes
@@ -1021,6 +1042,20 @@ function buildHouse() {
     // rain streaks and wet surfaces
     wetNow += (rainAmt - wetNow) * (1 - Math.exp(-dt / (rainAmt > wetNow ? 2.5 : 9)));
     for (const m of allMats) if (m.userData.wet) { const w = wetNow * m.userData.wet; m.roughness = m.userData.rough * (1 - w * 0.85); m.color.copy(m.userData.col).multiplyScalar(1 - w * 0.4); m.envMapIntensity = m.userData.env * (1 + w * 2.2); }
+    // snow settles over a minute or so and melts slower; frost forms and clears over a few seconds
+    snowNow += (snowAmt - snowNow) * (1 - Math.exp(-dt / (snowAmt > snowNow ? 9 : 14))); frostNow += (frostAmt - frostNow) * (1 - Math.exp(-dt / 3));
+    cloudU.uSnow.value = FX.weather ? snowNow : 0; grassU.uBury.value = FX.weather ? 0.92 * smooth(0.1, 0.8, snowNow) : 0; cloudU.uFrost.value = FX.weather ? frostNow : 0;
+    snowfall.visible = snowAmt > 0.02;
+    if (snowfall.visible) {
+      snowfall.material.opacity = 0.9 * snowAmt * (0.35 + 0.65 * Math.max(up, 0.3));
+      const T0 = t * 0.001;
+      for (let i = 0; i < SNOW_N; i++) {
+        const a = snowSeed[i * 4], b = snowSeed[i * 4 + 1], c = snowSeed[i * 4 + 2], d = snowSeed[i * 4 + 3];
+        const y = 20 - ((T0 * (0.9 + c * 0.7) + b * 20) % 20);
+        snowPos[i * 3] = -26 + a * 50 + Math.sin(T0 * (0.6 + d) + b * 40) * 0.5; snowPos[i * 3 + 1] = y; snowPos[i * 3 + 2] = -20 + d * 46 + Math.cos(T0 * (0.5 + c) + a * 40) * 0.5;
+      }
+      snowGeo.attributes.position.needsUpdate = true;
+    }
     rain.visible = rainAmt > 0.02;
     if (rain.visible) {
       rain.material.opacity = 0.2 * rainAmt * (0.25 + 0.75 * Math.max(up, 0.25));
@@ -1161,6 +1196,7 @@ function loop(t) {
   alive += ((stale ? 0.15 : 1) - alive) * (1 - Math.exp(-dt / 0.8));
   dark += (SCEN[scenKey].dark - dark) * (1 - Math.exp(-dt / 1.2));
   cloud += (WX[wxKey].cloud - cloud) * (1 - Math.exp(-dt / 1.6)); rainAmt += (WX[wxKey].rain - rainAmt) * (1 - Math.exp(-dt / 1.6));
+  snowAmt += ((WX[wxKey].snow || 0) - snowAmt) * (1 - Math.exp(-dt / 1.6)); frostAmt += ((WX[wxKey].frost || 0) - frostAmt) * (1 - Math.exp(-dt / 1.6));
   for (const k of EDGE_KEYS) {
     cur[k] = Math.max(0, cur[k] + (target(k) - cur[k]) * ease);
     phase[k] = (phase[k] + speedFor(cur[k]) * alive * (reduced ? 0.4 : 1) * dt) % 1;

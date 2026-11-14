@@ -3444,7 +3444,7 @@ Engineering rules (apply to every scenario):
                 debug key
 
 # Deferred (not to be built yet)
-# - Live view: weather and the sun's real position on the 3D house (source not chosen: Home Assistant or computed)
+# - Live view: weather (clear, cloud, rain, snow, frost) and the sun's real position on the 3D house (source not chosen: Home Assistant or computed)
 # - Mirror schedules to the valve weekly_schedule as a fallback when the service is down
 # - Open-window alerts (TRVZB exposes the setting, not a state; needs inference)
 # - Valve temperature calibration offsets (revisit if rooms without a sensor read badly)

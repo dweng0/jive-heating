@@ -33,7 +33,7 @@ Coordinates are metres: x = east, z = south, y = up.
 Three.js r128 (UMD build plus `examples/js` add-ons from a CDN), all textures drawn in code.
 
 - Physical sky; sun position driven by a single day-to-night value (midday, golden hour, night with stars and moonlight).
-- Weather: clear, passing cloud (drifting cloud shadows on every surface), overcast, rain (streaks, haze, wet reflective surfaces).
+- Weather: clear, passing cloud (drifting cloud shadows on every surface), overcast, rain (streaks, haze, wet reflective surfaces), snow (drifting flakes; snow settles on upward faces over about a minute and melts when the weather changes, buries the grass, drifts at the foot of walls; windows and panels stay clear), frost (clear sky, white rime speckled over lawn, roofs and paving, lighter on walls).
 - HDR pipeline: 4x multisampled half-float target, bloom on values above white, ACES tone curve, light colour grade, vignette, grain.
 - Reflection map re-baked from the sky when time or weather changes.
 - Brick and tile textures at 512 px with normal maps and large-scale weathering.
@@ -47,7 +47,7 @@ Three.js r128 (UMD build plus `examples/js` add-ons from a CDN), all textures dr
 
 ## To wire to real data
 
-- **Weather from an API.** The weather state (cloud cover, rain) should come from a real source, not buttons. Home Assistant already has a weather entity; the service could pass through cloud cover %, precipitation and condition. Needs a decision on source and on how it reaches the client (extra fields on `/ws/power`, or a separate endpoint polled every few minutes).
+- **Weather from an API.** The weather state (cloud cover, rain, snow, and frost from temperature at or below 0 °C with clear skies) should come from a real source, not buttons. Home Assistant already has a weather entity; the service could pass through cloud cover %, precipitation and condition. Needs a decision on source and on how it reaches the client (extra fields on `/ws/power`, or a separate endpoint polled every few minutes).
 - **Real sun position.** Replace the day-to-night value with the sun's actual azimuth and elevation for the house's latitude, longitude and the current time (Home Assistant's `sun.sun` exposes both, or compute client-side). The model's axes already match the real orientation, so shadows and panel lighting would be true to life.
 - **Live flows** from `/ws/power` once the edges contract is built, and battery % from the inverter.
 - **Before the inverter is installed** the page should show grid to home only, with solar and battery marked as not connected (the "Today, no inverter yet" example).
