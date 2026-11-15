@@ -3496,6 +3496,67 @@ Engineering rules (apply to every scenario):
             Then the 3D house shows falling and settling snow, and changes as the look changes
             And with weather null it shows a clear sky
 
+    Feature: Live league table
+        As someone with energy access
+        I want a live table of what is using power right now, biggest first
+        So that I can see at a glance what is running, without knowing which room or area it was filed under
+
+        The table sits on the Energy tab straight below the dials, on the web app and the Android app. It is ranked
+        like a league table and drawn like one side of an order book: each row is an item (a meter: a plug or a clamp)
+        with its live watts, and a bar behind it as long as its share of the whole house's power. Rows move up and down
+        as readings arrive. A toggle above it switches between Items and Rooms.
+
+        Today a meter only shows by name when it is a monitored device in no room; a clamp measuring an energy area
+        shows as the area, a device in a room or area only inside its total, and a meter with no job not at all. So a
+        9.5 kW shower on its own clamp could run without appearing by name. The table shows every meter by name.
+
+        Scenario: Live power carries every meter's watts
+            Given "Shower Clamp" (labelled "Shower") is the whole-area meter for energy area "Bathroom", "Oven Clamp"
+                (labelled "Oven") is a monitored device in room "Kitchen", "Kettle Plug" is in energy area "Kitchen
+                counter", "Fridge Plug" is in no room or area, and "Garage Clamp" is reporting but has no job
+            When admin "jane" opens the live power channel at /ws/power
+            Then the message has items, one per meter except the house meter, each with meter, name (its label, else
+                its meter name), watts (null while it has no live reading), room, area and job
+            And job is "area" for a whole-area meter, "device" for a monitored device and null for a meter with no job
+            And "Garage Clamp" is included with job null, so a clamp that has not been given a job is still seen
+
+        Scenario: Items are ranked by their live watts
+            Given the house uses 11000 W, "Shower" 9500 W, "Oven" 1200 W and "Fridge" 90 W
+            When someone with energy access opens the Energy tab
+            Then the table lists "Shower", "Oven", "Fridge", then "Everything else" 210 W, biggest first
+            And each row shows its watts and its share of the house: "Shower" 86%, "Oven" 11%, "Fridge" 1%
+            And each row's bar is as long as its share, like the depth on one side of an order book
+            And items reading under 5 W sit together at the bottom as "Off" in name order, and items with no reading
+                after them, greyed, as "No reading"
+
+        Scenario: Rows move up and down as readings arrive
+            Given the table shows "Oven" above "Kettle"
+            When a reading has "Kettle" at 2800 W and "Oven" at 1200 W
+            Then "Kettle" slides up past "Oven" over about half a second instead of jumping
+            And each number counts to its new value, and the share flashes green when it rises and red when it falls
+            And a row changes place at most once every 2 seconds, so a figure flickering around another's does not
+                make them swap back and forth
+
+        Scenario: The table can rank rooms instead of items
+            Given the table is showing Items
+            When the household chooses "Rooms" above it
+            Then each row is a place: a room (its monitored devices), an energy area (its whole-area meter, else its
+                devices), "Not in a room" for monitored devices in neither, and "Everything else"
+            And meters with no job are left out of Rooms, since they belong to no place
+            And the choice is remembered on that device
+
+        Scenario: A meter with no job can be given one from the table
+            Given "Garage Clamp" is reporting 400 W and has no job
+            When admin "jane" opens the Energy tab
+            Then its row says "No job yet" under its name
+            And tapping it opens the meter's settings to label it and choose its room, area or job
+            And members with energy access see the row but cannot change it
+
+        Scenario: The table says when there is nothing live
+            Given the house reading is stale
+            Then the shares show "—" and the rows keep their last order, greyed, with "Readings stopped"
+            And with no meters but the house meter the table says "Add a plug or clamp to see what is using power"
+
 # Deferred (not to be built yet)
 # - Charts page (whole house: a line per room, the house median, boiler periods shaded; 24 h / 7 d / 30 d; boiler-on
 #   and average stats). Dropped from the web app and Android app on 2026-11-15 as unused; the history recording and
