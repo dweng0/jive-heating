@@ -101,6 +101,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.navigation:navigation-compose:2.8.5")
+    // The Live tab shows the bundled web view; the asset loader serves it over https so its module scripts load.
+    implementation("androidx.webkit:webkit:1.12.1")
 
     // Charts. 2.2.0 matches this Kotlin (2.1.21) and AGP 8.7; newer Vico needs Kotlin 2.2+/AGP 8.9+/SDK 36.
     implementation("com.patrykandpatrick.vico:compose-m3:2.2.0")

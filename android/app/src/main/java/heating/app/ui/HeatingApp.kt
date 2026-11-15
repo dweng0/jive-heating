@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.BeachAccess
 import androidx.compose.material.icons.rounded.ElectricBolt
+import androidx.compose.material.icons.rounded.WbSunny
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
@@ -242,6 +243,7 @@ private fun Connected(
                             val icon = when (tab.route) {
                                 "rooms" -> Icons.Rounded.Home
                                 "dashboard" -> Icons.Rounded.ShowChart
+                                "live" -> Icons.Rounded.WbSunny
                                 "energy" -> Icons.Rounded.ElectricBolt
                                 "account" -> Icons.Rounded.AccountCircle
                                 else -> Icons.Rounded.BeachAccess
@@ -322,6 +324,9 @@ private fun Connected(
                 if (state.admin) {
                     DashboardScreen(connection.api, contentPadding = padding)
                 }
+            }
+            composable("live") {
+                if (state.admin || state.energy) heating.app.ui.live.LiveScreen(connection.api, padding)
             }
             composable("energy") {
                 if (state.admin || state.energy) {

@@ -7,11 +7,20 @@ import '@/live/live.css'
 /** A reading older than this is not live: the page fades and says so. */
 const STALE_AFTER_MS = 2 * 60_000
 
+/** Where readings come from: calls back with each /ws/power message and the connection state; returns a stop. */
+export type PowerSource = (onPower: (p: LivePower) => void, onConnected: (connected: boolean) => void) => () => void
+
+/** Live in the web app: readings from /ws/power on the signed-in session. */
+export function LivePage() {
+  return <LiveView source={followPower} />
+}
+
 /**
  * Live: where the house's power is coming from and going to right now, as a 3D house or a flow diagram. The picture
- * takes the full width. Built from docs/prototypes/live-page.html (see web/scripts/port-live-prototype.py).
+ * takes the full width. Built from docs/prototypes/live-page.html (see web/scripts/port-live-prototype.py). The Android
+ * app shows the same view (live-embed.html), fed by the app's own connection.
  */
-export function LivePage() {
+export function LiveView({ source }: { source: PowerSource }) {
   const feed = useRef<LiveFeed | null>(null)
 
   useEffect(() => {
@@ -22,7 +31,7 @@ export function LivePage() {
     // Stopped: no house reading, nothing for two minutes, or the inverter gone quiet (a live house reading but no flows).
     const stopped = (p: LivePower | null) => p == null || p.watts == null || (p.flows != null && p.flows.length === 0 && p.watts > 0)
     const judge = () => live.setStale(stopped(latest) || Date.now() - lastAt > STALE_AFTER_MS)
-    const stopPower = followPower(
+    const stopPower = source(
       (p) => {
         latest = p
         lastAt = Date.now()
@@ -38,7 +47,7 @@ export function LivePage() {
       live.stop()
       feed.current = null
     }
-  }, [])
+  }, [source])
 
   return (
     <div className="live-page" data-testid="live-page">

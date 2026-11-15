@@ -23,7 +23,15 @@ data class LivePower(
     val elseWatts: Double? = null,
     /** Energy areas' power now: the whole-area meter's, else the sum of its plugs reporting. */
     val areas: List<AreaPower> = emptyList(),
+    /** Where the power goes now, between solar, battery, grid and home. */
+    val flows: List<PowerFlow> = emptyList(),
+    /** Battery charge %; null without an inverter reading. */
+    val batteryPct: Double? = null,
 )
+
+/** Power moving from [from] to [to] (solar, battery, grid or home) right now. */
+@Serializable
+data class PowerFlow(val from: String, val to: String, val watts: Double)
 
 /** An energy area's live power; null while its clamp has no live reading. */
 @Serializable
