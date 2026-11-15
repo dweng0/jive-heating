@@ -91,6 +91,29 @@ class LivePowerTest {
         assertTrue(powerFlows(3000.0, 0.0, 3000.0).none { it.to == "grid" || it.to == "battery" })
     }
 
+    // BDD: Solar serves the home first, then the battery, then the grid
+    @Test
+    fun `solar serves the home first, then the battery, then the grid`() {
+        assertEquals(
+            setOf(PowerFlow("solar", "home", 1500.0), PowerFlow("battery", "home", 600.0), PowerFlow("grid", "home", 300.0)),
+            powerFlows(solar = 1500.0, battery = -600.0, home = 2400.0).toSet(),
+        )
+        // A discharging battery never exports while the home still draws from the grid.
+        for (home in listOf(0.0, 200.0, 600.0, 900.0, 2000.0)) {
+            val flows = powerFlows(solar = 300.0, battery = -600.0, home = home)
+            assertTrue(flows.none { it.from == "battery" && it.to == "grid" } || flows.none { it.from == "grid" && it.to == "home" }, "$flows")
+        }
+    }
+
+    // BDD: The battery charges from the grid overnight
+    @Test
+    fun `the battery charges from the grid overnight`() {
+        assertEquals(
+            setOf(PowerFlow("grid", "home", 370.0), PowerFlow("grid", "battery", 3100.0)),
+            powerFlows(solar = 0.0, battery = 3100.0, home = 370.0).toSet(),
+        )
+    }
+
     // BDD: The house power streams live
     @Test
     fun `the house power streams live`() {
