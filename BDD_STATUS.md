@@ -668,10 +668,7 @@ Checked 493 scenario(s) across 158 test file(s).
 - [x] League rows swap places as readings arrive
 - [x] Toggling the league table to Rooms ranks places instead of items
 - [x] League row for a meter with no job opens its settings
-- [ ] UNCOVERED: League table greys out when readings stop
+- [x] League table greys out when readings stop
 
 ---
-**492/493 scenarios covered.**
-
-1 scenario(s) need tests:
-- League table greys out when readings stop
+**493/493 scenarios covered.**
