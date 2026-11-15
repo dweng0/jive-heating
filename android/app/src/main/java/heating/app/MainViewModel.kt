@@ -30,6 +30,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     var signedOutReason by mutableStateOf<String?>(null)
         private set
 
+    /** Offers a newer app from the service; checks at most once an hour (on opening the app or Account). */
+    var updater by mutableStateOf<heating.app.update.AppUpdater?>(null)
+        private set
+
     init {
         settings.load()?.let(::connect)
     }
@@ -53,6 +57,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private fun connect(config: ServerConfig) {
         viewModelScope.coroutineContext.cancelChildren()
         val api = KtorHeatingApi(config, onUnauthorized = { sessionEnded() })
+        val app = getApplication<Application>()
+        updater = heating.app.update.AppUpdater(
+            BuildConfig.VERSION_CODE, api, heating.app.update.AndroidInstaller(app),
+            java.io.File(app.cacheDir, "updates"), System::currentTimeMillis, heating.app.update.PrefsLastCheck(app),
+        )
+        checkForUpdate()
         connection = Connection(
             baseUrl = config.baseUrl,
             api = api,
@@ -60,6 +70,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             account = AccountApi(config.baseUrl, config.token, onUnauthorized = { sessionEnded() }),
         )
     }
+
+    fun checkForUpdate() { updater?.let { u -> viewModelScope.launch { u.check() } } }
+    fun startUpdate() { updater?.let { u -> viewModelScope.launch { u.update() } } }
+    fun resumed() { updater?.let { u -> viewModelScope.launch { u.resumed(); u.check() } } }
 
     private fun sessionEnded() = viewModelScope.launch {
         if (connection == null) return@launch

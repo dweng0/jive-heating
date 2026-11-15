@@ -30,4 +30,9 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onResume() {
+        super.onResume()
+        vm.resumed()   // back from the install setting, or the app reopened: carry on an update, check for one
+    }
 }

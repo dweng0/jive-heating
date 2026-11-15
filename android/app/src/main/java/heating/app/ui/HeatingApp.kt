@@ -47,6 +47,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
@@ -116,13 +117,20 @@ fun HeatingApp(vm: MainViewModel) {
     if (connection == null) {
         SignInScreen(vm.lastUrl(), vm.lastUsername(), vm.signedOutReason, onSignedIn = vm::signedIn)
     } else {
-        Connected(connection, onSignOut = vm::signOut, onPasswordChanged = vm::replaceSession)
+        Connected(connection, onSignOut = vm::signOut, onPasswordChanged = vm::replaceSession, updater = vm.updater, onUpdate = vm::startUpdate, onAccountOpened = vm::checkForUpdate)
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun Connected(connection: Connection, onSignOut: () -> Unit, onPasswordChanged: (Session) -> Unit) {
+private fun Connected(
+    connection: Connection,
+    onSignOut: () -> Unit,
+    onPasswordChanged: (Session) -> Unit,
+    updater: heating.app.update.AppUpdater? = null,
+    onUpdate: () -> Unit = {},
+    onAccountOpened: () -> Unit = {},
+) {
     val store = connection.store
     val state by store.state.collectAsStateWithLifecycle()
     val nav = rememberNavController()
@@ -197,11 +205,13 @@ private fun Connected(connection: Connection, onSignOut: () -> Unit, onPasswordC
     }
 
     var trayOpen by rememberSaveable { mutableStateOf(false) }
+    val updateState by (updater?.state ?: kotlinx.coroutines.flow.MutableStateFlow(heating.app.update.UpdateState.Unknown)).collectAsState()
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             Column {
+            heating.app.update.UpdateBanner(updateState, onUpdate = onUpdate)
             if (state.admin && setupStatus?.broker == "disconnected" && !needsSetup) {
                 BrokerBanner(setupStatus?.since, onOpen = { nav.navigate("connection") })
             }
@@ -379,6 +389,10 @@ private fun Connected(connection: Connection, onSignOut: () -> Unit, onPasswordC
                     onSignOut = onSignOut,
                     onError = showError,
                     contentPadding = padding,
+                    updateLine = heating.app.update.accountUpdateLine(updateState),
+                    updateAction = heating.app.update.updateAction(updateState),
+                    onUpdate = onUpdate,
+                    onOpened = onAccountOpened,
                     adminSections = if (state.admin) ({
                         BoostSettingsCard(state.boostTarget, store::saveBoostTarget)
                         EnergyPricesCard(energyState.settings, energy::savePrices, energy::syncPricesWithBright)

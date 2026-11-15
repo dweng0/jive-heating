@@ -12,11 +12,14 @@ import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
+import io.ktor.client.request.prepareGet
 import io.ktor.client.request.parameter
 import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsChannel
+import io.ktor.utils.io.readAvailable
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
@@ -208,7 +211,7 @@ class KtorHeatingApi(
     engine: HttpClientEngine = OkHttp.create(),
     /** Called when the server rejects the session (expired, password changed, user deleted). */
     private val onUnauthorized: () -> Unit = {},
-) : HeatingApi {
+) : HeatingApi, heating.app.update.UpdateSource {
 
     private val client = HttpClient(engine) {
         install(ContentNegotiation) { json(apiJson) }
@@ -234,6 +237,27 @@ class KtorHeatingApi(
     private fun zone(id: String) = "api/zones/${id.encodeURLPathPart()}"
 
     override suspend fun me(): AccountUser = client.get("api/auth/me").body()
+
+    override suspend fun appInfo(): heating.app.update.AndroidAppInfo? = client.get("api/app").body<heating.app.update.AppsInfo>().android
+
+    override suspend fun downloadApk(to: java.io.File, progress: (Long, Long?) -> Unit) {
+        client.prepareGet("api/app/android").execute { response ->
+            val total = response.headers[io.ktor.http.HttpHeaders.ContentLength]?.toLongOrNull()
+            val body = response.bodyAsChannel()
+            val buffer = ByteArray(64 * 1024)
+            var done = 0L
+            to.outputStream().use { out ->
+                while (true) {
+                    val n = body.readAvailable(buffer, 0, buffer.size)
+                    if (n < 0) break
+                    if (n == 0) { if (body.isClosedForRead) break else continue }
+                    out.write(buffer, 0, n); done += n
+                    progress(done, total)
+                }
+            }
+            if (total != null && done != total) throw java.io.IOException("download ended at $done of $total bytes")
+        }
+    }
 
     override suspend fun status(): Status = client.get("api/status").body()
 

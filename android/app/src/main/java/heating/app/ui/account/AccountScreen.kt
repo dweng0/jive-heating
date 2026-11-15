@@ -59,9 +59,17 @@ fun AccountScreen(
     onSignOut: () -> Unit,
     onError: (String) -> Unit,
     contentPadding: PaddingValues,
+    /** "Up to date", or a newer version on offer, under the version; null before the first check. */
+    updateLine: String? = null,
+    /** The button beside [updateLine], such as "Update", or null for none. */
+    updateAction: String? = null,
+    onUpdate: () -> Unit = {},
+    /** Opening Account checks for a newer app (at most once an hour). */
+    onOpened: () -> Unit = {},
     /** Admin-only extras, such as energy prices; null for members. */
     adminSections: (@Composable () -> Unit)? = null,
 ) {
+    LaunchedEffect(Unit) { onOpened() }
     var me by remember { mutableStateOf<AccountUser?>(null) }
     var changing by rememberSaveable { mutableStateOf(false) }
     var confirmEverywhere by rememberSaveable { mutableStateOf(false) }
@@ -107,6 +115,17 @@ fun AccountScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp),
         )
+        if (updateLine != null) {
+            androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Text(
+                    updateLine,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 4.dp).weight(1f),
+                )
+                updateAction?.let { androidx.compose.material3.TextButton(onClick = onUpdate) { Text(it) } }
+            }
+        }
     }
 
     if (changing) {
