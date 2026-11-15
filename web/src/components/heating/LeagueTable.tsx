@@ -24,7 +24,7 @@ export function LeagueTable({ live }: { live: LivePower | null }) {
                 <div
                   data-testid="league-bar"
                   aria-hidden
-                  className={cn('absolute inset-y-0 left-0', r.state === 'else' ? 'bg-muted' : 'bg-primary/15')}
+                  className={cn('absolute inset-y-0 left-0', r.state === 'else' ? 'bg-foreground/10' : 'bg-primary/35')}
                   style={{ width: `${pct ?? 0}%` }}
                 />
                 <div className="relative flex items-baseline justify-between gap-3">

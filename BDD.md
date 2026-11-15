@@ -3417,7 +3417,7 @@ Engineering rules (apply to every scenario):
 
         Scenario: The app offers a newer version
             Given the app is version code 41 and the service holds 42, "0.9.0"
-            When the household opens the Android app, or Account, after at least an hour since the last check
+            When the household opens the Android app after at least an hour since the last check, or opens Account at any time
             Then a banner says "Version 0.9.0 is ready" with "Update"
             And with the same or an older version on the service there is no banner, and Account says "Up to date"
 

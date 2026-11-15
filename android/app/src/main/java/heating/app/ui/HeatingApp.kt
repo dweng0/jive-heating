@@ -117,7 +117,7 @@ fun HeatingApp(vm: MainViewModel) {
     if (connection == null) {
         SignInScreen(vm.lastUrl(), vm.lastUsername(), vm.signedOutReason, onSignedIn = vm::signedIn)
     } else {
-        Connected(connection, onSignOut = vm::signOut, onPasswordChanged = vm::replaceSession, updater = vm.updater, onUpdate = vm::startUpdate, onAccountOpened = vm::checkForUpdate)
+        Connected(connection, onSignOut = vm::signOut, onPasswordChanged = vm::replaceSession, updater = vm.updater, onUpdate = vm::startUpdate, onAccountOpened = vm::checkForUpdateNow)
     }
 }
 

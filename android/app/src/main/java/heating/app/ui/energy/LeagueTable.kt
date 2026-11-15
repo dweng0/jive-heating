@@ -1,6 +1,5 @@
 package heating.app.ui.energy
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +16,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import androidx.compose.ui.semantics.semantics
@@ -48,15 +49,14 @@ fun LeagueTable(live: LivePower?) {
 private fun LeagueRowView(row: LeagueRow) {
     val greyed = row.state == LeagueState.NO_READING
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val barColor = if (row.state == LeagueState.ELSE) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+    val share = (row.share ?: 0.0).toFloat().coerceIn(0f, 1f)
     Box(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).alpha(if (greyed) 0.5f else 1f)
+            // The bar behind the row, as long as its share of the house, like the depth on one side of an order book.
+            .drawBehind { drawRect(barColor, size = Size(size.width * share, size.height)) }
             .testTag("league-row").semantics { leagueGreyed = greyed },
     ) {
-        Box(
-            Modifier.matchParentSize().wrapShare(row.share ?: 0.0).background(
-                if (row.state == LeagueState.ELSE) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-            ),
-        )
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 row.name, Modifier.weight(1f), fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -67,6 +67,3 @@ private fun LeagueRowView(row: LeagueRow) {
         }
     }
 }
-
-/** The bar's width: [share] of the row. */
-private fun Modifier.wrapShare(share: Double): Modifier = fillMaxWidth(share.toFloat().coerceIn(0f, 1f))

@@ -72,6 +72,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun checkForUpdate() { updater?.let { u -> viewModelScope.launch { u.check() } } }
+    /** Opening Account always asks the service, so a version deployed minutes ago shows straight away. */
+    fun checkForUpdateNow() { updater?.let { u -> viewModelScope.launch { u.check(force = true) } } }
     fun startUpdate() { updater?.let { u -> viewModelScope.launch { u.update() } } }
     fun resumed() { updater?.let { u -> viewModelScope.launch { u.resumed(); u.check() } } }
 
