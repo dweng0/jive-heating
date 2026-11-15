@@ -83,19 +83,27 @@ fun LeagueTable(live: LivePower?, now: () -> Long = { SystemClock.uptimeMillis()
     // Items or Rooms, remembered on this device.
     val prefs = LocalContext.current.getSharedPreferences(LEAGUE_PREFS, Context.MODE_PRIVATE)
     var view by remember { mutableStateOf(if (prefs.getString(VIEW_KEY, null) == "rooms") LeagueView.ROOMS else LeagueView.ITEMS) }
-    val rows = leagueRows(live, view)
+    // While the house reading is stale the table holds the last good reading, greyed, rather than re-ranking on part of it.
+    val stale = live != null && live.watts == null
+    val lastGood = remember { arrayOf<LivePower?>(null) }
+    if (live != null && !stale) lastGood[0] = live
+    val rows = leagueRows(if (stale) lastGood[0] ?: live else live, view)
     val desired = rows.map { it.key }
     val placing = remember { arrayOf(Placing()) }
     var tick by remember { mutableIntStateOf(0) }
     val order = remember(desired, tick) { placeRows(placing[0], desired, now()).also { placing[0] = it }.order }
     // A held row is let go when its 2 s are up, without waiting for the next reading.
-    LaunchedEffect(order, desired) {
+    LaunchedEffect(order, desired, tick) {
         val t = now()
         val at = nextUnlock(placing[0], desired, t) ?: return@LaunchedEffect
-        delay(at - t)
+        // A millisecond past the 2 s, so waking a touch early does not find the row still held.
+        delay(at - t + 1)
         tick++
     }
-    if (rows.isEmpty()) return
+    if (live == null) return
+    // Nothing but the house meter yet.
+    val empty = live.items.isEmpty()
+    if (rows.isEmpty() && !empty) return
     val byKey = rows.associateBy { it.key }
     val slides = remember { mutableMapOf<String, Slide>() }
     Card(Modifier.fillMaxWidth().testTag("league-table")) {
@@ -116,7 +124,12 @@ fun LeagueTable(live: LivePower?, now: () -> Long = { SystemClock.uptimeMillis()
                     }
                 }
             }
-            order.forEach { k -> byKey[k]?.let { row -> key(k) { LeagueRowView(row, slides.getOrPut(k) { Slide() }, onSetUp) } } }
+            if (stale) Text("Readings stopped", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (empty) {
+                Text("Add a plug or clamp to see what is using power", Modifier.padding(vertical = 8.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                order.forEach { k -> byKey[k]?.let { row -> key(k) { LeagueRowView(row, slides.getOrPut(k) { Slide() }, onSetUp, stale) } } }
+            }
         }
     }
 }
@@ -165,9 +178,9 @@ private fun countTo(value: Double?, anim: Animatable<Float, *>?, keep: (Animatab
 }
 
 @Composable
-private fun LeagueRowView(row: LeagueRow, slide: Slide, onSetUp: ((String) -> Unit)?) {
+private fun LeagueRowView(row: LeagueRow, slide: Slide, onSetUp: ((String) -> Unit)?, stale: Boolean) {
     val noJob = row.item != null && row.item.job == null
-    val greyed = row.state == LeagueState.NO_READING
+    val greyed = row.state == LeagueState.NO_READING || stale
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val barColor = if (row.state == LeagueState.ELSE) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
     val watts = countTo(row.watts, slide.watts) { slide.watts = it }
@@ -213,7 +226,7 @@ private fun LeagueRowView(row: LeagueRow, slide: Slide, onSetUp: ((String) -> Un
                 color = if (row.state == LeagueState.ON || row.state == LeagueState.ELSE) MaterialTheme.colorScheme.onSurface else muted,
             )
             Text(
-                leagueShare(row.copy(share = shownShare)),
+                if (stale) "—" else leagueShare(row.copy(share = shownShare)),
                 Modifier.width(44.dp).testTag("league-share").semantics { leagueFlash = flash }
                     .then(if (flashColor != null) Modifier.clip(RoundedCornerShape(4.dp)).background(flashColor.copy(alpha = 0.2f)) else Modifier),
                 textAlign = TextAlign.End, style = MaterialTheme.typography.bodySmall, color = flashColor ?: muted,

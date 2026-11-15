@@ -39,10 +39,11 @@ function usePlacedRows(rows: LeagueRow[]): LeagueRow[] {
     const now = Date.now()
     const at = nextUnlock(placing.current, desired, now)
     if (at == null) return
-    const t = setTimeout(wake, at - now)
+    // A millisecond past the 2 s, so a timer firing a touch early does not find the row still held.
+    const t = setTimeout(wake, at - now + 1)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [order, signature])
+  }, [order, signature, tick])
   const byKey = new Map(rows.map((r) => [r.key, r]))
   return order.map((k) => byKey.get(k)!).filter(Boolean)
 }
@@ -114,8 +115,13 @@ function useMeterSettings() {
  */
 export function LeagueTable({ live, admin = false }: { live: LivePower | null; admin?: boolean }) {
   const settings = useMeterSettings()
+  // While the house reading is stale the table holds the last good reading, greyed, rather than re-ranking on part of it.
+  const stale = live != null && live.watts == null
+  const lastGood = useRef<LivePower | null>(null)
+  if (live != null && !stale) lastGood.current = live
+  const shown = stale ? (lastGood.current ?? live) : live
   const [view, setView] = useState<LeagueView>(rememberedView)
-  const rows = usePlacedRows(leagueRows(live, view))
+  const rows = usePlacedRows(leagueRows(shown, view))
   function choose(next: LeagueView) {
     setView(next)
     try {
@@ -160,7 +166,10 @@ export function LeagueTable({ live, admin = false }: { live: LivePower | null; a
     return () => clearTimeout(t)
   }, [orderKey])
 
-  if (rows.length === 0) return null
+  if (live == null) return null
+  // Nothing but the house meter yet.
+  const empty = live.items != null && live.items.length === 0
+  if (rows.length === 0 && !empty) return null
   return (
     <Card data-testid="league-table">
       <CardContent className="flex flex-col gap-1 p-4">
@@ -183,18 +192,34 @@ export function LeagueTable({ live, admin = false }: { live: LivePower | null; a
             ))}
           </div>
         </div>
-        <ul ref={list} className="flex flex-col gap-1">
-          {rows.map((r) => (
-            <LeagueRowView key={r.key} row={r} sliding={sliding.has(r.key)} onSetUp={admin ? settings.open : undefined} />
-          ))}
-        </ul>
+        {stale && <p className="text-sm text-muted-foreground">Readings stopped</p>}
+        {empty ? (
+          <p className="py-2 text-sm text-muted-foreground">Add a plug or clamp to see what is using power</p>
+        ) : (
+          <ul ref={list} className="flex flex-col gap-1">
+            {rows.map((r) => (
+              <LeagueRowView key={r.key} row={r} stale={stale} sliding={sliding.has(r.key)} onSetUp={admin ? settings.open : undefined} />
+            ))}
+          </ul>
+        )}
         {settings.dialog}
       </CardContent>
     </Card>
   )
 }
 
-function LeagueRowView({ row: r, sliding, onSetUp }: { row: LeagueRow; sliding: boolean; onSetUp?: (meter: string) => void }) {
+function LeagueRowView({
+  row: r,
+  stale,
+  sliding,
+  onSetUp,
+}: {
+  row: LeagueRow
+  /** The house reading has stopped: greyed, and its share shown as "—" */
+  stale: boolean
+  sliding: boolean
+  onSetUp?: (meter: string) => void
+}) {
   const noJob = r.item != null && r.item.job == null
   const pct = r.share == null ? null : r.share * 100
   const watts = useCountTo(r.watts)
@@ -206,7 +231,8 @@ function LeagueRowView({ row: r, sliding, onSetUp }: { row: LeagueRow; sliding: 
       data-testid="league-row"
       data-state={r.state}
       data-sliding={sliding}
-      className={cn('relative overflow-hidden rounded-md px-3 py-2', r.state === 'no-reading' && 'opacity-50')}
+      data-stale={stale}
+      className={cn('relative overflow-hidden rounded-md px-3 py-2', (r.state === 'no-reading' || stale) && 'opacity-50')}
     >
       <div
         data-testid="league-bar"
@@ -247,7 +273,7 @@ function LeagueRowView({ row: r, sliding, onSetUp }: { row: LeagueRow; sliding: 
               flash === 'down' && 'bg-red-500/25 text-red-700 dark:text-red-400',
             )}
           >
-            {shownPct == null ? '' : `${Math.round(shownPct)}%`}
+            {stale ? '—' : shownPct == null ? '' : `${Math.round(shownPct)}%`}
           </span>
         </span>
       </div>

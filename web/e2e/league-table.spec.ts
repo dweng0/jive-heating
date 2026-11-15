@@ -228,3 +228,37 @@ test('members with energy access see a meter with no job but cannot change it', 
   await expect(row.getByTestId('league-note')).toHaveText('No job yet')
   await expect(row.getByRole('button')).toHaveCount(0)
 })
+
+// BDD: League table greys out when readings stop
+test('when the house reading stops the league keeps its last order, greyed, with no shares and says so', async ({ page }) => {
+  const items = [
+    { meter: 'Oven Clamp', name: 'Oven', watts: 1200, job: 'monitored' },
+    { meter: 'Kettle Plug', name: 'Kettle', watts: 2800, job: 'monitored' },
+  ]
+  const ws = await serve(page, live(5000, items))
+  await page.goto('/energy')
+  const table = page.getByTestId('league-table')
+  await expect(rows(page).getByTestId('league-name')).toHaveText(['Kettle', 'Oven', 'Everything else'])
+  await expect(table.getByText('Readings stopped')).toHaveCount(0)
+
+  // The house reading goes stale; the plugs' last figures now say the oven leads, but the order holds.
+  ws.push(live(null, [{ ...items[0], watts: 3000 }, { ...items[1], watts: 100 }]))
+  await expect(table.getByText('Readings stopped')).toBeVisible()
+  await expect(rows(page).getByTestId('league-name')).toHaveText(['Kettle', 'Oven', 'Everything else'])
+  await expect(rows(page).getByTestId('league-share')).toHaveText(['—', '—', '—'])
+  for (const r of await rows(page).all()) await expect(r).toHaveAttribute('data-stale', 'true')
+
+  // Readings come back: colour, shares and ranking return.
+  ws.push(live(5000, [{ ...items[0], watts: 3000 }, { ...items[1], watts: 100 }]))
+  await expect(table.getByText('Readings stopped')).toHaveCount(0)
+  await expect(rows(page).getByTestId('league-name')).toHaveText(['Oven', 'Kettle', 'Everything else'])
+  await expect(rows(page).first()).toHaveAttribute('data-stale', 'false')
+})
+
+test('with no meters but the house meter the league table says to add a plug or clamp', async ({ page }) => {
+  await serve(page, live(800, []))
+  await page.goto('/energy')
+  const table = page.getByTestId('league-table')
+  await expect(table).toContainText('Add a plug or clamp to see what is using power')
+  await expect(rows(page)).toHaveCount(0)
+})

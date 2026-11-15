@@ -238,4 +238,34 @@ class LeagueTableTest {
         compose.onNodeWithText("No job yet", useUnmergedTree = true).assertExists()
         row("Garage Clamp").assert(SemanticsMatcher.keyNotDefined(androidx.compose.ui.semantics.SemanticsActions.OnClick))
     }
+
+    // BDD: League table greys out when readings stop
+    @Test
+    fun `when the house reading stops the league keeps its last order, greyed, with no shares and says so`() {
+        val good = kitchen(1200.0, 2800.0)
+        val live = mutableStateOf(good)
+        compose.setContent { MaterialTheme { LeagueTable(live.value) } }
+        assertEquals(listOf("Kettle", "Oven", "Everything else"), shownNames())
+        compose.onAllNodesWithText("Readings stopped").assertCountEquals(0)
+
+        // The house reading goes stale; the plugs' last figures now say the oven leads, but the order holds.
+        compose.runOnIdle { live.value = kitchen(3000.0, 100.0).copy(watts = null) }
+        compose.onNodeWithText("Readings stopped").assertIsDisplayed()
+        assertEquals(listOf("Kettle", "Oven", "Everything else"), shownNames())
+        assertEquals(3, compose.onAllNodesWithText("—", useUnmergedTree = true).fetchSemanticsNodes().size)
+        compose.onAllNodesWithTag("league-row", useUnmergedTree = true).fetchSemanticsNodes().forEach { assertEquals(true, it.config[LeagueGreyed]) }
+
+        // Readings come back: colour, shares and ranking return.
+        compose.runOnIdle { live.value = kitchen(3000.0, 100.0) }
+        compose.onAllNodesWithText("Readings stopped").assertCountEquals(0)
+        assertEquals(listOf("Oven", "Kettle", "Everything else"), shownNames())
+        assertEquals(false, compose.onAllNodesWithTag("league-row", useUnmergedTree = true).fetchSemanticsNodes().first().config[LeagueGreyed])
+    }
+
+    @Test
+    fun `with no meters but the house meter the league table says to add a plug or clamp`() {
+        compose.setContent { MaterialTheme { LeagueTable(LivePower(watts = 800.0, items = emptyList())) } }
+        compose.onNodeWithText("Add a plug or clamp to see what is using power").assertIsDisplayed()
+        compose.onAllNodesWithTag("league-row", useUnmergedTree = true).assertCountEquals(0)
+    }
 }
