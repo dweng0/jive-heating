@@ -229,6 +229,8 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 
 Enter your service's address and sign in on first launch. To let people download it from the web app
 (**Account → Android app**), copy the APK to `android-dist/heating.apk` before building the Docker image.
+Copy the `output-metadata.json` Gradle writes beside the release APK into `android-dist/` too: the service reads the
+version from it, and the app uses that to offer itself an update.
 
 ## Going outside your home network
 

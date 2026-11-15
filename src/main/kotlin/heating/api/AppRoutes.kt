@@ -12,11 +12,16 @@ import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.route
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
 import java.time.Instant
 
 @Serializable
-data class AndroidAppView(val size: Long, val builtAt: String)
+data class AndroidAppView(val size: Long, val builtAt: String, val versionCode: Int? = null, val versionName: String? = null)
 
 @Serializable
 data class AppsView(val android: AndroidAppView?)
@@ -27,7 +32,10 @@ fun Route.appRoutes(heating: HeatingApp) = route("/api/app") {
 
     get {
         val file = apk()
-        call.respond(AppsView(file?.let { AndroidAppView(it.length(), Instant.ofEpochMilli(it.lastModified()).toString()) }))
+        call.respond(AppsView(file?.let {
+            val version = versionOf(it)
+            AndroidAppView(it.length(), Instant.ofEpochMilli(it.lastModified()).toString(), version?.first, version?.second)
+        }))
     }
     get("/android") {
         val file = apk() ?: throw ApiException.notFound("the Android app is not available on this server")
@@ -41,3 +49,13 @@ fun Route.appRoutes(heating: HeatingApp) = route("/api/app") {
 }
 
 private val APK = ContentType("application", "vnd.android.package-archive")
+
+/**
+ * The APK's version code and name, from the output-metadata.json Gradle writes beside a built APK; null when that file
+ * is missing or unreadable, so the app offers no update.
+ */
+private fun versionOf(apk: File): Pair<Int, String>? = runCatching {
+    val meta = File(apk.parentFile, "output-metadata.json").takeIf { it.isFile } ?: return null
+    val element = Json.parseToJsonElement(meta.readText()).jsonObject["elements"]!!.jsonArray.first().jsonObject
+    element["versionCode"]!!.jsonPrimitive.int to element["versionName"]!!.jsonPrimitive.content
+}.getOrNull()
