@@ -7,6 +7,10 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -33,10 +37,10 @@ class LeagueTableTest {
         items = listOf(
             ItemPower("Fridge Plug", "Fridge", 90.0, room = "kitchen", job = "monitored"),
             ItemPower("Kettle Plug", "Kettle", 0.0, room = "kitchen", job = "monitored"),
-            ItemPower("Shower Clamp", "Shower", 9500.0),
+            ItemPower("Shower Clamp", "Shower", 9500.0, area = "bathroom", job = "area"),
             ItemPower("Lamp Plug", "Lamp", 3.0, job = "monitored"),
             ItemPower("Oven Clamp", "Oven", 1200.0, area = "kitchen-ring", job = "area"),
-            ItemPower("Garage Plug", "Garage", null),
+            ItemPower("Garage Plug", "Garage", null, job = "monitored"),
         ),
     )
 
@@ -197,5 +201,41 @@ class LeagueTableTest {
         compose.runOnIdle { shown.value = true }
         compose.onNodeWithTag("league-rooms").assertIsSelected()
         assertEquals(listOf("Kitchen", "Bathroom", "Not in a room", "Everything else"), shownNames())
+    }
+
+    // BDD: League row for a meter with no job opens its settings
+    @Test
+    fun `a league row for a meter with no job says so, and opens its settings for an admin to name it and give it a job`() {
+        val api = heating.app.data.FakeHeatingApi()
+        api.meters["Garage Clamp"] = heating.app.data.Meter("Garage Clamp", power = 400.0)
+        val garage = heating.app.data.Room("garage", "Garage", heating.app.data.Control.GROUPED, heating.app.data.Mode.OFF, null, null, false, emptyList(), emptyList(), emptyList(), false)
+        val messages = mutableListOf<String>()
+        val live = LivePower(watts = 3000.0, items = listOf(ItemPower("Garage Clamp", "Garage Clamp", 400.0), ItemPower("Fridge Plug", "Fridge", 90.0, job = "monitored")))
+        compose.setContent {
+            MaterialTheme {
+                val setUp = rememberMeterSetUp(api, listOf(garage)) { messages += it }
+                LeagueTable(live, onSetUp = setUp::open)
+                setUp.Dialog()
+            }
+        }
+        compose.onAllNodesWithTag("league-note", useUnmergedTree = true).assertCountEquals(1)
+        compose.onNodeWithText("No job yet", useUnmergedTree = true).assertExists()
+
+        row("Garage Clamp").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+        compose.onNodeWithText("What does Garage Clamp measure?").assertIsDisplayed()
+        compose.onNodeWithTag("meter-settings-label").performTextInput("Workshop")
+        compose.onNodeWithText("Monitor one device").performClick()
+        // The room menu opens in a popup window Robolectric does not reach; picking a place is Manage energy's same picker.
+        compose.onNodeWithText("Save").performClick()
+        compose.waitForIdle()
+        assertEquals(listOf("labelMeter Garage Clamp Workshop", "setMeterJob Garage Clamp ${heating.app.data.MeterJob("monitored")}"), api.calls.filter { it.startsWith("labelMeter") || it.startsWith("setMeterJob") })
+        assertEquals(listOf("Workshop updated"), messages)
+    }
+
+    @Test
+    fun `members with energy access see a meter with no job but cannot change it`() {
+        compose.setContent { MaterialTheme { LeagueTable(LivePower(watts = 3000.0, items = listOf(ItemPower("Garage Clamp", "Garage Clamp", 400.0)))) } }
+        compose.onNodeWithText("No job yet", useUnmergedTree = true).assertExists()
+        row("Garage Clamp").assert(SemanticsMatcher.keyNotDefined(androidx.compose.ui.semantics.SemanticsActions.OnClick))
     }
 }

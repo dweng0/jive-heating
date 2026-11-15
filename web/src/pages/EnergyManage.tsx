@@ -18,6 +18,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
+import { JobDialog, type Act } from '@/components/heating/MeterJobDialog'
 import { WaitingDevicesCard } from '@/components/heating/WaitingDevicesCard'
 import {
   MAIN_METER_BUTTON,
@@ -114,7 +115,6 @@ export function EnergyManagePage() {
   )
 }
 
-type Act = <T>(action: () => Promise<T>, failure: string, done?: string) => Promise<boolean>
 type RowActions = { onRename: (m: Meter) => void; onJob: (m: Meter) => void }
 
 function Section({ title, description, testId, action, children }: { title: string; description?: string; testId: string; action?: ReactNode; children: ReactNode }) {
@@ -582,114 +582,3 @@ function RenameDialog({ meter, onClose, act }: { meter: Meter | null; onClose: (
   )
 }
 
-const JOBS: { value: MeterJob['job']; label: string; hint: string }[] = [
-  { value: 'house', label: MAIN_METER_BUTTON, hint: 'Measures all electricity coming in' },
-  { value: 'area', label: 'Measure an energy area', hint: 'Measures all of an area, such as the lights' },
-  { value: 'monitored', label: 'Monitor one device', hint: 'An appliance or circuit, such as the oven, in a room or area' },
-  { value: 'none', label: 'Nothing for now', hint: 'Waits to be set up' },
-]
-
-/** A meter's job, changed in one step: PUT /api/meters/{meter}/job. */
-function JobDialog({ meter, areas, onClose, act }: { meter: Meter | null; areas: EnergyArea[]; onClose: () => void; act: Act }) {
-  const { rooms } = useHome()
-  const [job, setJob] = useState<MeterJob['job']>('none')
-  const [place, setPlace] = useState('')
-  useEffect(() => {
-    if (!meter) return
-    setJob(meter.inUse ? 'house' : meter.measures ? 'area' : meter.monitored ? 'monitored' : 'none')
-    setPlace(meter.measures ? meter.measures : meter.area ? `area:${meter.area}` : (meter.room ?? ''))
-  }, [meter])
-  const noEnergy = meter?.reportsEnergy === false
-
-  function body(): MeterJob | null {
-    if (job === 'house' || job === 'none') return { job }
-    if (job === 'area') {
-      const area = place.replace(/^area:/, '')
-      return areas.some((a) => a.id === area) ? { job, area } : null
-    }
-    return place.startsWith('area:') ? { job, area: place.slice(5) } : place ? { job, room: place } : { job }
-  }
-
-  return (
-    <Dialog open={meter != null} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent>
-        <form
-          onSubmit={async (e) => {
-            e.preventDefault()
-            const b = body()
-            if (!meter || !b) return
-            if (await act(() => energyApi.setJob(meter.name, b), "Couldn't change the job", `${meterLabel(meter)} updated`)) onClose()
-          }}
-          className="flex flex-col gap-4"
-        >
-          <DialogHeader>
-            <DialogTitle>What does {meter ? meterLabel(meter) : ''} measure?</DialogTitle>
-            <DialogDescription>What it recorded in its old job stays where it was recorded.</DialogDescription>
-          </DialogHeader>
-          <div role="radiogroup" aria-label="Job" className="flex flex-col gap-2">
-            {JOBS.map((j) => {
-              const disabled = noEnergy && (j.value === 'house' || j.value === 'monitored')
-              return (
-                <label key={j.value} className="flex items-start gap-3 rounded-lg border p-3 text-sm has-[:checked]:border-primary" aria-disabled={disabled}>
-                  <input
-                    type="radio"
-                    name="job"
-                    value={j.value}
-                    disabled={disabled}
-                    checked={job === j.value}
-                    onChange={() => {
-                      setJob(j.value)
-                      setPlace(j.value === 'area' ? (areas[0]?.id ?? '') : '')
-                    }}
-                    className="mt-1"
-                  />
-                  <span>
-                    <span className="block font-medium">{j.label}</span>
-                    <span className="block text-muted-foreground">{disabled ? 'This meter does not report energy' : j.hint}</span>
-                  </span>
-                </label>
-              )
-            })}
-          </div>
-          {job === 'area' && (
-            <select aria-label="Area" className={selectClass} value={place.replace(/^area:/, '')} onChange={(e) => setPlace(e.target.value)}>
-              {areas.length === 0 && <option value="">Add an area first</option>}
-              {areas.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
-            </select>
-          )}
-          {job === 'monitored' && (
-            <select aria-label="Room or area" className={selectClass} value={place} onChange={(e) => setPlace(e.target.value)}>
-              <option value="">No room</option>
-              {rooms.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name}
-                </option>
-              ))}
-              {areas.length > 0 && (
-                <optgroup label="Energy areas">
-                  {areas.map((a) => (
-                    <option key={a.id} value={`area:${a.id}`}>
-                      {a.name}
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-            </select>
-          )}
-          <DialogFooter>
-            <Button type="button" variant="ghost" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={body() == null}>
-              Save
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  )
-}

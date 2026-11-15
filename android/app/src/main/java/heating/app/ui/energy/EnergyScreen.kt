@@ -32,6 +32,8 @@ fun EnergyScreen(
     onOpenArea: (String) -> Unit = {},
     onManage: () -> Unit = {},
     admin: Boolean = true,
+    rooms: List<heating.app.data.Room> = emptyList(),
+    onMessage: (String) -> Unit = {},
 ) {
     Column(
         Modifier.fillMaxSize().padding(contentPadding).verticalScroll(rememberScrollState()).padding(16.dp),
@@ -41,7 +43,7 @@ fun EnergyScreen(
             Text("Energy", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             if (admin) OutlinedButton(onClick = onManage) { Text("Manage") }
         }
-        LivePowerSection(api, onOpenRoom, onOpenEverythingElse, onOpenArea = onOpenArea, onAddArea = onManage, admin = admin, onDayFigures = { onPeriod(state.period) })
+        LivePowerSection(api, onOpenRoom, onOpenEverythingElse, onOpenArea = onOpenArea, onAddArea = onManage, admin = admin, onDayFigures = { onPeriod(state.period) }, rooms = rooms, onMessage = onMessage)
         EnergySection(state, onPeriod, onSetTarget = if (admin) onManage else null)
         EnergyFlowCard(api)
     }

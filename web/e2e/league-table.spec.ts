@@ -1,4 +1,4 @@
-import { expect, test, type Page, type WebSocketRoute } from '@playwright/test'
+import { expect, test, type Page, type Route, type WebSocketRoute } from '@playwright/test'
 
 // The live league table below the dials on the Energy tab, against a mocked service: every /api call, /ws and
 // /ws/power are answered here, so these tests do not depend on the real service.
@@ -35,7 +35,9 @@ function live(watts: number | null, items: Item[], places: { rooms?: object[]; a
   return { watts, at: new Date().toISOString(), rooms: places.rooms ?? [], devices: [], elseWatts: null, areas: places.areas ?? [], items }
 }
 
-async function serve(page: Page, first: object) {
+type Extra = (route: Route, pathname: string) => Promise<void> | undefined
+
+async function serve(page: Page, first: object, opts: { me?: object; extra?: Extra } = {}) {
   const sockets: WebSocketRoute[] = []
   await page.routeWebSocket('**/ws', () => {})
   await page.routeWebSocket('**/ws/power', (ws) => {
@@ -44,7 +46,9 @@ async function serve(page: Page, first: object) {
   })
   await page.route('**/api/**', async (route) => {
     const { pathname } = new URL(route.request().url())
-    if (pathname === '/api/auth/me') return route.fulfill({ json: jane })
+    const handled = opts.extra?.(route, pathname)
+    if (handled) return handled
+    if (pathname === '/api/auth/me') return route.fulfill({ json: opts.me ?? jane })
     if (pathname === '/api/rooms') return route.fulfill({ json: [] })
     if (pathname === '/api/status') return route.fulfill({ json: STATUS })
     if (pathname === '/api/groups') return route.fulfill({ json: [] })
@@ -177,4 +181,50 @@ test('toggling the league table to Rooms ranks rooms, areas and devices in neith
   await page.reload()
   await expect(page.getByTestId('league-table').getByRole('button', { name: 'Rooms' })).toHaveAttribute('aria-pressed', 'true')
   await expect(rows(page).getByTestId('league-name')).toHaveText(['Kitchen', 'Bathroom', 'Not in a room', 'Everything else'])
+})
+
+// BDD: League row for a meter with no job opens its settings
+test('a league row for a meter with no job says so, and opens its settings for an admin to name it and give it a job', async ({ page }) => {
+  const garage = { meter: 'Garage Clamp', name: 'Garage Clamp', watts: 400, job: null }
+  const meter = { name: 'Garage Clamp', online: true, energy: 12, power: 400, stale: false, lastReading: null, inUse: false, monitored: false, reportsEnergy: true }
+  const calls: { method: string; path: string; body: unknown }[] = []
+  await serve(page, live(3000, [garage, { meter: 'Fridge Plug', name: 'Fridge', watts: 90, job: 'monitored' }]), {
+    extra: (route, pathname) => {
+      const req = route.request()
+      if (pathname === '/api/meters') return route.fulfill({ json: [meter] })
+      if (pathname === '/api/energy/areas') return route.fulfill({ json: [] })
+      if (pathname === '/api/rooms') return route.fulfill({ json: [{ id: 'garage', name: 'Garage', control: 'grouped', valves: [], zones: [] }] })
+      if (req.method() === 'PUT' && pathname.startsWith('/api/meters/')) {
+        calls.push({ method: req.method(), path: pathname, body: req.postDataJSON() })
+        return route.fulfill({ json: meter })
+      }
+    },
+  })
+  await page.goto('/energy')
+  const row = rows(page).filter({ hasText: 'Garage Clamp' })
+  await expect(row.getByTestId('league-note')).toHaveText('No job yet')
+  // Other rows have no note.
+  await expect(rows(page).filter({ hasText: 'Fridge' }).getByTestId('league-note')).toHaveCount(0)
+
+  await row.getByRole('button', { name: 'Set up Garage Clamp' }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog).toContainText('What does Garage Clamp measure?')
+  await dialog.getByLabel('Name').fill('Garage')
+  await dialog.getByRole('radio', { name: /Monitor one device/ }).check()
+  await dialog.getByLabel('Room or area', { exact: true }).selectOption('garage')
+  await dialog.getByRole('button', { name: 'Save' }).click()
+  await expect(dialog).toBeHidden()
+  expect(calls).toEqual([
+    { method: 'PUT', path: '/api/meters/Garage%20Clamp/label', body: { label: 'Garage' } },
+    { method: 'PUT', path: '/api/meters/Garage%20Clamp/job', body: { job: 'monitored', room: 'garage' } },
+  ])
+})
+
+test('members with energy access see a meter with no job but cannot change it', async ({ page }) => {
+  const member = { id: 'u-sam', username: 'sam', admin: false, energy: true, rooms: [] as string[] }
+  await serve(page, live(3000, [{ meter: 'Garage Clamp', name: 'Garage Clamp', watts: 400, job: null }]), { me: member })
+  await page.goto('/energy')
+  const row = rows(page).filter({ hasText: 'Garage Clamp' })
+  await expect(row.getByTestId('league-note')).toHaveText('No job yet')
+  await expect(row.getByRole('button')).toHaveCount(0)
 })

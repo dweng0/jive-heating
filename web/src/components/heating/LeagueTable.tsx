@@ -1,5 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react'
+import { toast } from 'sonner'
 import { Card, CardContent } from '@/components/ui/card'
+import { JobDialog, type Act } from '@/components/heating/MeterJobDialog'
+import { energyApi, type EnergyArea, type Meter } from '@/lib/energy'
+import { useHome } from '@/lib/home'
 import { leagueRows, nextUnlock, NO_PLACING, placeRows, type LeagueRow, type LeagueView, type Placing } from '@/lib/league'
 import { formatWatts, type LivePower } from '@/lib/livePower'
 import { cn } from '@/lib/utils'
@@ -83,8 +87,33 @@ function useFlash(pct: number | null): 'up' | 'down' | null {
   return flash
 }
 
-/** What is using power right now, biggest first: a row per meter, with a bar as long as its share of the house. */
-export function LeagueTable({ live }: { live: LivePower | null }) {
+/** Opens a meter's settings by name: loads it and the energy areas, then shows the dialog to name it and give it a job. */
+function useMeterSettings() {
+  const { run } = useHome()
+  const [meter, setMeter] = useState<Meter | null>(null)
+  const [areas, setAreas] = useState<EnergyArea[]>([])
+  const act: Act = async (action, failure, done) => {
+    const result = await run(action, failure)
+    if (result === undefined) return false
+    if (done) toast.success(done)
+    return true
+  }
+  async function open(name: string) {
+    const loaded = await run(() => Promise.all([energyApi.meters(), energyApi.areas()]), "Couldn't load the meter")
+    if (!loaded) return
+    setAreas([...loaded[1]].sort((x, y) => x.name.localeCompare(y.name)))
+    setMeter(loaded[0].find((m) => m.name === name) ?? null)
+  }
+  const dialog = <JobDialog meter={meter} areas={areas} onClose={() => setMeter(null)} act={act} withLabel />
+  return { open, dialog }
+}
+
+/**
+ * What is using power right now, biggest first: a row per meter, with a bar as long as its share of the house. A meter
+ * with no job says so; an admin taps it to name it and give it a job.
+ */
+export function LeagueTable({ live, admin = false }: { live: LivePower | null; admin?: boolean }) {
+  const settings = useMeterSettings()
   const [view, setView] = useState<LeagueView>(rememberedView)
   const rows = usePlacedRows(leagueRows(live, view))
   function choose(next: LeagueView) {
@@ -156,15 +185,17 @@ export function LeagueTable({ live }: { live: LivePower | null }) {
         </div>
         <ul ref={list} className="flex flex-col gap-1">
           {rows.map((r) => (
-            <LeagueRowView key={r.key} row={r} sliding={sliding.has(r.key)} />
+            <LeagueRowView key={r.key} row={r} sliding={sliding.has(r.key)} onSetUp={admin ? settings.open : undefined} />
           ))}
         </ul>
+        {settings.dialog}
       </CardContent>
     </Card>
   )
 }
 
-function LeagueRowView({ row: r, sliding }: { row: LeagueRow; sliding: boolean }) {
+function LeagueRowView({ row: r, sliding, onSetUp }: { row: LeagueRow; sliding: boolean; onSetUp?: (meter: string) => void }) {
+  const noJob = r.item != null && r.item.job == null
   const pct = r.share == null ? null : r.share * 100
   const watts = useCountTo(r.watts)
   const shownPct = useCountTo(pct)
@@ -183,9 +214,25 @@ function LeagueRowView({ row: r, sliding }: { row: LeagueRow; sliding: boolean }
         className={cn('absolute inset-y-0 left-0 transition-[width] duration-500', r.state === 'else' ? 'bg-foreground/10' : 'bg-primary/35')}
         style={{ width: `${pct ?? 0}%` }}
       />
+      {noJob && onSetUp && (
+        // The whole row is the button, drawn over it so the figures stay where they are.
+        <button
+          type="button"
+          aria-label={`Set up ${r.name}`}
+          onClick={() => onSetUp(r.item!.meter)}
+          className="absolute inset-0 z-10 rounded-md hover:bg-foreground/5 focus-visible:outline-2 focus-visible:outline-ring"
+        />
+      )}
       <div className="relative flex items-baseline justify-between gap-3">
-        <span data-testid="league-name" className={cn('truncate font-medium', r.state === 'else' && 'text-muted-foreground')}>
-          {r.name}
+        <span className="flex min-w-0 flex-col">
+          <span data-testid="league-name" className={cn('truncate font-medium', r.state === 'else' && 'text-muted-foreground')}>
+            {r.name}
+          </span>
+          {noJob && (
+            <span data-testid="league-note" className="text-xs text-muted-foreground">
+              No job yet
+            </span>
+          )}
         </span>
         <span className="flex shrink-0 items-baseline gap-3 tabular-nums">
           <span data-testid="league-watts" className={cn(r.state !== 'on' && r.state !== 'else' && 'text-muted-foreground')}>

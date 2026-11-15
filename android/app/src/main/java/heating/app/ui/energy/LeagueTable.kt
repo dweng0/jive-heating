@@ -4,6 +4,7 @@ import android.os.SystemClock
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -78,7 +79,7 @@ private const val VIEW_KEY = "view"
  * Rows slide to their new places, but none changes place more than once every 2 s; [now] is the clock that rule reads.
  */
 @Composable
-fun LeagueTable(live: LivePower?, now: () -> Long = { SystemClock.uptimeMillis() }) {
+fun LeagueTable(live: LivePower?, now: () -> Long = { SystemClock.uptimeMillis() }, onSetUp: ((meter: String) -> Unit)? = null) {
     // Items or Rooms, remembered on this device.
     val prefs = LocalContext.current.getSharedPreferences(LEAGUE_PREFS, Context.MODE_PRIVATE)
     var view by remember { mutableStateOf(if (prefs.getString(VIEW_KEY, null) == "rooms") LeagueView.ROOMS else LeagueView.ITEMS) }
@@ -115,7 +116,7 @@ fun LeagueTable(live: LivePower?, now: () -> Long = { SystemClock.uptimeMillis()
                     }
                 }
             }
-            order.forEach { k -> byKey[k]?.let { row -> key(k) { LeagueRowView(row, slides.getOrPut(k) { Slide() }) } } }
+            order.forEach { k -> byKey[k]?.let { row -> key(k) { LeagueRowView(row, slides.getOrPut(k) { Slide() }, onSetUp) } } }
         }
     }
 }
@@ -164,7 +165,8 @@ private fun countTo(value: Double?, anim: Animatable<Float, *>?, keep: (Animatab
 }
 
 @Composable
-private fun LeagueRowView(row: LeagueRow, slide: Slide) {
+private fun LeagueRowView(row: LeagueRow, slide: Slide, onSetUp: ((String) -> Unit)?) {
+    val noJob = row.item != null && row.item.job == null
     val greyed = row.state == LeagueState.NO_READING
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val barColor = if (row.state == LeagueState.ELSE) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
@@ -195,13 +197,17 @@ private fun LeagueRowView(row: LeagueRow, slide: Slide) {
         Modifier.slideToPlace(slide).fillMaxWidth().clip(RoundedCornerShape(6.dp)).alpha(if (greyed) 0.5f else 1f)
             // The bar behind the row, as long as its share of the house, like the depth on one side of an order book.
             .drawBehind { drawRect(barColor, size = Size(size.width * share, size.height)) }
+            .then(if (noJob && onSetUp != null) Modifier.clickable(onClickLabel = "Set up ${row.name}") { onSetUp(row.item!!.meter) } else Modifier)
             .testTag("league-row").semantics { leagueGreyed = greyed },
     ) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                row.name, Modifier.weight(1f), fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                color = if (row.state == LeagueState.ELSE) muted else MaterialTheme.colorScheme.onSurface,
-            )
+            Column(Modifier.weight(1f)) {
+                Text(
+                    row.name, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    color = if (row.state == LeagueState.ELSE) muted else MaterialTheme.colorScheme.onSurface,
+                )
+                if (noJob) Text("No job yet", Modifier.testTag("league-note"), style = MaterialTheme.typography.bodySmall, color = muted)
+            }
             Text(
                 leagueWatts(row.copy(watts = watts)), Modifier.testTag("league-watts"),
                 color = if (row.state == LeagueState.ON || row.state == LeagueState.ELSE) MaterialTheme.colorScheme.onSurface else muted,

@@ -331,6 +331,8 @@ private fun Connected(
                         onOpenArea = { nav.navigate("energy/area/${android.net.Uri.encode(it)}") },
                         onManage = { nav.navigate("energy/manage") },
                         admin = state.admin,
+                        rooms = state.rooms,
+                        onMessage = { scope.launch { snackbar.showSnackbar(it) } },
                     )
                 }
             }

@@ -101,8 +101,12 @@ fun LivePowerSection(
     admin: Boolean = true,
     /** Called after each fetch of the day figures (every five minutes and just after midnight), for Use and cost to follow. */
     onDayFigures: () -> Unit = {},
+    /** The rooms a meter with no job can be put in, from its league row. */
+    rooms: List<heating.app.data.Room> = emptyList(),
+    onMessage: (String) -> Unit = {},
 ) {
     val memory = viewModel<LivePowerMemory>()
+    val setUp = rememberMeterSetUp(api, rooms, onMessage)
     val latestOnDayFigures by androidx.compose.runtime.rememberUpdatedState(onDayFigures)
     // Fetch the day figures now: back from the background, or the live readings reconnected after a gap.
     val fetchNow = androidx.compose.runtime.remember { kotlinx.coroutines.channels.Channel<Unit>(kotlinx.coroutines.channels.Channel.CONFLATED) }
@@ -173,7 +177,8 @@ fun LivePowerSection(
         EnergyDials(live?.watts, connected = live != null, bands = bands, busiest = onDial, peak = peak, today = today, dark = dark, onSetTarget = if (admin) onAddArea else null) {
             TripMeters(totals, readings, dark)
         }
-        LeagueTable(live)
+        LeagueTable(live, onSetUp = if (admin) setUp::open else null)
+        setUp.Dialog()
         GasCard(api, admin)
         HouseHistoryChart(api, dark)
         live?.let { p ->

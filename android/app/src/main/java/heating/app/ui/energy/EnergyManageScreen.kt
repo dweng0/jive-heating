@@ -57,12 +57,6 @@ fun meterNow(m: Meter): String = when {
 }
 
 /** The jobs a meter can be given, in order. */
-private val JOBS = listOf(
-    "house" to (MAIN_METER_BUTTON to "Measures all electricity coming in"),
-    "area" to ("Measure an energy area" to "Measures all of an area, such as the lights"),
-    "monitored" to ("Monitor one device" to "An appliance or circuit, such as the oven"),
-    "none" to ("Nothing for now" to "Waits to be set up"),
-)
 
 /** Everything that measures electricity, set up in one place. Admin only. */
 @Composable
@@ -233,59 +227,10 @@ fun EnergyManageScreen(api: HeatingApi, rooms: List<Room>, contentPadding: Paddi
         )
     }
     jobFor?.let { m ->
-        var job by remember(m) { mutableStateOf(if (m.inUse) "house" else if (m.measures != null) "area" else if (m.monitored) "monitored" else "none") }
-        var place by remember(m) { mutableStateOf(m.measures ?: m.area?.let { "area:$it" } ?: m.room ?: "") }
-        fun body(): MeterJob? = when (job) {
-            "house", "none" -> MeterJob(job)
-            "area" -> place.removePrefix("area:").takeIf { a -> areas.any { it.id == a } }?.let { MeterJob(job, area = it) }
-            else -> when {
-                place.startsWith("area:") -> MeterJob(job, area = place.removePrefix("area:"))
-                place.isNotEmpty() -> MeterJob(job, room = place)
-                else -> MeterJob(job)
-            }
+        MeterJobDialog(m, areas, rooms, onDismiss = { jobFor = null }) { _, job ->
+            jobFor = null
+            act("${m.shownAs} updated") { api.setMeterJob(m.name, job) }
         }
-        AlertDialog(
-            onDismissRequest = { jobFor = null },
-            title = { Text("What does ${m.shownAs} measure?") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("What it recorded in its old job stays where it was recorded.", style = MaterialTheme.typography.bodySmall)
-                    JOBS.forEach { (value, words) ->
-                        val disabled = !m.reportsEnergy && (value == "house" || value == "monitored")
-                        Row(
-                            Modifier.fillMaxWidth().selectable(selected = job == value, enabled = !disabled, role = Role.RadioButton) {
-                                job = value
-                                place = if (value == "area") areas.firstOrNull()?.id ?: "" else ""
-                            },
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            RadioButton(selected = job == value, onClick = null, enabled = !disabled)
-                            Column(Modifier.padding(start = 8.dp)) {
-                                Text(words.first, fontWeight = FontWeight.Medium)
-                                Text(if (disabled) "This meter does not report energy" else words.second, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                    }
-                    if (job == "area") {
-                        val current = areas.firstOrNull { it.id == place.removePrefix("area:") }?.name ?: "Add an area first"
-                        Picker("Area: $current", areas.map { it.id to it.name }) { place = it }
-                    }
-                    if (job == "monitored") {
-                        val current = place.takeIf { it.startsWith("area:") }?.let { p -> areas.firstOrNull { "area:${it.id}" == p }?.name }
-                            ?: rooms.firstOrNull { it.id == place }?.name ?: "No room"
-                        Picker("Place: $current", listOf("" to "No room") + rooms.map { it.id to it.name } + areas.map { "area:${it.id}" to it.name }) { place = it }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(enabled = body() != null, onClick = {
-                    val b = body() ?: return@TextButton
-                    jobFor = null
-                    act("${m.shownAs} updated") { api.setMeterJob(m.name, b) }
-                }) { Text("Save") }
-            },
-            dismissButton = { TextButton(onClick = { jobFor = null }) { Text("Cancel") } },
-        )
     }
 }
 

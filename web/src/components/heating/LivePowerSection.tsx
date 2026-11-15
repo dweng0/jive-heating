@@ -121,7 +121,7 @@ export function LivePowerSection() {
         counters={<TripMeters totals={totals} readings={readings} />}
       />
 
-      <LeagueTable live={live} />
+      <LeagueTable live={live} admin={admin} />
 
       <GasCard />
 
