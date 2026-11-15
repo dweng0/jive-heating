@@ -3435,12 +3435,73 @@ Engineering rules (apply to every scenario):
             And without the key the release build fails with a message naming the missing setting, never signing with a
                 debug key
 
+    Feature: Live weather
+        As someone with energy access
+        I want the house on the Live tab to show the weather outside
+        So that the picture matches what I can see out of the window
+
+        The service asks a weather source for the weather outside the house. A source is an adapter behind one small
+        contract (WeatherSource): the condition (clear, partly cloudy, cloudy, rain or snow), cloud cover from 0 to 100,
+        the temperature in °C and when it was observed, each optional except the condition. Nothing else in the
+        service knows where the weather came from, so another source (a weather API, a station in the garden) only
+        needs a new adapter and a WEATHER_SOURCE value. Home Assistant's weather entity is the first adapter.
+        The service turns a reading into the look the Live picture draws: clear, cloudy (passing cloud), overcast,
+        rain, snow or frost.
+
+        Scenario: The service asks the weather source every five minutes
+            Given the weather source says partly cloudy at 9.5 °C
+            When the service starts and then every 5 minutes
+            Then it asks the source for the weather once each time, not on every tick, and never on the request path
+            And without a WEATHER_SOURCE it never asks and the Live picture keeps a clear sky
+
+        Scenario: A reading becomes the look the Live picture draws
+            Given the weather source says "<condition>" at <temperature> °C
+            Then the look is <look>
+            Examples:
+                | condition     | temperature | look     |
+                | clear         | 8           | clear    |
+                | partly cloudy | 8           | cloudy   |
+                | cloudy        | 8           | overcast |
+                | rain          | 8           | rain     |
+                | snow          | -1          | snow     |
+                | clear         | -2          | frost    |
+                | partly cloudy | 0           | frost    |
+                | cloudy        | -3          | overcast |
+
+        Scenario: Home Assistant is the first weather source
+            Given WEATHER_SOURCE is "homeassistant" with HA_URL, HA_TOKEN and HA_WEATHER_ENTITY "weather.forecast_home"
+            And Home Assistant's /api/states/weather.forecast_home says "rainy" with temperature 7.5 and cloud_coverage 90
+            When the service asks for the weather
+            Then the reading is rain, 7.5 °C, cloud cover 90, observed at the state's last_updated
+            And "sunny" and "clear-night" are clear, "partlycloudy" is partly cloudy, "cloudy" and "fog" are cloudy,
+                "rainy", "pouring", "lightning-rainy" and "hail" are rain, "snowy" and "snowy-rainy" are snow
+            And anything else keeps the last known condition, and a missing setting stops the service starting with a
+                message naming it
+
+        Scenario: Live power carries the weather
+            Given the weather source last said rain at 7.5 °C
+            When admin "jane" opens the live power channel at /ws/power
+            Then the message has weather with look "rain", temperatureC 7.5 and at
+            And a change of look sends a new message straight away
+            And with no weather source, or no reading in the last 30 minutes, weather is null
+
+        Scenario: A failing weather source does not stop live power
+            Given the weather source times out or answers with an error
+            Then live power carries on, the failure is logged once until the source works again, and the last reading
+                keeps showing until it is 30 minutes old
+
+        Scenario: The Live picture shows the weather
+            Given live power has weather with look "snow"
+            When someone opens the Live tab on the web app or the Android app
+            Then the 3D house shows falling and settling snow, and changes as the look changes
+            And with weather null it shows a clear sky
+
 # Deferred (not to be built yet)
 # - Charts page (whole house: a line per room, the house median, boiler periods shaded; 24 h / 7 d / 30 d; boiler-on
 #   and average stats). Dropped from the web app and Android app on 2026-11-15 as unused; the history recording and
 #   GET /api/history stay, and git history before that date has the page (web/src/pages/Dashboard.tsx,
 #   android/.../ui/dashboard/DashboardScreen.kt) to bring back.
-# - Live view: weather (clear, cloud, rain, snow, frost) and the sun's real position on the 3D house (source not chosen: Home Assistant or computed)
+# - Live view: the sun's real compass bearing on the 3D house (its height already follows the clock)
 # - Mirror schedules to the valve weekly_schedule as a fallback when the service is down
 # - Open-window alerts (TRVZB exposes the setting, not a state; needs inference)
 # - Valve temperature calibration offsets (revisit if rooms without a sensor read badly)
