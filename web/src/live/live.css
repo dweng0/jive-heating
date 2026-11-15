@@ -58,9 +58,12 @@
 .live-page #gl {position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .live-page .track {position: absolute; inset: 0; display: flex; transition: transform .45s cubic-bezier(.2,.8,.2,1); will-change: transform; }
 .live-page #gl {touch-action: none; cursor: grab; }
-/* The picture's edges fade out to the page behind, light or dark, so the house sits on the page with no box. */
-.live-page #gl {-webkit-mask-image: radial-gradient(ellipse 72% 74% at 50% 50%, #000 58%, transparent 100%);
-  mask-image: radial-gradient(ellipse 72% 74% at 50% 50%, #000 58%, transparent 100%); }
+/* Each edge of the picture fades to transparent over its last few percent, showing the page behind, light or dark. */
+.live-page #gl {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 7%, #000 93%, transparent), linear-gradient(to bottom, transparent, #000 7%, #000 93%, transparent);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(to right, transparent, #000 7%, #000 93%, transparent), linear-gradient(to bottom, transparent, #000 7%, #000 93%, transparent);
+  mask-composite: intersect; }
 /* The diagram is drawn for a dark ground. */
 .live-page #paneDiagram {background: radial-gradient(120% 90% at 50% 20%, #142030 0%, var(--bg) 70%); border-radius: 20px; }
 .live-page #gl.grabbing {cursor: grabbing; }

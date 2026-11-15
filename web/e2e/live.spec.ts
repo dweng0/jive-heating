@@ -119,7 +119,9 @@ for (const [scheme, bg] of [['light', 'rgb(250, 247, 242)'], ['dark', 'rgb(23, 1
     // No box: the stage shows the page through, and the picture's edges fade out to it.
     expect(look.stage).toBe('rgba(0, 0, 0, 0)')
     expect(look.stageBorder).toBe('0px')
-    expect(look.mask).toContain('radial-gradient')
+    // A plain gradient at each edge, not an oval.
+    expect(look.mask).toContain('linear-gradient')
+    expect(look.mask).not.toContain('radial-gradient')
     expect(look.mask).toMatch(/transparent|rgba\(0, 0, 0, 0\)/)
     // The panels stay dark in both modes.
     expect(look.panel).toBe('rgb(17, 23, 31)')
@@ -287,7 +289,7 @@ test('effects can be switched off one by one', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Effects' })).toHaveCount(0)
   await page.goto('/live?debug=true')
   await page.getByRole('button', { name: 'Effects' }).click()
-  for (const name of ['Shadows', 'Glow', 'Cloud shadows', 'Moss and weathering', 'Vignette and grain', '3D grass']) {
+  for (const name of ['Shadows', 'Glow', 'Cloud shadows', 'Moss and weathering', 'Film grain', '3D grass']) {
     // Each switch takes effect at once. (A slow device, like this headless browser, starts with some already off.)
     const box = page.getByLabel(name, { exact: true })
     const was = await box.isChecked()

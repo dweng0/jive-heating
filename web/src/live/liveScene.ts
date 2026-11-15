@@ -358,7 +358,7 @@ function buildHouse() {
   snowfall.frustumCulled = false; snowfall.visible = false; scene.add(snowfall);
   let snowNow = 0, frostNow = 0;
 
-  // image pipeline: HDR render, glow on anything brighter than white, then film-style tone curve, vignette and a touch of grain
+  // image pipeline: HDR render, glow on anything brighter than white, then film-style tone curve and a touch of grain (no vignette: the page fades the edges)
   const fadeMat = new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, fog: false });
   let composer = null, finalPass = null, bloomPass = null;
   if (THREE.EffectComposer && THREE.UnrealBloomPass && THREE.ShaderPass) {
@@ -376,7 +376,6 @@ function buildHouse() {
         void main(){ vec3 c = texture2D(tDiffuse, vUv).rgb * exposure;
           c = clamp((c * (2.51 * c + 0.03)) / (c * (2.43 * c + 0.59) + 0.14), 0.0, 1.0); c = pow(c, vec3(1.0 / 2.2));
           c = mix(vec3(dot(c, vec3(0.299, 0.587, 0.114))), c, 1.14); c = mix(c, c * c * (3.0 - 2.0 * c), 0.25);
-          vec2 d = vUv - 0.5; c *= 1.0 - dot(d, d) * 0.6 * fx;
           c += (fract(sin(dot(vUv * 913.7 + time, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) * 0.022 * fx;
           gl_FragColor = vec4(c, 1.0); }` });
     composer.addPass(finalPass);
@@ -801,7 +800,7 @@ function buildHouse() {
     // no switches without debug=true in the address, but a slow device still lightens itself below
     if (fxBtn && fxEl) fxBtn.onclick = () => { fxEl.hidden = !fxEl.hidden; fxBtn.setAttribute('aria-expanded', !fxEl.hidden); };
     const apply = () => { if (bloomPass) bloomPass.enabled = FX.glow; if (finalPass) finalPass.uniforms.fx.value = FX.lens ? 1 : 0; fxU.uFx.value = FX.weather ? 1 : 0; sun.castShadow = FX.shadows; grass.visible = FX.grass; };
-    for (const [k, label] of [['shadows', 'Shadows'], ['glow', 'Glow'], ['clouds', 'Cloud shadows'], ['weather', 'Moss and weathering'], ['lens', 'Vignette and grain'], ['grass', '3D grass']]) {
+    for (const [k, label] of [['shadows', 'Shadows'], ['glow', 'Glow'], ['clouds', 'Cloud shadows'], ['weather', 'Moss and weathering'], ['lens', 'Film grain'], ['grass', '3D grass']]) {
       const l = document.createElement('label'), c = document.createElement('input');
       c.type = 'checkbox'; c.checked = FX[k]; c.id = 'fx-' + k; c.onchange = () => { FX[k] = c.checked; apply(); };
       l.append(c, label); fxEl?.appendChild(l);

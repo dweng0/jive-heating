@@ -3405,7 +3405,7 @@ Engineering rules (apply to every scenario):
         Scenario: Effects can be turned down on a slow phone
             Given the Live tab is open on the 3D house with debug=true in the address
             When the household opens "Effects" under the picture
-            Then there are switches for shadows, glow, cloud shadows, moss and weathering, vignette and grain, and 3D grass
+            Then there are switches for shadows, glow, cloud shadows, moss and weathering, film grain, and 3D grass
             And each takes effect at once, and phones start with lighter settings
             And without debug=true there is no "Effects" button, though a slow device still drops to lighter settings
 
@@ -3438,7 +3438,8 @@ Engineering rules (apply to every scenario):
             Given the phone or browser is set to light mode
             When someone with energy access opens the Live tab on the 3D house
             Then the Live page has the app's own background colour, not a dark card
-            And the edges of the picture fade into that colour, so the house sits on the page with no box around it
+            And each edge of the picture fades to transparent over its last few percent, a plain gradient with no
+                oval or darkened corners, so the house sits on the page with no box around it
             And in dark mode the page and the fade are the app's dark background instead
             And the panels, labels and diagram stay dark, so their colours read the same in either mode
 
