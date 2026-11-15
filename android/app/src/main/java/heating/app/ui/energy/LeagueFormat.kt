@@ -49,3 +49,43 @@ fun leagueWatts(row: LeagueRow): String = when (row.state) {
 
 /** "86%", or blank when it has no share. */
 fun leagueShare(row: LeagueRow): String = row.share?.let { "${(it * 100).roundToInt()}%" } ?: ""
+
+/** A row changes place at most this often, so figures flickering around each other do not swap back and forth. */
+const val SWAP_EVERY_MS = 2000L
+
+/** The order the table is drawn in, and when each row last changed place. */
+data class Placing(val order: List<String> = emptyList(), val movedAt: Map<String, Long> = emptyMap())
+
+/**
+ * Moves the drawn order towards [desired] by swapping neighbours, except that a row which changed place less than 2 s
+ * ago holds its place (and nothing passes it) until its time is up. New rows go straight to their place; gone rows drop.
+ */
+fun placeRows(prev: Placing, desired: List<String>, now: Long): Placing {
+    val rank = desired.withIndex().associate { (i, k) -> k to i }
+    val order = prev.order.filter { it in rank }.toMutableList()
+    val held = order.toSet()
+    desired.forEachIndexed { i, k -> if (k !in held) order.add(minOf(i, order.size), k) }
+    fun locked(k: String) = prev.movedAt[k]?.let { now - it < SWAP_EVERY_MS } ?: false
+    val moved = mutableSetOf<String>()
+    var swapped = true
+    while (swapped) {
+        swapped = false
+        for (i in 0 until order.size - 1) {
+            val a = order[i]
+            val b = order[i + 1]
+            if (rank.getValue(a) > rank.getValue(b) && !locked(a) && !locked(b)) {
+                order[i] = b
+                order[i + 1] = a
+                moved += a
+                moved += b
+                swapped = true
+            }
+        }
+    }
+    val movedAt = order.mapNotNull { k -> if (k in moved) k to now else prev.movedAt[k]?.let { k to it } }.toMap()
+    return Placing(order, movedAt)
+}
+
+/** When the next held row is free to move, or null when the drawn order already matches [desired]. */
+fun nextUnlock(p: Placing, desired: List<String>, now: Long): Long? =
+    if (p.order == desired) null else p.movedAt.values.map { it + SWAP_EVERY_MS }.filter { it > now }.minOrNull()

@@ -486,7 +486,7 @@ test('the boiler chip says what the boiler is doing, with a countdown while it f
   await call(page, 'POST', '/api/house', { mode: 'off' })
   await expect(chipLabel).toHaveText('Idle', { timeout: 90_000 }) // after any run still finishing
   await expect(title).toHaveText('Heating is off')
-  await expect(page.getByText('Live', { exact: true })).toBeVisible()
+  await expect(page.getByRole('main').getByText('Live', { exact: true })).toBeVisible()
   await chip.focus()
   await page.keyboard.press('Enter')
   await expect(page.getByRole('dialog')).toContainText('No room needs heat right now.')

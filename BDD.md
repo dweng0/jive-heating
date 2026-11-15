@@ -3537,7 +3537,7 @@ Engineering rules (apply to every scenario):
             And a row changes place at most once every 2 seconds, so a figure flickering around another's does not
                 make them swap back and forth
 
-        Scenario: League table ranks rooms instead of items
+        Scenario: Toggling the league table to Rooms ranks places instead of items
             Given the table is showing Items
             When the household chooses "Rooms" above it
             Then each row is a place: a room (its monitored devices), an energy area (its whole-area meter, else its

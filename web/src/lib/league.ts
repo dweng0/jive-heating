@@ -51,3 +51,55 @@ export function leagueRows(live: LivePower | null): LeagueRow[] {
   }
   return [...rows, ...off.map((i) => row(i, 'off')), ...none.map((i) => row(i, 'no-reading'))]
 }
+
+/** A row changes place at most this often, so figures flickering around each other do not swap back and forth. */
+export const SWAP_EVERY_MS = 2000
+
+/** The order the table is drawn in, and when each row last changed place. */
+export interface Placing {
+  order: string[]
+  movedAt: Record<string, number>
+}
+
+export const NO_PLACING: Placing = { order: [], movedAt: {} }
+
+/**
+ * Moves the drawn order towards [desired] by swapping neighbours, except that a row which changed place less than 2 s
+ * ago holds its place (and nothing passes it) until its time is up. New rows go straight to their place; gone rows drop.
+ */
+export function placeRows(prev: Placing, desired: string[], now: number): Placing {
+  const rank = new Map(desired.map((k, i) => [k, i]))
+  const order = prev.order.filter((k) => rank.has(k))
+  const held = new Set(order)
+  desired.forEach((k, i) => {
+    if (!held.has(k)) order.splice(Math.min(i, order.length), 0, k)
+  })
+  const locked = (k: string) => now - (prev.movedAt[k] ?? -Infinity) < SWAP_EVERY_MS
+  const moved = new Set<string>()
+  for (let swapped = true; swapped; ) {
+    swapped = false
+    for (let i = 0; i + 1 < order.length; i++) {
+      const a = order[i]
+      const b = order[i + 1]
+      if (rank.get(a)! > rank.get(b)! && !locked(a) && !locked(b)) {
+        order[i] = b
+        order[i + 1] = a
+        moved.add(a).add(b)
+        swapped = true
+      }
+    }
+  }
+  const movedAt: Record<string, number> = {}
+  for (const k of order) {
+    if (moved.has(k)) movedAt[k] = now
+    else if (prev.movedAt[k] != null) movedAt[k] = prev.movedAt[k]
+  }
+  return { order, movedAt }
+}
+
+/** When the next held row is free to move, or null when the drawn order already matches [desired]. */
+export function nextUnlock(p: Placing, desired: string[], now: number): number | null {
+  if (p.order.join('\n') === desired.join('\n')) return null
+  const times = Object.values(p.movedAt).map((t) => t + SWAP_EVERY_MS).filter((t) => t > now)
+  return times.length ? Math.min(...times) : null
+}

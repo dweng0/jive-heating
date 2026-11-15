@@ -95,3 +95,48 @@ test('the league table ranks items by their live watts, then everything else, of
   await expect(rows(page).nth(6)).toHaveAttribute('data-state', 'no-reading')
   await expect(rows(page).nth(6)).toHaveClass(/opacity-50/)
 })
+
+// BDD: League rows swap places as readings arrive
+test('league rows slide past each other, count to new figures, flash their share and swap at most every 2 s', async ({ page }) => {
+  await page.clock.install()
+  const kitchen = (oven: number, kettle: number) =>
+    live(5000, [
+      { meter: 'Oven Clamp', name: 'Oven', watts: oven, job: 'monitored' },
+      { meter: 'Kettle Plug', name: 'Kettle', watts: kettle, job: 'monitored' },
+    ])
+  const ws = await serve(page, kitchen(1200, 800))
+  await page.goto('/energy')
+  const names = rows(page).getByTestId('league-name')
+  await expect(names).toHaveText(['Oven', 'Kettle', 'Everything else'])
+
+  ws.push(kitchen(1200, 2800))
+  await expect(names).toHaveText(['Kettle', 'Oven', 'Everything else'])
+  const kettle = rows(page).filter({ hasText: 'Kettle' })
+  // It slides from where it was rather than jumping: it starts drawn at its old place and eases over 500 ms.
+  await expect(kettle).toHaveAttribute('data-sliding', 'true')
+  await expect(kettle).toHaveAttribute('style', /transition: transform 500ms/)
+  // The share flashes green as it rises, Oven's would flash red if it fell.
+  await expect(kettle.getByTestId('league-share')).toHaveAttribute('data-flash', 'up')
+  // Its watts count up: part way through they sit between the old and new figure.
+  await page.clock.runFor(200)
+  const mid = await kettle.getByTestId('league-watts').textContent()
+  const midW = mid!.endsWith('kW') ? parseFloat(mid!) * 1000 : parseFloat(mid!)
+  expect(midW).toBeGreaterThan(800)
+  expect(midW).toBeLessThan(2800)
+  await page.clock.runFor(1000)
+  await expect(kettle.getByTestId('league-watts')).toHaveText('2.80 kW')
+  await expect(kettle.getByTestId('league-share')).toHaveText('56%')
+  await expect(kettle).toHaveAttribute('data-sliding', 'false')
+  await expect(kettle.getByTestId('league-share')).not.toHaveAttribute('data-flash', 'up')
+
+  // Oven flickers back above inside 2 s of the swap: they hold their places.
+  ws.push(kitchen(2900, 2800))
+  await expect(rows(page).filter({ hasText: 'Oven' }).getByTestId('league-share')).toHaveAttribute('data-flash', 'up')
+  await page.clock.runFor(300)
+  await expect(names).toHaveText(['Kettle', 'Oven', 'Everything else'])
+  // Once 2 s have passed since the swap, they change places again without needing another reading.
+  await page.clock.runFor(1000)
+  await expect(names).toHaveText(['Oven', 'Kettle', 'Everything else'])
+  ws.push(kitchen(2900, 1000))
+  await expect(rows(page).filter({ hasText: 'Kettle' }).getByTestId('league-share')).toHaveAttribute('data-flash', 'down')
+})
