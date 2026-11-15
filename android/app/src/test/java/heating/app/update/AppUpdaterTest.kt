@@ -21,7 +21,7 @@ class AppUpdaterTest {
     private class FakeSource(var info: AndroidAppInfo?, var failDownload: Boolean = false) : UpdateSource {
         var checks = 0
         override suspend fun appInfo(): AndroidAppInfo? { checks++; return info }
-        override suspend fun downloadApk(to: File, progress: (Long, Long?) -> Unit) {
+        override suspend fun downloadApk(to: File, from: Long, progress: (Long, Long?) -> Unit) {
             if (failDownload) throw IOException("connection reset")
             progress(0, 4); progress(2, 4)
             to.writeBytes(byteArrayOf(1, 2, 3, 4)); progress(4, 4)
@@ -112,5 +112,55 @@ class AppUpdaterTest {
         flaky.failDownload = false
         u3.update()
         assertEquals(1, inst3.installed.size)
+    }
+
+    /** An 8-byte APK whose connection drops after 3 bytes, [drops] times, then holds. */
+    private class DroppingSource(var drops: Int) : UpdateSource {
+        val apk = byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8)
+        val froms = mutableListOf<Long>()
+        override suspend fun appInfo() = AndroidAppInfo(size = 8, versionCode = 42, versionName = "0.9.0")
+        override suspend fun downloadApk(to: File, from: Long, progress: (Long, Long?) -> Unit) {
+            froms += from
+            assertEquals(from, if (to.exists()) to.length() else 0L, "asks from where the file got to")
+            val end = if (drops > 0) minOf(apk.size, from.toInt() + 3) else apk.size
+            to.appendBytes(apk.copyOfRange(from.toInt(), end)); progress(end.toLong(), 8)
+            if (drops > 0) { drops--; throw IOException("stream canceled") }
+        }
+    }
+
+    // BDD: An interrupted update download carries on where it stopped
+    @Test
+    fun `an interrupted update download carries on where it stopped`() = runTest {
+        val source = DroppingSource(drops = 2)
+        val installer = FakeInstaller()
+        val u = updater(source, installer)
+        u.check(); u.update()
+        assertEquals(listOf(0L, 3L, 6L), source.froms, "each try asks for just the rest")
+        assertEquals((1..8).map { it.toByte() }, installer.installed.single().readBytes().toList())
+
+        // Five drops in a row: it gives up and says so, keeping the installed app.
+        val hopeless = DroppingSource(drops = 99)
+        val inst2 = FakeInstaller()
+        val u2 = updater(hopeless, inst2)
+        u2.check(); u2.update()
+        assertEquals(5, hopeless.froms.size)
+        assertEquals(UpdateState.Failed("0.9.0"), u2.state.value)
+        assertTrue(inst2.installed.isEmpty())
+
+        // The app asks the service for the rest with a Range header and adds the 206's bytes to what it has.
+        val ranged = MockEngine { request ->
+            assertEquals("bytes=2-", request.headers[HttpHeaders.Range])
+            respond(byteArrayOf(3, 4), HttpStatusCode.PartialContent, headersOf(HttpHeaders.ContentRange, "bytes 2-3/4"))
+        }
+        val part = Files.createTempFile("apk", ".part").toFile().apply { writeBytes(byteArrayOf(1, 2)) }
+        var last: Pair<Long, Long?>? = null
+        KtorHeatingApi(ServerConfig("https://heating.example", "t"), ranged).downloadApk(part, 2) { d, t -> last = d to t }
+        assertEquals(listOf<Byte>(1, 2, 3, 4), part.readBytes().toList())
+        assertEquals(4L to 4L, last)
+
+        // A service that ignores Range sends the whole APK: it replaces the part.
+        val whole = MockEngine { respond(byteArrayOf(9, 8, 7, 6), HttpStatusCode.OK, headersOf(HttpHeaders.ContentLength, "4")) }
+        KtorHeatingApi(ServerConfig("https://heating.example", "t"), whole).downloadApk(part, 4) { _, _ -> }
+        assertEquals(listOf<Byte>(9, 8, 7, 6), part.readBytes().toList())
     }
 }

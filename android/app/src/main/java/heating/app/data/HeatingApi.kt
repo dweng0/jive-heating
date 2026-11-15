@@ -12,6 +12,7 @@ import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
+import io.ktor.client.request.header
 import io.ktor.client.request.prepareGet
 import io.ktor.client.request.parameter
 import io.ktor.client.request.patch
@@ -208,7 +209,9 @@ val apiJson = Json {
 
 class KtorHeatingApi(
     private val config: ServerConfig,
-    engine: HttpClientEngine = OkHttp.create(),
+    // A minute without data before giving up on a read, not OkHttp's 10 s: a 50 MB update over a slow tunnel and weak
+    // Wi-Fi stalls for longer than that and would otherwise fail.
+    engine: HttpClientEngine = OkHttp.create { config { readTimeout(60, java.util.concurrent.TimeUnit.SECONDS) } },
     /** Called when the server rejects the session (expired, password changed, user deleted). */
     private val onUnauthorized: () -> Unit = {},
 ) : HeatingApi, heating.app.update.UpdateSource {
@@ -240,13 +243,21 @@ class KtorHeatingApi(
 
     override suspend fun appInfo(): heating.app.update.AndroidAppInfo? = client.get("api/app").body<heating.app.update.AppsInfo>().android
 
-    override suspend fun downloadApk(to: java.io.File, progress: (Long, Long?) -> Unit) {
-        client.prepareGet("api/app/android").execute { response ->
-            val total = response.headers[io.ktor.http.HttpHeaders.ContentLength]?.toLongOrNull()
+    override suspend fun downloadApk(to: java.io.File, from: Long, progress: (Long, Long?) -> Unit) {
+        client.prepareGet("api/app/android") {
+            if (from > 0) header(io.ktor.http.HttpHeaders.Range, "bytes=$from-")
+        }.execute { response ->
+            // 206: the rest, added to what the file has. 200: a service that ignores Range sent it all, so start again.
+            val partial = from > 0 && response.status == io.ktor.http.HttpStatusCode.PartialContent
+            val start = if (partial) from else 0L
+            val length = response.headers[io.ktor.http.HttpHeaders.ContentLength]?.toLongOrNull()
+            val total = if (partial) {
+                response.headers[io.ktor.http.HttpHeaders.ContentRange]?.substringAfterLast('/')?.toLongOrNull() ?: length?.let { start + it }
+            } else length
             val body = response.bodyAsChannel()
             val buffer = ByteArray(64 * 1024)
-            var done = 0L
-            to.outputStream().use { out ->
+            var done = start
+            java.io.FileOutputStream(to, partial).use { out ->
                 while (true) {
                     val n = body.readAvailable(buffer, 0, buffer.size)
                     if (n < 0) break

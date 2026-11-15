@@ -3,12 +3,14 @@ package heating
 import heating.testing.TestHeating
 import heating.testing.anonymous
 import io.ktor.client.request.get
+import io.ktor.client.request.header
 import io.ktor.client.statement.bodyAsText
 import io.ktor.client.statement.readRawBytes
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import java.nio.file.Files
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -64,6 +66,31 @@ class AppDownloadTest {
         TestHeating(androidApk = apk.toString()).api { client ->
             val info = client.get("/api/app").bodyAsText()
             assertTrue(info.contains("\"versionCode\":null") && info.contains("\"versionName\":null"), info)
+        }
+    }
+
+    // BDD: An interrupted update download carries on where it stopped
+    @Test
+    fun `the service sends just the rest of the apk when asked for a range`() {
+        val apk = Files.createTempFile("heating", ".apk")
+        val bytes = ByteArray(1234) { (it * 7).toByte() }
+        Files.write(apk, bytes)
+        TestHeating(androidApk = apk.toString()).api { client ->
+            val rest = client.get("/api/app/android") { header(HttpHeaders.Range, "bytes=1000-") }
+            assertEquals(HttpStatusCode.PartialContent, rest.status)
+            assertEquals("bytes 1000-1233/1234", rest.headers[HttpHeaders.ContentRange])
+            assertEquals("234", rest.headers[HttpHeaders.ContentLength])
+            assertContentEquals(bytes.copyOfRange(1000, 1234), rest.readRawBytes())
+
+            val middle = client.get("/api/app/android") { header(HttpHeaders.Range, "bytes=10-19") }
+            assertEquals(HttpStatusCode.PartialContent, middle.status)
+            assertContentEquals(bytes.copyOfRange(10, 20), middle.readRawBytes())
+
+            val past = client.get("/api/app/android") { header(HttpHeaders.Range, "bytes=5000-") }
+            assertEquals(HttpStatusCode.RequestedRangeNotSatisfiable, past.status)
+            assertEquals("bytes */1234", past.headers[HttpHeaders.ContentRange])
+
+            assertEquals("bytes", client.get("/api/app/android").headers[HttpHeaders.AcceptRanges])
         }
     }
 }

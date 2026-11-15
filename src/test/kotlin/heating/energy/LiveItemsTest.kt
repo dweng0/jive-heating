@@ -8,12 +8,14 @@ import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.isSuccess
 import io.ktor.http.contentType
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class LiveItemsTest {
 
@@ -55,5 +57,23 @@ class LiveItemsTest {
         // Offline: no live watts.
         t.availability("Fridge Plug", online = false)
         assertNull(t.app.livePower.now().items.first { it.meter == "Fridge Plug" }.watts)
+    }
+
+    // BDD: A meter with a job shows even when its device was ignored
+    @Test
+    fun `a meter with a job shows even when its device was ignored`() {
+        val t = TestHeating()
+        t.discover(meters = listOf("Main Clamp", "Lights Clamp", "Hallway Plug"))
+        t.api { client ->
+            client.post("/api/energy/areas") { contentType(ContentType.Application.Json); setBody("""{"name":"Lights"}""") }
+            assertEquals(HttpStatusCode.OK, client.put("/api/meters/Main Clamp/house").status)
+            assertEquals(HttpStatusCode.OK, client.put("/api/meters/Lights Clamp/job") { contentType(ContentType.Application.Json); setBody("""{"job":"area","area":"lights"}""") }.status)
+            for (d in listOf("Lights Clamp", "Hallway Plug")) assertTrue(client.put("/api/devices/$d/ignored").status.isSuccess(), d)
+        }
+        for ((m, w) in listOf("Main Clamp" to 500, "Lights Clamp" to 110, "Hallway Plug" to 20)) t.meterState(m, """{"energy":1.0,"power":$w}""")
+
+        val items = t.app.livePower.now().items.associateBy { it.meter }
+        assertEquals(ItemPower("Lights Clamp", "Lights Clamp", 110.0, room = null, area = "lights", job = "area"), items["Lights Clamp"])
+        assertNull(items["Hallway Plug"], "ignoring still hides a meter with no job")
     }
 }

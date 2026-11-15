@@ -11,6 +11,8 @@ import heating.app.notify.registerForPush
 import heating.app.notify.shouldAskToNotify
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Row
@@ -211,10 +213,9 @@ private fun Connected(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             Column {
-            heating.app.update.UpdateBanner(updateState, onUpdate = onUpdate)
-            if (state.admin && setupStatus?.broker == "disconnected" && !needsSetup) {
-                BrokerBanner(setupStatus?.since, onOpen = { nav.navigate("connection") })
-            }
+            val brokerLost = state.admin && setupStatus?.broker == "disconnected" && !needsSetup
+            val banners = heating.app.update.updateBanner(updateState) != null || brokerLost
+            TopBanners(updateState, onUpdate, brokerLost, setupStatus?.since, onOpenConnection = { nav.navigate("connection") })
             if (title != null) {
                 TopAppBar(
                     title = { Text(title) },
@@ -227,6 +228,8 @@ private fun Connected(
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+                    // The banners above already keep clear of the status bar.
+                    windowInsets = if (banners) androidx.compose.foundation.layout.WindowInsets(0) else TopAppBarDefaults.windowInsets,
                 )
             }
             }
@@ -507,5 +510,26 @@ private fun Stepper(label: String, value: String, onLess: () -> Unit, onMore: ()
         FilledIconButton(onClick = onLess) { Icon(Icons.Rounded.Remove, "Less $label") }
         Text(" ", textAlign = TextAlign.Center)
         FilledIconButton(onClick = onMore) { Icon(Icons.Rounded.Add, "More $label") }
+    }
+}
+
+/**
+ * The strips above the app: a newer version, and for an admin a lost broker. The first one shown keeps clear of the
+ * phone's status bar ([statusBar]), as the app draws edge to edge and they would otherwise sit behind its icons.
+ */
+@Composable
+fun TopBanners(
+    updateState: heating.app.update.UpdateState,
+    onUpdate: () -> Unit,
+    brokerLost: Boolean,
+    brokerSince: String?,
+    onOpenConnection: () -> Unit,
+    statusBar: androidx.compose.foundation.layout.WindowInsets = androidx.compose.foundation.layout.WindowInsets.statusBars,
+) {
+    val update = heating.app.update.updateBanner(updateState) != null
+    if (!update && !brokerLost) return
+    Column(Modifier.windowInsetsPadding(statusBar)) {
+        heating.app.update.UpdateBanner(updateState, onUpdate = onUpdate)
+        if (brokerLost) BrokerBanner(brokerSince, onOpen = onOpenConnection)
     }
 }

@@ -3428,6 +3428,18 @@ Engineering rules (apply to every scenario):
             And if the app may not install apps yet, it opens the setting to allow it and carries on when allowed
             And a failed download says "Update failed" with "Try again", and the old version keeps working
 
+        Scenario: An interrupted update download carries on where it stopped
+            Given the banner offers version 0.9.0 and the household has tapped "Update"
+            When the connection stalls or drops partway through the download
+            Then the app waits up to a minute for more data, then asks for just the rest (a Range request), up to 5
+                times, before saying "Update failed"
+            And the service answers a Range request on GET /api/app/android with 206 and only the bytes asked for
+
+        Scenario: The update banner sits below the status bar
+            Given the banner offers a new version, or says "Update failed"
+            When the household looks at the top of the Android app
+            Then the banner is drawn below the phone's status bar, never behind its clock, signal or battery icons
+
         Scenario: Release builds are signed with the stable key
             Given the release key's path and passwords are set in the build's environment
             When the release APK is built
@@ -3519,6 +3531,13 @@ Engineering rules (apply to every scenario):
                 its meter name), watts (null while it has no live reading), room, area and job
             And job is "area" for a whole-area meter, "monitored" for a monitored device and null for a meter with no job
             And "Garage Clamp" is included with job null, so a clamp that has not been given a job is still seen
+
+        Scenario: A meter with a job shows even when its device was ignored
+            Given "Lights Clamp" is the whole-area meter for energy area "Lights", "Hallway Plug" has no job, and both
+                are on the ignored devices list
+            When admin "jane" opens the live power channel at /ws/power
+            Then "Lights Clamp" is in items with job "area", so its watts are not lumped into "Everything else"
+            And "Hallway Plug" is left out, as ignoring only hides meters that have no job
 
         Scenario: League table ranks items by their live watts
             Given the house uses 11000 W, "Shower" 9500 W, "Oven" 1200 W and "Fridge" 90 W

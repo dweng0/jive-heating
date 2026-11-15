@@ -214,9 +214,12 @@ class LivePower(
 
     private fun items(): List<ItemPower> {
         val house = settings.get().electricityMeter
-        return meters.all().filter { it.name != house && !ignored(it) }.map { m ->
+        // Ignoring only hides a meter with no job: one that measures an area or is monitored stays, or its watts would
+        // fall silently into everything else.
+        return meters.all().filter { it.name != house }.mapNotNull { m ->
             val area = areas?.measuredBy(m.name)
             when {
+                area == null && m.name !in monitored && ignored(m) -> null
                 area != null -> ItemPower(m.name, label(m.name), plugWatts(m.name), area = area, job = "area")
                 m.name in monitored -> ItemPower(m.name, label(m.name), plugWatts(m.name), monitored.roomOf(m.name), monitored.areaOf(m.name), "monitored")
                 else -> ItemPower(m.name, label(m.name), plugWatts(m.name))

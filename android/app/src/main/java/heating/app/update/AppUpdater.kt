@@ -15,8 +15,11 @@ data class AppsInfo(val android: AndroidAppInfo? = null)
 /** Where updates come from: the service's copy of the APK. */
 interface UpdateSource {
     suspend fun appInfo(): AndroidAppInfo?
-    /** Downloads the APK into [to], telling [progress] bytes so far and the total when known. */
-    suspend fun downloadApk(to: File, progress: (Long, Long?) -> Unit)
+    /**
+     * Downloads the APK into [to], telling [progress] bytes so far and the total when known. With [from] above 0, [to]
+     * already holds that many bytes from an interrupted try and only the rest is asked for.
+     */
+    suspend fun downloadApk(to: File, from: Long, progress: (Long, Long?) -> Unit)
 }
 
 /** Android's package installer, behind an interface so the update flow can be tested without a device. */
@@ -95,9 +98,27 @@ class AppUpdater(
             return
         }
         val apk = File(dir.apply { mkdirs() }, "heating.apk")
+        apk.delete()
         set(UpdateState.Downloading(name, 0f))
+        // A dropped or stalled connection carries on from where the file got to, rather than failing the update.
+        var tries = 0
+        while (true) {
+            try {
+                source.downloadApk(apk, if (apk.exists()) apk.length() else 0L) { done, total ->
+                    set(UpdateState.Downloading(name, total?.takeIf { it > 0 }?.let { done.toFloat() / it }))
+                }
+                break
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                if (++tries >= DOWNLOAD_TRIES) {
+                    apk.delete()
+                    set(UpdateState.Failed(name))
+                    return
+                }
+                kotlinx.coroutines.delay(RETRY_AFTER_MS)
+            }
+        }
         try {
-            source.downloadApk(apk) { done, total -> set(UpdateState.Downloading(name, total?.takeIf { it > 0 }?.let { done.toFloat() / it })) }
             set(UpdateState.Installing(name))
             installer.install(apk)
         } catch (e: Exception) {
@@ -114,5 +135,8 @@ class AppUpdater(
 
     companion object {
         const val CHECK_EVERY_MS = 60 * 60_000L
+        /** Tries at the download, each carrying on from the last, before saying "Update failed". */
+        const val DOWNLOAD_TRIES = 5
+        const val RETRY_AFTER_MS = 2_000L
     }
 }
