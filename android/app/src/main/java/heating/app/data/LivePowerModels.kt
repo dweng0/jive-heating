@@ -29,6 +29,22 @@ data class LivePower(
     val batteryPct: Double? = null,
     /** The weather outside as the Live picture draws it; null without a weather source or a recent reading. */
     val weather: LiveWeather? = null,
+    /** Every meter but the house meter, for the league table. */
+    val items: List<ItemPower> = emptyList(),
+)
+
+/**
+ * A meter for the league table: its label (else its name), live watts (null without a live reading), its room or
+ * energy area, and its job: "area" (an area's whole-area meter), "monitored" (a monitored device) or null (no job yet).
+ */
+@Serializable
+data class ItemPower(
+    val meter: String,
+    val name: String,
+    val watts: Double? = null,
+    val room: String? = null,
+    val area: String? = null,
+    val job: String? = null,
 )
 
 /** The weather look (clear, cloudy, overcast, rain, snow or frost), the temperature and when it was observed. */

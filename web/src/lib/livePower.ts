@@ -39,6 +39,20 @@ export interface LivePower {
   batteryPct?: number | null
   /** The weather outside as the Live picture draws it; null without a weather source or a recent reading */
   weather?: LiveWeather | null
+  /** Every meter but the house meter, for the league table (older services leave it out) */
+  items?: ItemPower[]
+}
+
+export interface ItemPower {
+  meter: string
+  /** Its label, else its name */
+  name: string
+  /** Null without a live reading */
+  watts: number | null
+  room?: string | null
+  area?: string | null
+  /** "area" (an area's whole-area meter), "monitored" (a monitored device) or null (no job yet) */
+  job?: string | null
 }
 
 export interface LiveWeather {

@@ -5,6 +5,7 @@ import { DAY_FIGURES_EVENT, followBusiest, nextFetchAt, NO_BUSIEST, places, tota
 import { followPower, powerApi, type LivePower, type PowerBands } from '@/lib/livePower'
 import { useHome } from '@/lib/home'
 import { EnergyDials } from './EnergyDials'
+import { LeagueTable } from './LeagueTable'
 import { HouseHistoryChart } from './HouseHistoryChart'
 import { OtherAreas } from './OtherAreas'
 import { TripMeters } from './TripMeters'
@@ -119,6 +120,8 @@ export function LivePowerSection() {
         admin={admin}
         counters={<TripMeters totals={totals} readings={readings} />}
       />
+
+      <LeagueTable live={live} />
 
       <GasCard />
 
