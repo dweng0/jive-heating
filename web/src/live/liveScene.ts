@@ -128,7 +128,8 @@ function drawRing() {
   ].map(([n, c, w]) => `<span><i class="sw" style="background:${c}"></i>${n}<b>${fmt(w)}</b></span>`).join('');
 }
 function renderSide() {
-  if (!reading) return;
+  // the app shows its live league table instead of this list; kept for the prototype
+  if (!reading || !document.getElementById('circuits')) return;
   const named = reading.circuits.reduce((a, c) => a + c.watts, 0);
   const rows = [...reading.circuits].sort((a, b) => b.watts - a.watts);
   rows.push({ name: 'Everything else', watts: Math.max(0, reading.home - named) });

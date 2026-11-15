@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { LeagueBoard } from '@/components/heating/LeagueTable'
 import { followPower, type LivePower } from '@/lib/livePower'
 import { startLive, type LiveFeed } from '@/live/liveScene'
 import { toLiveReading } from '@/live/liveReading'
@@ -24,6 +25,7 @@ export function LiveView({ source }: { source: PowerSource }) {
   // The effects switches are for trying things out: only with debug=true in the address.
   const debug = new URLSearchParams(window.location.search).get('debug') === 'true'
   const feed = useRef<LiveFeed | null>(null)
+  const [power, setPower] = useState<LivePower | null>(null)
 
   useEffect(() => {
     const live = startLive()
@@ -36,6 +38,7 @@ export function LiveView({ source }: { source: PowerSource }) {
     const stopPower = source(
       (p) => {
         latest = p
+        setPower(p)
         live.setWeather(p.weather?.look)
         lastAt = Date.now()
         if (!stopped(p)) live.push(toLiveReading(p))
@@ -95,6 +98,11 @@ export function LiveView({ source }: { source: PowerSource }) {
             {debug && <div className="fx" id="fx" hidden />}
           </div>
 
+          {/* What is using the power, full width under the picture. */}
+          <div className="league">
+            <LeagueBoard live={power} wide />
+          </div>
+
           <aside>
             <div className="panel">
               <h2>Home powered by</h2>
@@ -102,10 +110,6 @@ export function LiveView({ source }: { source: PowerSource }) {
                 <svg className="ring" viewBox="0 0 120 120" id="ring" aria-label="Share of home power from each source" />
                 <div className="ringkey" id="ringKey" />
               </div>
-            </div>
-            <div className="panel">
-              <h2>Where it's going</h2>
-              <div className="circuits" id="circuits" />
             </div>
           </aside>
         </div>

@@ -3392,7 +3392,8 @@ Engineering rules (apply to every scenario):
         Scenario: The Live tab says where the home's power came from
             Given the flows are solar to home 600, battery to home 300 and grid to home 100
             Then a "Home powered by" ring shows 60% solar, 30% battery and 10% grid, and "90% your own" in the middle
-            And a "Where it's going" list shows each room and monitored device's live watts, then "Everything else"
+            And the live league table under the picture shows where it is going (see "Live shows the league table full
+                width under the picture")
 
         Scenario: Effects can be turned down on a slow phone
             Given the Live tab is open on the 3D house with debug=true in the address
@@ -3400,6 +3401,16 @@ Engineering rules (apply to every scenario):
             Then there are switches for shadows, glow, cloud shadows, moss and weathering, vignette and grain, and 3D grass
             And each takes effect at once, and phones start with lighter settings
             And without debug=true there is no "Effects" button, though a slow device still drops to lighter settings
+
+        Scenario: Live shows the league table full width under the picture
+            Given the house uses 2400 W, "Dishwasher" (in room "Kitchen") 1560 W and "Lights" (energy area "Lights") 110 W
+            When someone with energy access opens the Live tab on the web app or the Android app
+            Then the picture is at the top, and under it the live league table takes the full width, in place of
+                "Where it's going"
+            And each row shows its place, its name with its room or area under it, its watts, and a bar of its share
+                stacked after the rows above it, like the depth on one side of an order book, with its share and the
+                running total: "Dishwasher" 1st, 65%, running 65%; "Lights" 2nd, 5%, running 70%
+            And rows slide up and down to their new places as readings arrive, as on the Energy tab
 
         Scenario: House and Diagram are switched at the top
             Given someone with energy access opens the Live tab

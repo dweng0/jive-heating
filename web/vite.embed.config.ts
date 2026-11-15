@@ -1,11 +1,12 @@
 import path from 'node:path'
+import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
 // The Live view for the Android app: `npm run build:live-embed` writes it into the app's assets, served there by
 // WebViewAssetLoader. Relative paths, so it works from any folder.
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   base: './',
   publicDir: false,
   resolve: { alias: { '@': path.resolve(__dirname, './src') } },

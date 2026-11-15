@@ -180,9 +180,44 @@ test('the ring shows the share from each source and where it is going', async ({
   await slowExpect(page.locator('#ringKey')).toContainText('Solar600 W')
   await slowExpect(page.locator('#ringKey')).toContainText('Battery300 W')
   await slowExpect(page.locator('#ringKey')).toContainText('Grid100 W')
-  await slowExpect(page.locator('#circuits')).toContainText('Kitchen')
-  await slowExpect(page.locator('#circuits')).toContainText('Fridge Plug')
-  await slowExpect(page.locator('#circuits')).toContainText('Everything else')
+})
+
+// BDD: Live shows the league table full width under the picture
+test('the league table runs full width under the picture', async ({ page }) => {
+  const reading = {
+    ...power(2400, [{ from: 'grid', to: 'home', watts: 2400 }]),
+    rooms: [{ room: 'kitchen', name: 'Kitchen', watts: 1560 }],
+    areas: [{ area: 'lights', name: 'Lights', watts: 110 }],
+    items: [
+      { meter: 'Dishwasher', name: 'Dishwasher', watts: 1560, room: 'kitchen', area: null, job: 'monitored' },
+      { meter: 'Mains B', name: 'Lights', watts: 110, room: null, area: 'lights', job: 'area' },
+    ],
+  }
+  const { push } = await serve(page, { first: reading })
+  await page.goto('/live')
+  await expect(page.getByText("Where it's going")).toHaveCount(0)
+  const table = page.getByTestId('league-table')
+  await slowExpect(table).toBeVisible()
+  const [stage, box] = await Promise.all([page.locator('#stage').boundingBox(), table.boundingBox()])
+  expect(box!.y).toBeGreaterThanOrEqual(stage!.y + stage!.height)
+  expect(box!.width).toBeGreaterThanOrEqual(stage!.width - 40)
+
+  const rows = table.getByTestId('league-row')
+  await expect(rows.nth(0).getByTestId('league-place')).toHaveText('1')
+  await expect(rows.nth(0).getByTestId('league-name')).toHaveText('Dishwasher')
+  await expect(rows.nth(0).getByTestId('league-where')).toHaveText('Kitchen')
+  await expect(rows.nth(0).getByTestId('league-share')).toHaveText('65%')
+  await expect(rows.nth(0).getByTestId('league-running')).toHaveText('65%')
+  await expect(rows.nth(1).getByTestId('league-name')).toHaveText('Lights')
+  await expect(rows.nth(1).getByTestId('league-where')).toHaveText('Lights')
+  await expect(rows.nth(1).getByTestId('league-running')).toHaveText('70%')
+  // The bar is stacked after the rows above: Lights' starts where Dishwasher's ends.
+  const offset = await rows.nth(1).getByTestId('league-bar').evaluate((el) => (el as HTMLElement).style.left)
+  expect(parseFloat(offset)).toBeCloseTo(65, 0)
+
+  // Rows move to their new places as readings arrive.
+  push({ ...reading, items: [{ ...reading.items[0], watts: 50 }, { ...reading.items[1], watts: 2000 }] })
+  await slowExpect(rows.nth(0).getByTestId('league-name')).toHaveText('Lights')
 })
 
 // BDD: House and Diagram are switched at the top

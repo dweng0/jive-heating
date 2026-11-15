@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { Card, CardContent } from '@/components/ui/card'
 import { JobDialog, type Act } from '@/components/heating/MeterJobDialog'
@@ -115,6 +115,25 @@ function useMeterSettings() {
  */
 export function LeagueTable({ live, admin = false }: { live: LivePower | null; admin?: boolean }) {
   const settings = useMeterSettings()
+  return <LeagueBoard live={live} onSetUp={admin ? settings.open : undefined} extra={settings.dialog} />
+}
+
+/**
+ * The table itself, needing nothing from the app around it, so the Live view in the Android app can show it too.
+ * [wide] lays it out like one side of an order book across the page: place, name with its room or area, watts, and a
+ * bar of its share stacked after the rows above it, with the running total.
+ */
+export function LeagueBoard({
+  live,
+  onSetUp,
+  extra,
+  wide = false,
+}: {
+  live: LivePower | null
+  onSetUp?: (meter: string) => void
+  extra?: ReactNode
+  wide?: boolean
+}) {
   // While the house reading is stale the table holds the last good reading, greyed, rather than re-ranking on part of it.
   const stale = live != null && live.watts == null
   const lastGood = useRef<LivePower | null>(null)
@@ -130,6 +149,13 @@ export function LeagueTable({ live, admin = false }: { live: LivePower | null; a
       /* not remembered */
     }
   }
+  // Each row's bar starts where the rows above it end, like the depth on one side of an order book.
+  const running: number[] = []
+  rows.forEach((_, i) => running.push(i === 0 ? 0 : running[i - 1] + (rows[i - 1].share ?? 0)))
+  const roomName = new Map((shown?.rooms ?? []).map((x) => [x.room, x.name]))
+  const areaName = new Map((shown?.areas ?? []).map((x) => [x.area, x.name]))
+  const whereOf = (r: LeagueRow) =>
+    r.item?.room ? roomName.get(r.item.room) ?? null : r.item?.area ? areaName.get(r.item.area) ?? null : null
   const list = useRef<HTMLUListElement>(null)
   const tops = useRef(new Map<string, number>())
   const [sliding, setSliding] = useState<Set<string>>(new Set())
@@ -195,14 +221,38 @@ export function LeagueTable({ live, admin = false }: { live: LivePower | null; a
         {stale && <p className="text-sm text-muted-foreground">Readings stopped</p>}
         {empty ? (
           <p className="py-2 text-sm text-muted-foreground">Add a plug or clamp to see what is using power</p>
+        ) : wide ? (
+          <>
+            <div className="hidden grid-cols-[2rem_minmax(0,1fr)_5.5rem_minmax(6rem,22rem)_3.5rem] items-center gap-3 border-b px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground sm:grid">
+              <span>#</span>
+              <span>{view === 'items' ? 'Item' : 'Place'}</span>
+              <span className="text-right">Now</span>
+              <span>Share of the house</span>
+              <span className="text-right">Share</span>
+            </div>
+            <ul ref={list} className="flex flex-col">
+              {rows.map((r, i) => (
+                <LeagueWideRow
+                  key={r.key}
+                  row={r}
+                  place={i + 1}
+                  before={running[i]}
+                  where={whereOf(r)}
+                  stale={stale}
+                  sliding={sliding.has(r.key)}
+                  onSetUp={onSetUp}
+                />
+              ))}
+            </ul>
+          </>
         ) : (
           <ul ref={list} className="flex flex-col gap-1">
             {rows.map((r) => (
-              <LeagueRowView key={r.key} row={r} stale={stale} sliding={sliding.has(r.key)} onSetUp={admin ? settings.open : undefined} />
+              <LeagueRowView key={r.key} row={r} stale={stale} sliding={sliding.has(r.key)} onSetUp={onSetUp} />
             ))}
           </ul>
         )}
-        {settings.dialog}
+        {extra}
       </CardContent>
     </Card>
   )
@@ -277,6 +327,102 @@ function LeagueRowView({
           </span>
         </span>
       </div>
+    </li>
+  )
+}
+
+function LeagueWideRow({
+  row: r,
+  place,
+  before,
+  where,
+  stale,
+  sliding,
+  onSetUp,
+}: {
+  row: LeagueRow
+  place: number
+  /** The share of the rows above this one (0..1), where its bar starts */
+  before: number
+  where: string | null
+  stale: boolean
+  sliding: boolean
+  onSetUp?: (meter: string) => void
+}) {
+  const noJob = r.item != null && r.item.job == null
+  const pct = r.share == null ? null : r.share * 100
+  const watts = useCountTo(r.watts)
+  const shownPct = useCountTo(pct)
+  const flash = useFlash(pct == null ? null : Math.round(pct))
+  const runningPct = pct == null ? null : Math.min(100, before * 100 + pct)
+  return (
+    <li
+      data-key={r.key}
+      data-testid="league-row"
+      data-state={r.state}
+      data-sliding={sliding}
+      data-stale={stale}
+      className={cn(
+        'relative grid grid-cols-[2rem_minmax(0,1fr)_5.5rem] items-center gap-x-3 gap-y-1 border-b border-border/60 px-3 py-3 last:border-b-0 sm:grid-cols-[2rem_minmax(0,1fr)_5.5rem_minmax(6rem,22rem)_3.5rem]',
+        (r.state === 'no-reading' || stale) && 'opacity-50',
+      )}
+    >
+      {noJob && onSetUp && (
+        <button
+          type="button"
+          aria-label={`Set up ${r.name}`}
+          onClick={() => onSetUp(r.item!.meter)}
+          className="absolute inset-0 z-10 hover:bg-foreground/5 focus-visible:outline-2 focus-visible:outline-ring"
+        />
+      )}
+      <span data-testid="league-place" className="text-sm tabular-nums text-muted-foreground">
+        {place}
+      </span>
+      <span className="flex min-w-0 flex-col">
+        <span data-testid="league-name" className={cn('truncate font-semibold', r.state === 'else' && 'text-muted-foreground')}>
+          {r.name}
+        </span>
+        {noJob ? (
+          <span data-testid="league-note" className="text-xs text-muted-foreground">
+            No job yet
+          </span>
+        ) : where ? (
+          <span data-testid="league-where" className="truncate text-xs text-muted-foreground">
+            {where}
+          </span>
+        ) : null}
+      </span>
+      <span
+        data-testid="league-watts"
+        className={cn('text-right font-semibold tabular-nums', r.state !== 'on' && r.state !== 'else' && 'font-normal text-muted-foreground')}
+      >
+        {r.state === 'off' ? 'Off' : r.state === 'no-reading' ? 'No reading' : formatWatts(watts)}
+      </span>
+      <span className="col-span-3 flex flex-col gap-1 sm:col-span-1">
+        <span className="relative h-3 overflow-hidden rounded-sm bg-muted">
+          <span
+            data-testid="league-bar"
+            aria-hidden
+            className={cn('absolute inset-y-0 transition-[left,width] duration-500', r.state === 'else' ? 'bg-foreground/25' : 'bg-primary')}
+            style={{ left: `${before * 100}%`, width: `${pct ?? 0}%` }}
+          />
+        </span>
+        <span className="flex justify-between text-[11px] tabular-nums text-muted-foreground">
+          <span>{pct == null || stale ? '' : `+${Math.round(shownPct ?? 0)}%`}</span>
+          <span data-testid="league-running">{runningPct == null || stale ? '' : `${Math.round(runningPct)}%`}</span>
+        </span>
+      </span>
+      <span
+        data-testid="league-share"
+        data-flash={flash ?? undefined}
+        className={cn(
+          'hidden rounded text-right text-sm tabular-nums text-muted-foreground transition-colors duration-300 sm:block',
+          flash === 'up' && 'bg-green-500/25 text-green-700 dark:text-green-400',
+          flash === 'down' && 'bg-red-500/25 text-red-700 dark:text-red-400',
+        )}
+      >
+        {stale ? '—' : shownPct == null ? '' : `${Math.round(shownPct)}%`}
+      </span>
     </li>
   )
 }
