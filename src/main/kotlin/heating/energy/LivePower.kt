@@ -28,7 +28,8 @@ data class DevicePower(val meter: String, val watts: Double?)
 /**
  * The house's power right now, as sent on /ws/power. [watts] is null when there is no live house reading;
  * [at] is when the house meter was last read. [elseWatts] is the house use no room or device accounts for,
- * never below 0, and null while [watts] is.
+ * never below 0, and null while [watts] is. [flows] say where the power goes between solar, battery, grid and home
+ * while the inverter is reporting, and [batteryPct] is the battery's charge.
  *
  * openapi: LivePower
  */
@@ -40,6 +41,8 @@ data class LivePowerView(
     val devices: List<DevicePower> = emptyList(),
     val elseWatts: Double? = null,
     val areas: List<AreaPower> = emptyList(),
+    val flows: List<PowerFlow> = emptyList(),
+    val batteryPct: Double? = null,
 )
 
 /** Where the dial turns amber ([green]: the typical overnight load) and red ([red]: the 90th percentile). */
@@ -85,6 +88,7 @@ class LivePower(
     private val changes: ChangeNotifier,
     private val clock: Clock,
     private val areas: EnergyAreas? = null,
+    private val inverter: Inverter? = null,
 ) {
     @Volatile private var staleTold = false
     private val recent = ArrayDeque<Pair<Instant, Double?>>()
@@ -122,6 +126,7 @@ class LivePower(
             AreaPower(area.id, area.name, if (clamp != null) plugWatts(clamp) else plugs.takeIf { it.isNotEmpty() }?.sum())
         }
         // Each area counts once: its clamp's power, or its plugs' when it has no clamp.
+        val inv = inverter?.live()
         val accounted = rooms.sumOf { it.watts ?: 0.0 } + devices.sumOf { it.watts ?: 0.0 } + areaPower.sumOf { it.watts ?: 0.0 }
         return LivePowerView(
             watts = watts,
@@ -130,6 +135,8 @@ class LivePower(
             devices = devices,
             elseWatts = watts?.let { maxOf(0.0, it - accounted) },
             areas = areaPower,
+            flows = if (watts != null && inv != null) powerFlows(inv.solarWatts, inv.batteryWatts, watts) else emptyList(),
+            batteryPct = inv?.batteryPct,
         )
     }
 

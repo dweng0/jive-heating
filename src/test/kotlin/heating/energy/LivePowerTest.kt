@@ -59,6 +59,38 @@ class LivePowerTest {
         found
     }
 
+    // BDD: Live power carries the flows between sources and the home
+    @Test
+    fun `live power carries the flows between sources and the home`() {
+        val t = TestHeating()
+        t.discover(meters = listOf("Main Clamp"))
+        t.api { client -> assertEquals(HttpStatusCode.OK, client.put("/api/meters/Main%20Clamp/house").status) }
+        t.meterState("Main Clamp", """{"energy":1523.4,"power":900}""")
+        t.app.inverter.report(solarWatts = 5200.0, batteryWatts = 2600.0, batteryPct = 64.0)
+
+        live(t) { client ->
+            val message = client.connect().nextMessage()
+            val flows = message["flows"]!!.jsonArray.map { f ->
+                val o = f.jsonObject
+                Triple(o["from"]!!.jsonPrimitive.content, o["to"]!!.jsonPrimitive.content, o["watts"]!!.jsonPrimitive.double)
+            }
+            assertEquals(
+                setOf(Triple("solar", "home", 900.0), Triple("solar", "battery", 2600.0), Triple("solar", "grid", 1700.0)),
+                flows.toSet(),
+            )
+            assertEquals(64.0, message["batteryPct"]!!.jsonPrimitive.double, 1e-9)
+        }
+        // Ends are only the four nodes, watts never below 0, and 0 W flows are left out.
+        val ends = setOf("solar", "battery", "grid", "home")
+        for ((solar, battery, home) in listOf(Triple(0.0, 0.0, 0.0), Triple(3000.0, 0.0, 3000.0), Triple(0.0, -1500.0, 400.0), Triple(800.0, 1200.0, 300.0))) {
+            for (f in powerFlows(solar, battery, home)) {
+                assertTrue(f.from in ends && f.to in ends, "$f")
+                assertTrue(f.watts > 0.0, "$f")
+            }
+        }
+        assertTrue(powerFlows(3000.0, 0.0, 3000.0).none { it.to == "grid" || it.to == "battery" })
+    }
+
     // BDD: The house power streams live
     @Test
     fun `the house power streams live`() {

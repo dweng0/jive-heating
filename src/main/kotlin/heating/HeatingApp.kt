@@ -114,9 +114,11 @@ class HeatingApp(
     val meterLabels = heating.energy.MeterLabels(store)
     val meters = heating.energy.MeterRegistry(bus, topics, clock)
     val energyHistory = heating.energy.EnergyHistory(config.dbPath)
+    /** The solar inverter and battery; nothing reports to it until the inverter is connected. */
+    val inverter = heating.energy.Inverter(changes, clock)
     val livePower = heating.energy.LivePower(
         meters, energySettings, monitoredMeters, { id -> runCatching { rooms.get(id).name }.getOrNull() },
-        energyHistory, config.timezone, changes, clock, energyAreas,
+        energyHistory, config.timezone, changes, clock, energyAreas, inverter,
     )
     val meterRecorder = heating.energy.MeterRecorder(energyHistory, meters, energySettings, monitoredMeters, clock::instant, energyAreas)
     val gasReadings = heating.gas.GasReadings(config.dbPath)
