@@ -33,6 +33,17 @@ export interface LivePower {
   areas?: AreaPower[]
   /** House W no room or device accounts for; null while watts is */
   elseWatts: number | null
+  /** Where the power goes now, between solar, battery, grid and home (older services leave it out) */
+  flows?: PowerFlow[]
+  /** Battery charge %; null without an inverter reading */
+  batteryPct?: number | null
+}
+
+export interface PowerFlow {
+  from: 'solar' | 'battery' | 'grid'
+  to: 'home' | 'battery' | 'grid'
+  /** Above 0 */
+  watts: number
 }
 
 export interface PowerBands {

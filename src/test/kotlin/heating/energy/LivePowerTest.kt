@@ -133,6 +133,30 @@ class LivePowerTest {
         }
     }
 
+    // BDD: Stopped readings fade the flows
+    @Test
+    fun `stopped readings leave live power without flows`() {
+        val t = TestHeating()
+        t.discover(meters = listOf("Main Clamp"))
+        t.api { client -> assertEquals(HttpStatusCode.OK, client.put("/api/meters/Main%20Clamp/house").status) }
+        t.meterState("Main Clamp", """{"energy":1523.4,"power":900}""")
+        t.app.inverter.report(solarWatts = 2000.0, batteryWatts = 500.0, batteryPct = 70.0)
+
+        live(t) { client ->
+            val socket = client.connect()
+            assertTrue(socket.nextMessage()["flows"]!!.jsonArray.isNotEmpty())
+            // The inverter goes quiet for two minutes while the house meter carries on: no flows, not grid-only ones.
+            t.clock.advance(Duration.ofSeconds(121))
+            t.meterState("Main Clamp", """{"energy":1523.5,"power":950}""")
+            assertTrue(socket.nextMessage()["flows"]!!.jsonArray.isEmpty())
+            // It reports again: the flows come back.
+            t.app.inverter.report(solarWatts = 2000.0, batteryWatts = 500.0, batteryPct = 70.0)
+            assertTrue(socket.nextMessage()["flows"]!!.jsonArray.isNotEmpty())
+        }
+        // A stale house meter: no flows either.
+        assertTrue(powerFlowsOrNone(houseWatts = null, inverter = null, inverterSeen = false).isEmpty())
+    }
+
     // BDD: The house power streams live
     @Test
     fun `the house power streams live`() {

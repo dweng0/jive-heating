@@ -32,6 +32,9 @@ class Inverter(private val changes: ChangeNotifier, private val clock: Clock) {
     /** The latest reading, or null when there is none from the last [LIVE_FOR]. */
     fun live(): InverterReading? = latest?.takeIf { Duration.between(it.at, clock.instant()) < LIVE_FOR }
 
+    /** Whether the inverter has ever reported: once it has, its silence means readings stopped, not "no inverter". */
+    fun seen(): Boolean = latest != null
+
     companion object {
         val LIVE_FOR: Duration = LivePower.LIVE_FOR
     }
@@ -63,6 +66,16 @@ fun powerFlows(solar: Double, battery: Double, home: Double): List<PowerFlow> {
         PowerFlow(GRID, HOME, gridToHome),
         PowerFlow(GRID, BATTERY, gridToBattery),
     ).filter { it.watts > 0.0 }
+}
+
+/**
+ * The flows for live power: none while the house reading is stale, or while an inverter that has reported before has
+ * gone quiet; grid to home only before any inverter has reported.
+ */
+fun powerFlowsOrNone(houseWatts: Double?, inverter: InverterReading?, inverterSeen: Boolean): List<PowerFlow> = when {
+    houseWatts == null -> emptyList()
+    inverter == null && inverterSeen -> emptyList()
+    else -> powerFlows(inverter?.solarWatts ?: 0.0, inverter?.batteryWatts ?: 0.0, houseWatts)
 }
 
 private const val SOLAR = "solar"

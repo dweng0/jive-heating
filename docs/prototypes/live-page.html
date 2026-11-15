@@ -997,6 +997,13 @@ function buildHouse() {
       c.type = 'checkbox'; c.checked = FX[k]; c.id = 'fx-' + k; c.onchange = () => { FX[k] = c.checked; apply(); };
       l.append(c, label); fxEl.appendChild(l);
     }
+    // a device that can't keep up (a slow phone, a kiosk, software rendering) drops to the lighter settings by itself
+    three.lighten = () => {
+      for (const k of ['grass', 'shadows', 'glow', 'clouds']) { FX[k] = false; const c = document.getElementById('fx-' + k); if (c) c.checked = false; }
+      // straight to the screen, with the renderer's own film curve, instead of the HDR chain
+      if (composer) { composer = null; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.85; scene.traverse(o => { if (o.material) [].concat(o.material).forEach(m => { m.needsUpdate = true; }); }); }
+      renderer.setPixelRatio(1); resize(); apply();
+    };
   }
   Object.assign(three, { renderer, scene, camera });
   three.frame = (t, dt) => {
@@ -1190,8 +1197,17 @@ function diagramFrame() {
 const statusEl = document.getElementById('status'), statusText = document.getElementById('statusText');
 const staleNote = document.getElementById('staleNote'), stageEl = document.getElementById('stage');
 let last = performance.now();
+const slow = { frames: 0, total: 0, done: false };   // the first frames' timing decides whether to lighten the 3D view
 function loop(t) {
-  const dt = Math.max(0, Math.min(0.1, (t - last) / 1000)); last = t;
+  const raw = (t - last) / 1000;
+  const dt = Math.max(0, Math.min(0.1, raw)); last = t;
+  if (!slow.done && gl && viewIdx === 0) {
+    slow.frames++; slow.total += raw;
+    if (slow.frames > 3 && (slow.total > 2.5 || slow.frames >= 45)) {
+      slow.done = true;
+      if (slow.total / slow.frames > 0.055 && three.lighten) three.lighten();   // under ~18 frames a second
+    }
+  }
   const ease = 1 - Math.exp(-dt / 0.55);       // ~1.5 s to settle on a new reading
   alive += ((stale ? 0.15 : 1) - alive) * (1 - Math.exp(-dt / 0.8));
   dark += (SCEN[scenKey].dark - dark) * (1 - Math.exp(-dt / 1.2));

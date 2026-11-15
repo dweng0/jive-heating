@@ -13,6 +13,7 @@ import { RuleNewPage } from '@/pages/RuleNew'
 import { RulesPage } from '@/pages/Rules'
 import { EnergyManagePage } from '@/pages/EnergyManage'
 import { EnergyPage } from '@/pages/Energy'
+import { LivePage } from '@/pages/Live'
 import { EverythingElseEnergyPage, RoomEnergyPage } from '@/pages/RoomEnergy'
 import { AreaEnergyPage } from '@/pages/AreaEnergy'
 import { GroupPage } from '@/pages/GroupPage'
@@ -56,6 +57,7 @@ export default function App() {
             <Routes>
               <Route path="/" element={<RoomsPage />} />
               <Route path="/dashboard" element={auth.me.admin ? <DashboardPage /> : <Navigate to="/" replace />} />
+              <Route path="/live" element={auth.me.admin || auth.me.energy ? <LivePage /> : <Navigate to="/" replace />} />
               <Route path="/energy" element={auth.me.admin || auth.me.energy ? <EnergyPage /> : <Navigate to="/" replace />} />
               <Route path="/energy/manage" element={auth.me.admin ? <EnergyManagePage /> : <Navigate to="/" replace />} />
               <Route path="/energy/rooms/:id" element={auth.me.admin ? <RoomEnergyPage /> : <Navigate to="/" replace />} />
