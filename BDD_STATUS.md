@@ -1,6 +1,6 @@
 # BDD Status
 
-Checked 483 scenario(s) across 150 test file(s).
+Checked 483 scenario(s) across 153 test file(s).
 
 
 ## Feature: Service foundation
@@ -638,33 +638,21 @@ Checked 483 scenario(s) across 150 test file(s).
 ## Feature: Live view
 
 - [x] Live power carries the flows between sources and the home
-- [ ] UNCOVERED: Solar serves the home first, then the battery, then the grid
-- [ ] UNCOVERED: The battery charges from the grid overnight
-- [ ] UNCOVERED: Before the inverter is connected only the grid shows
-- [ ] UNCOVERED: Stopped readings fade the flows
+- [x] Solar serves the home first, then the battery, then the grid
+- [x] The battery charges from the grid overnight
+- [x] Before the inverter is connected only the grid shows
+- [x] Stopped readings fade the flows
 - [x] The Live tab shows the house with its flows
-- [ ] UNCOVERED: Readings ease instead of jumping
-- [ ] UNCOVERED: The Live tab says where the home's power came from
-- [ ] UNCOVERED: Effects can be turned down on a slow phone
+- [x] Readings ease instead of jumping
+- [x] The Live tab says where the home's power came from
+- [x] Effects can be turned down on a slow phone
 
 ## Feature: App updates
 
 - [x] The service says which app version it holds
-- [ ] UNCOVERED: The app offers a newer version
-- [ ] UNCOVERED: Updating downloads and installs the new version
-- [ ] UNCOVERED: Release builds are signed with the stable key
+- [x] The app offers a newer version
+- [x] Updating downloads and installs the new version
+- [x] Release builds are signed with the stable key
 
 ---
-**473/483 scenarios covered.**
-
-10 scenario(s) need tests:
-- Solar serves the home first, then the battery, then the grid
-- The battery charges from the grid overnight
-- Before the inverter is connected only the grid shows
-- Stopped readings fade the flows
-- Readings ease instead of jumping
-- The Live tab says where the home's power came from
-- Effects can be turned down on a slow phone
-- The app offers a newer version
-- Updating downloads and installs the new version
-- Release builds are signed with the stable key
+**483/483 scenarios covered.**
