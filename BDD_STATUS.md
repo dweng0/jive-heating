@@ -666,14 +666,13 @@ Checked 493 scenario(s) across 158 test file(s).
 - [x] Live power carries every meter's watts
 - [x] League table ranks items by their live watts
 - [x] League rows swap places as readings arrive
-- [ ] UNCOVERED: Toggling the league table to Rooms ranks places instead of items
+- [x] Toggling the league table to Rooms ranks places instead of items
 - [ ] UNCOVERED: League row for a meter with no job opens its settings
 - [ ] UNCOVERED: League table greys out when readings stop
 
 ---
-**490/493 scenarios covered.**
+**491/493 scenarios covered.**
 
-3 scenario(s) need tests:
-- Toggling the league table to Rooms ranks places instead of items
+2 scenario(s) need tests:
 - League row for a meter with no job opens its settings
 - League table greys out when readings stop
