@@ -3434,13 +3434,12 @@ Engineering rules (apply to every scenario):
             Then the House and Diagram buttons sit at the top beside the "Live" title, above the picture
             And they are large, with the chosen one filled in the app's orange, so it is clear the view can be swapped
 
-        Scenario: The 3D house fades into the app's background
+        Scenario: The 3D house sits on the app's background in a rounded frame
             Given the phone or browser is set to light mode
             When someone with energy access opens the Live tab on the 3D house
             Then the Live page has the app's own background colour, not a dark card
-            And each edge of the picture fades to transparent over its last few percent, a plain gradient with no
-                oval or darkened corners, so the house sits on the page with no box around it
-            And in dark mode the page and the fade are the app's dark background instead
+            And the picture sits in a frame with rounded corners, like the diagram, with no fading at its edges
+            And in dark mode the page is the app's dark background instead
             And the panels, labels and diagram stay dark, so their colours read the same in either mode
 
     Feature: App updates

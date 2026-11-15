@@ -95,9 +95,9 @@ test.describe('on a phone', () => {
   })
 })
 
-// BDD: The 3D house fades into the app's background
+// BDD: The 3D house sits on the app's background in a rounded frame
 for (const [scheme, bg] of [['light', 'rgb(250, 247, 242)'], ['dark', 'rgb(23, 19, 15)']] as const) {
-  test(`the house fades into the ${scheme} background`, async ({ page }) => {
+  test(`the house sits on the ${scheme} background in a rounded frame`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme })
     await serve(page)
     await page.goto('/live')
@@ -111,18 +111,21 @@ for (const [scheme, bg] of [['light', 'rgb(250, 247, 242)'], ['dark', 'rgb(23, 1
         stage: css('#stage').backgroundColor,
         stageBorder: css('#stage').borderTopWidth,
         mask: gl.maskImage || gl.getPropertyValue('-webkit-mask-image'),
+        radius: css('#paneHouse').borderTopLeftRadius,
+        diagramRadius: css('#paneDiagram').borderTopLeftRadius,
+        clips: css('#paneHouse').overflow,
         panel: css('.live-page .panel').backgroundColor,
       }
     })
     expect(look.body).toBe(bg)
     expect(look.page).toBe(bg)
-    // No box: the stage shows the page through, and the picture's edges fade out to it.
     expect(look.stage).toBe('rgba(0, 0, 0, 0)')
     expect(look.stageBorder).toBe('0px')
-    // A plain gradient at each edge, not an oval.
-    expect(look.mask).toContain('linear-gradient')
-    expect(look.mask).not.toContain('radial-gradient')
-    expect(look.mask).toMatch(/transparent|rgba\(0, 0, 0, 0\)/)
+    // A rounded frame like the diagram's, and no fading at the edges.
+    expect(look.radius).toBe('20px')
+    expect(look.radius).toBe(look.diagramRadius)
+    expect(look.clips).toBe('hidden')
+    expect(look.mask).toBe('none')
     // The panels stay dark in both modes.
     expect(look.panel).toBe('rgb(17, 23, 31)')
   })
