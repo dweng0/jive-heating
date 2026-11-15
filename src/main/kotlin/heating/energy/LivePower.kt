@@ -21,6 +21,14 @@ data class RoomPower(val room: String, val name: String, val watts: Double?)
 @Serializable
 data class AreaPower(val area: String, val name: String, val watts: Double?)
 
+/**
+ * Every meter but the house meter, by name, for the live league table: its label (else its name), live watts (null
+ * without a live reading), the room or energy area it belongs to, and its job: "area" (an area's whole-area meter),
+ * "monitored" (a monitored device) or null (no job yet).
+ */
+@Serializable
+data class ItemPower(val meter: String, val name: String, val watts: Double?, val room: String? = null, val area: String? = null, val job: String? = null)
+
 /** A monitored device in no room or area, and its live power; null while it is offline. */
 @Serializable
 data class DevicePower(val meter: String, val watts: Double?)
@@ -43,6 +51,10 @@ data class LivePowerView(
     val areas: List<AreaPower> = emptyList(),
     val flows: List<PowerFlow> = emptyList(),
     val batteryPct: Double? = null,
+    /** The weather outside as the Live picture draws it; null without a weather source or a recent reading. */
+    val weather: heating.weather.LiveWeather? = null,
+    /** Every meter but the house meter, so nothing using power goes unseen. */
+    val items: List<ItemPower> = emptyList(),
 )
 
 /** Where the dial turns amber ([green]: the typical overnight load) and red ([red]: the 90th percentile). */
@@ -89,6 +101,9 @@ class LivePower(
     private val clock: Clock,
     private val areas: EnergyAreas? = null,
     private val inverter: Inverter? = null,
+    private val weather: () -> heating.weather.LiveWeather? = { null },
+    private val label: (String) -> String = { it },
+    private val ignored: (Meter) -> Boolean = { false },
 ) {
     @Volatile private var staleTold = false
     private val recent = ArrayDeque<Pair<Instant, Double?>>()
@@ -104,8 +119,8 @@ class LivePower(
                     }
                     changes.emit(Change.LivePowerChanged)
                 }
-                in monitored -> changes.emit(Change.LivePowerChanged)
-                else -> if (areas?.measuredBy(meter.name) != null) changes.emit(Change.LivePowerChanged)
+                // Every meter is in the league table, with a job or not.
+                else -> changes.emit(Change.LivePowerChanged)
             }
         }
     }
@@ -137,6 +152,8 @@ class LivePower(
             areas = areaPower,
             flows = powerFlowsOrNone(watts, inv, inverter?.seen() == true),
             batteryPct = inv?.batteryPct,
+            weather = weather(),
+            items = items(),
         )
     }
 
@@ -193,6 +210,18 @@ class LivePower(
         val all = known.map { it.second }.sorted()
         val median = if (nights.size % 2 == 1) nights[nights.size / 2] else (nights[nights.size / 2 - 1] + nights[nights.size / 2]) / 2
         return PowerBands(green = median, red = all[ceil(0.9 * all.size).toInt() - 1])
+    }
+
+    private fun items(): List<ItemPower> {
+        val house = settings.get().electricityMeter
+        return meters.all().filter { it.name != house && !ignored(it) }.map { m ->
+            val area = areas?.measuredBy(m.name)
+            when {
+                area != null -> ItemPower(m.name, label(m.name), plugWatts(m.name), area = area, job = "area")
+                m.name in monitored -> ItemPower(m.name, label(m.name), plugWatts(m.name), monitored.roomOf(m.name), monitored.areaOf(m.name), "monitored")
+                else -> ItemPower(m.name, label(m.name), plugWatts(m.name))
+            }
+        }.sortedBy { it.name.lowercase() }
     }
 
     private fun plugWatts(name: String): Double? = meters[name]?.takeIf { meters.offlineSince(it) == null }?.power

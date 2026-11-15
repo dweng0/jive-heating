@@ -42,8 +42,26 @@ data class Config(
     /** How long Zigbee2MQTT discovery listens for bridges, and how long it keeps listening after the first one. */
     val discoverWait: Duration = Duration.ofSeconds(5),
     val discoverGrace: Duration = Duration.ofMillis(500),
+    /** Where the Live picture's weather comes from; null for none (a clear sky). */
+    val weather: WeatherSettings? = null,
 ) {
+    /** The weather adapter [weather] names, or null for none. */
+    fun weatherSource(): heating.weather.WeatherSource? = when (val w = weather) {
+        null -> null
+        is WeatherSettings.HomeAssistant -> heating.weather.HomeAssistantWeather(w.url, w.token, w.entity)
+    }
+
     companion object {
+        /** WEATHER_SOURCE picks the adapter; each adapter reads its own settings and names any that are missing. */
+        private fun weatherFrom(env: Map<String, String>): WeatherSettings? {
+            fun need(name: String) = env[name]?.takeIf { it.isNotBlank() } ?: throw IllegalStateException("WEATHER_SOURCE needs $name")
+            return when (val source = env["WEATHER_SOURCE"]?.takeIf { it.isNotBlank() }?.lowercase()) {
+                null, "none" -> null
+                "homeassistant" -> WeatherSettings.HomeAssistant(need("HA_URL"), need("HA_TOKEN"), need("HA_WEATHER_ENTITY"))
+                else -> throw IllegalStateException("WEATHER_SOURCE \"$source\" is not known; use homeassistant or none")
+            }
+        }
+
         fun fromEnv(env: Map<String, String> = System.getenv()): Config {
             val token = env["HEATING_API_TOKEN"]?.takeIf { it.isNotBlank() }
                 ?: throw IllegalStateException("HEATING_API_TOKEN must be set")
@@ -74,7 +92,16 @@ data class Config(
                 webPushContact = env["WEBPUSH_CONTACT"]?.takeIf { it.isNotBlank() }?.also {
                     check(it.startsWith("mailto:") || it.startsWith("https://")) { "WEBPUSH_CONTACT must be a mailto: or https: address" }
                 },
+                weather = weatherFrom(env),
             )
         }
+    }
+}
+
+/** The settings for each weather adapter. Add a subtype (and a WEATHER_SOURCE value) for a new source. */
+sealed interface WeatherSettings {
+    /** A Home Assistant weather entity, read with a long-lived access token. */
+    data class HomeAssistant(val url: String, val token: String, val entity: String) : WeatherSettings {
+        override fun toString() = "HomeAssistant(url=$url, entity=$entity)"   // never logs the token
     }
 }

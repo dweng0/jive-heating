@@ -37,6 +37,15 @@ export interface LivePower {
   flows?: PowerFlow[]
   /** Battery charge %; null without an inverter reading */
   batteryPct?: number | null
+  /** The weather outside as the Live picture draws it; null without a weather source or a recent reading */
+  weather?: LiveWeather | null
+}
+
+export interface LiveWeather {
+  look: 'clear' | 'cloudy' | 'overcast' | 'rain' | 'snow' | 'frost'
+  temperatureC?: number | null
+  /** When it was observed */
+  at: string
 }
 
 export interface PowerFlow {

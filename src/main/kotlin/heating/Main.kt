@@ -32,6 +32,7 @@ fun main() {
         },
         push = config.fcmServiceAccountFile?.let { FcmPushSender.fromJson(File(it).readText()) } ?: PushSender.None,
         gasMeter = config.brightUsername?.let { heating.gas.GlowmarktGasMeter(it, config.brightPassword!!) },
+        weatherSource = config.weatherSource(),
     )
     heating.start()
 

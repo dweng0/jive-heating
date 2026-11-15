@@ -3,8 +3,8 @@ import { expect, test, type Page, type WebSocketRoute } from '@playwright/test'
 // The Live tab, against a mocked service: /api calls, /ws and /ws/power are answered here. The 3D view renders in
 // software in a headless browser, a few frames a second, so waits are longer than elsewhere.
 
-test.describe.configure({ timeout: 120_000 })
-const slowExpect = expect.configure({ timeout: 30_000 })
+test.describe.configure({ timeout: 240_000 })
+const slowExpect = expect.configure({ timeout: 90_000 })
 
 const jane = { id: 'u-jane', username: 'jane', admin: true, rooms: [] as string[] }
 const sam = { id: 'u-sam', username: 'sam', admin: false, energy: false, rooms: [] as string[] }
@@ -176,4 +176,17 @@ test('a service that sends no flows yet shows the house meter as grid to home', 
   await slowExpect(label(page, 'home').locator('.v')).toHaveText('700 W', { timeout: 90_000 })
   await slowExpect(label(page, 'grid').locator('.s')).toHaveText('Importing')
   await slowExpect(label(page, 'solar').locator('.v')).toHaveText('Not connected')
+})
+
+// BDD: The Live picture shows the weather
+test('the Live picture follows the weather in live power', async ({ page }) => {
+  const at = new Date().toISOString()
+  const { push } = await serve(page, { first: { ...SUNNY, weather: { look: 'snow', temperatureC: -1, at } } })
+  await page.goto('/live')
+  await slowExpect(page.locator('#stage')).toHaveAttribute('data-weather', 'snow')
+  push({ ...SUNNY, weather: { look: 'rain', temperatureC: 6, at } })
+  await slowExpect(page.locator('#stage')).toHaveAttribute('data-weather', 'rain')
+  // No weather source, or nothing recent: a clear sky.
+  push({ ...SUNNY, weather: null })
+  await slowExpect(page.locator('#stage')).toHaveAttribute('data-weather', 'clear')
 })

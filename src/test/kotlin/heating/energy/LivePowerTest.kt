@@ -359,8 +359,11 @@ class LivePowerTest {
             t.meterState("TV Plug", """{"energy":1.0,"power":350}""")
             val next = socket.nextMessage()
             assertEquals(400.0, next["rooms"]!!.jsonArray[0].jsonObject["watts"]!!.jsonPrimitive.double, 1e-9)
-            // An unmonitored plug's reading is not.
+            // An unmonitored plug's reading is pushed for the league table, but it is in no room card or device list.
             t.meterState("Spare Plug", """{"energy":1.0,"power":5}""")
+            val spare = socket.nextMessage()
+            assertEquals(400.0, spare["rooms"]!!.jsonArray[0].jsonObject["watts"]!!.jsonPrimitive.double, 1e-9)
+            assertEquals(listOf("Fridge Plug"), spare["devices"]!!.jsonArray.map { it.jsonObject["meter"]!!.jsonPrimitive.content })
             t.meterState("Main Clamp", """{"energy":1.0,"power":2100}""")
             assertEquals(2100.0, socket.nextMessage()["watts"]!!.jsonPrimitive.double, 1e-9)
         }

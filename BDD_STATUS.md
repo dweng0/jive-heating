@@ -1,6 +1,6 @@
 # BDD Status
 
-Checked 481 scenario(s) across 154 test file(s).
+Checked 493 scenario(s) across 156 test file(s).
 
 
 ## Feature: Service foundation
@@ -652,5 +652,27 @@ Checked 481 scenario(s) across 154 test file(s).
 - [x] Updating downloads and installs the new version
 - [x] Release builds are signed with the stable key
 
+## Feature: Live weather
+
+- [x] The service asks the weather source every five minutes
+- [x] A reading becomes the look the Live picture draws
+- [x] Home Assistant is the first weather source
+- [x] Live power carries the weather
+- [x] A failing weather source does not stop live power
+- [x] The Live picture shows the weather
+
+## Feature: Live league table
+
+- [x] Live power carries every meter's watts
+- [ ] UNCOVERED: Items are ranked by their live watts
+- [x] Rows move up and down as readings arrive
+- [ ] UNCOVERED: The table can rank rooms instead of items
+- [x] A meter with no job can be given one from the table
+- [x] The table says when there is nothing live
+
 ---
-**481/481 scenarios covered.**
+**491/493 scenarios covered.**
+
+2 scenario(s) need tests:
+- Items are ranked by their live watts
+- The table can rank rooms instead of items

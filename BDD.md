@@ -3517,7 +3517,7 @@ Engineering rules (apply to every scenario):
             When admin "jane" opens the live power channel at /ws/power
             Then the message has items, one per meter except the house meter, each with meter, name (its label, else
                 its meter name), watts (null while it has no live reading), room, area and job
-            And job is "area" for a whole-area meter, "device" for a monitored device and null for a meter with no job
+            And job is "area" for a whole-area meter, "monitored" for a monitored device and null for a meter with no job
             And "Garage Clamp" is included with job null, so a clamp that has not been given a job is still seen
 
         Scenario: Items are ranked by their live watts

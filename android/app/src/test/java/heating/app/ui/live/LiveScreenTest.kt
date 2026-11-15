@@ -12,6 +12,7 @@ import kotlin.test.assertTrue
 class LiveScreenTest {
 
     // BDD: The Live tab shows the house with its flows
+    // BDD: The Live picture shows the weather
     @Test
     fun `the Live tab shows the same house view as the web app, fed by the app's own connection`() {
         // A Live tab for admins and energy access, beside Energy; none for other members.
@@ -25,6 +26,8 @@ class LiveScreenTest {
         assertTrue(script.contains("\"batteryPct\":64.0"), script)
         // Stopped (no flows) must reach the page as an empty list, not be left out.
         assertTrue(pushScript(LivePower(watts = 950.0)).contains("\"flows\":[]"))
+        // The weather reaches the page untouched.
+        assertTrue(pushScript(LivePower(watts = 500.0, weather = heating.app.data.LiveWeather("snow", -1.0, "2026-11-15T09:00:00Z"))).contains("\"weather\":{\"look\":\"snow\""))
         assertEquals("window.liveFeed && window.liveFeed.connected(false)", connectedScript(false))
 
         // The view ships inside the app (built by `npm run build:live-embed`), so it works on any network.

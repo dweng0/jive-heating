@@ -74,6 +74,10 @@ class HeatingApp(
     private val gasMeter: heating.gas.GasMeter? = null,
     /** Where gas readings are fetched, off the tick's thread. */
     private val gasExecutor: Executor = Executors.newSingleThreadExecutor { Thread(it, "gas").apply { isDaemon = true } },
+    /** The weather outside for the Live picture (the adapter WEATHER_SOURCE names); none keeps a clear sky. */
+    weatherSource: heating.weather.WeatherSource? = null,
+    /** Where the weather is fetched, off the tick's thread. */
+    weatherExecutor: Executor = Executors.newSingleThreadExecutor { Thread(it, "weather").apply { isDaemon = true } },
 ) {
     /** Connection settings from the database (seeded from the environment on a first start); only with a [heating.mqtt.ReconnectingMqttBus]. */
     private val savedConnection = (bus as? heating.mqtt.ReconnectingMqttBus)?.let { heating.setup.ConnectionSettings(store, config) }
@@ -116,9 +120,11 @@ class HeatingApp(
     val energyHistory = heating.energy.EnergyHistory(config.dbPath)
     /** The solar inverter and battery; nothing reports to it until the inverter is connected. */
     val inverter = heating.energy.Inverter(changes, clock)
+    val weather = heating.weather.Weather(weatherSource, weatherExecutor, clock, changes)
     val livePower = heating.energy.LivePower(
         meters, energySettings, monitoredMeters, { id -> runCatching { rooms.get(id).name }.getOrNull() },
-        energyHistory, config.timezone, changes, clock, energyAreas, inverter,
+        energyHistory, config.timezone, changes, clock, energyAreas, inverter, weather::now,
+        { meterLabels.of(it) }, { it.name in ignoredDevices || it.device in ignoredDevices },
     )
     val meterRecorder = heating.energy.MeterRecorder(energyHistory, meters, energySettings, monitoredMeters, clock::instant, energyAreas)
     val gasReadings = heating.gas.GasReadings(config.dbPath)
@@ -218,6 +224,7 @@ class HeatingApp(
         gasMeter?.let { periodic += heating.gas.GasSync(it, gasReadings, gasExecutor).tick }
         priceSync?.let { periodic += it.tick }
         periodic += livePower.tick
+        periodic += weather.tick
         periodic += areaAlerts.tick
         events.start()
         rules.start(bus)

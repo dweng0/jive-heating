@@ -52,6 +52,7 @@ class TestHeating(
     kumaPushUrl: String? = null,
     /** The smart gas meter; none keeps gas an estimate. Fetching is synchronous in tests. */
     private val gasMeter: heating.gas.GasMeter? = null,
+    private val weatherSource: heating.weather.WeatherSource? = null,
     /** Pretend brokers; when given the service connects through a swappable connection (connection setup) instead of [bus]. */
     val brokers: FakeBrokers? = null,
     configure: (Config) -> Config = { it },
@@ -120,7 +121,7 @@ class TestHeating(
 
     private fun build() = HeatingApp(
         config, brokers?.let { heating.mqtt.ReconnectingMqttBus(it, clock::instant).also { l -> link = l } } ?: bus, SqliteStore(dbPath), clock, httpGet = { httpSent += it }, push = push, pushExecutor = { it.run() },
-        webPushHttp = WebPushHttp(::webPushPost), gasMeter = gasMeter, gasExecutor = { it.run() },
+        webPushHttp = WebPushHttp(::webPushPost), gasMeter = gasMeter, gasExecutor = { it.run() }, weatherSource = weatherSource, weatherExecutor = { it.run() },
     )
 
     /**

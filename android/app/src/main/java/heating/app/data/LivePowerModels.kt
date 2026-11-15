@@ -27,7 +27,13 @@ data class LivePower(
     val flows: List<PowerFlow> = emptyList(),
     /** Battery charge %; null without an inverter reading. */
     val batteryPct: Double? = null,
+    /** The weather outside as the Live picture draws it; null without a weather source or a recent reading. */
+    val weather: LiveWeather? = null,
 )
+
+/** The weather look (clear, cloudy, overcast, rain, snow or frost), the temperature and when it was observed. */
+@Serializable
+data class LiveWeather(val look: String, val temperatureC: Double? = null, val at: String)
 
 /** Power moving from [from] to [to] (solar, battery, grid or home) right now. */
 @Serializable

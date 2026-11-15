@@ -19,6 +19,8 @@ const THREE = { ...THREE_CORE, Sky, EffectComposer, RenderPass, ShaderPass, Unre
 export interface LiveFeed {
   push(r: LiveReading): void
   setStale(stale: boolean): void
+  /** The weather look from live power (clear, cloudy, overcast, rain, snow or frost); anything else is clear. */
+  setWeather(look: string | null | undefined): void
   stop(): void
 }
 
@@ -1063,6 +1065,7 @@ raf = requestAnimationFrame(loop);
 return {
   push(r) { reading = r; lastAt = Date.now(); renderSide(); },
   setStale(v) { stale = v; },
+  setWeather(look) { wxKey = WX[look] ? look : 'clear'; const st = document.getElementById('stage'); if (st) st.dataset.weather = wxKey; },
   stop() {
     stopped = true; cancelAnimationFrame(raf); for (const c of cleanups) c()
     for (const id of ['labels', 'fx', 'svgwrap']) { const el = document.getElementById(id); if (el) el.innerHTML = '' }

@@ -34,6 +34,7 @@ export function LiveView({ source }: { source: PowerSource }) {
     const stopPower = source(
       (p) => {
         latest = p
+        live.setWeather(p.weather?.look)
         lastAt = Date.now()
         if (!stopped(p)) live.push(toLiveReading(p))
         judge()
