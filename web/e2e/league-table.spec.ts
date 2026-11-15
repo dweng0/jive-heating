@@ -31,8 +31,8 @@ const today = {
 
 type Item = { meter: string; name: string; watts: number | null; room?: string | null; area?: string | null; job?: string | null }
 
-function live(watts: number | null, items: Item[]) {
-  return { watts, at: new Date().toISOString(), rooms: [], devices: [], elseWatts: null, areas: [], items }
+function live(watts: number | null, items: Item[], places: { rooms?: object[]; areas?: object[] } = {}) {
+  return { watts, at: new Date().toISOString(), rooms: places.rooms ?? [], devices: [], elseWatts: null, areas: places.areas ?? [], items }
 }
 
 async function serve(page: Page, first: object) {
@@ -139,4 +139,42 @@ test('league rows slide past each other, count to new figures, flash their share
   await expect(names).toHaveText(['Oven', 'Kettle', 'Everything else'])
   ws.push(kitchen(2900, 1000))
   await expect(rows(page).filter({ hasText: 'Kettle' }).getByTestId('league-share')).toHaveAttribute('data-flash', 'down')
+})
+
+// BDD: Toggling the league table to Rooms ranks places instead of items
+test('toggling the league table to Rooms ranks rooms, areas and devices in neither, leaves out meters with no job, and is remembered', async ({ page }) => {
+  await serve(
+    page,
+    live(
+      6000,
+      [
+        { meter: 'Kettle Plug', name: 'Kettle', watts: 2000, room: 'kitchen', job: 'monitored' },
+        { meter: 'Toaster Plug', name: 'Toaster', watts: 800, room: 'kitchen', job: 'monitored' },
+        { meter: 'Shower Clamp', name: 'Shower', watts: 2500, area: 'bathroom', job: 'area' },
+        // Inside the bathroom's clamp already, so not counted again.
+        { meter: 'Fan Plug', name: 'Fan', watts: 40, area: 'bathroom', job: 'monitored' },
+        { meter: 'Fridge Plug', name: 'Fridge', watts: 90, job: 'monitored' },
+        { meter: 'Garage Clamp', name: 'Garage Clamp', watts: 400, job: null },
+      ],
+      { rooms: [{ room: 'kitchen', name: 'Kitchen', watts: 2800 }], areas: [{ area: 'bathroom', name: 'Bathroom', watts: 2500 }] },
+    ),
+  )
+  await page.goto('/energy')
+  const table = page.getByTestId('league-table')
+  const items = table.getByRole('button', { name: 'Items' })
+  const placesBtn = table.getByRole('button', { name: 'Rooms' })
+  await expect(items).toHaveAttribute('aria-pressed', 'true')
+  await expect(rows(page).getByTestId('league-name')).toContainText(['Shower', 'Kettle', 'Toaster'])
+
+  await placesBtn.click()
+  await expect(placesBtn).toHaveAttribute('aria-pressed', 'true')
+  // The garage clamp has no job, so it is in no place: its 400 W sits in everything else.
+  await expect(rows(page).getByTestId('league-name')).toHaveText(['Kitchen', 'Bathroom', 'Not in a room', 'Everything else'])
+  await expect(rows(page).getByTestId('league-watts')).toHaveText(['2.80 kW', '2.50 kW', '90 W', '610 W'])
+  await expect(rows(page).getByTestId('league-share')).toHaveText(['47%', '42%', '2%', '10%'])
+
+  // Remembered on this device.
+  await page.reload()
+  await expect(page.getByTestId('league-table').getByRole('button', { name: 'Rooms' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(rows(page).getByTestId('league-name')).toHaveText(['Kitchen', 'Bathroom', 'Not in a room', 'Everything else'])
 })

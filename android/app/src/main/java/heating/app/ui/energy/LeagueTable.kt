@@ -14,6 +14,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -25,6 +28,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.composed
+import androidx.compose.ui.platform.LocalContext
+import android.content.Context
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onPlaced
@@ -64,6 +69,9 @@ private var SemanticsPropertyReceiver.leagueFlash by LeagueFlash
 private const val MOVE_MS = 500
 /** How long a share stays green or red after it changes. */
 private const val FLASH_MS = 700L
+/** Where this device remembers whether the table shows Items or Rooms. */
+private const val LEAGUE_PREFS = "league"
+private const val VIEW_KEY = "view"
 
 /**
  * What is using power right now, biggest first: a row per meter, with a bar behind it as long as its share of the house.
@@ -71,7 +79,10 @@ private const val FLASH_MS = 700L
  */
 @Composable
 fun LeagueTable(live: LivePower?, now: () -> Long = { SystemClock.uptimeMillis() }) {
-    val rows = leagueRows(live)
+    // Items or Rooms, remembered on this device.
+    val prefs = LocalContext.current.getSharedPreferences(LEAGUE_PREFS, Context.MODE_PRIVATE)
+    var view by remember { mutableStateOf(if (prefs.getString(VIEW_KEY, null) == "rooms") LeagueView.ROOMS else LeagueView.ITEMS) }
+    val rows = leagueRows(live, view)
     val desired = rows.map { it.key }
     val placing = remember { arrayOf(Placing()) }
     var tick by remember { mutableIntStateOf(0) }
@@ -88,7 +99,22 @@ fun LeagueTable(live: LivePower?, now: () -> Long = { SystemClock.uptimeMillis()
     val slides = remember { mutableMapOf<String, Slide>() }
     Card(Modifier.fillMaxWidth().testTag("league-table")) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("Using power now", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 4.dp))
+            Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Using power now", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                SingleChoiceSegmentedButtonRow {
+                    LeagueView.entries.forEachIndexed { i, v ->
+                        SegmentedButton(
+                            selected = view == v,
+                            onClick = {
+                                view = v
+                                prefs.edit().putString(VIEW_KEY, if (v == LeagueView.ROOMS) "rooms" else "items").apply()
+                            },
+                            shape = SegmentedButtonDefaults.itemShape(i, LeagueView.entries.size),
+                            modifier = Modifier.testTag(if (v == LeagueView.ROOMS) "league-rooms" else "league-items"),
+                        ) { Text(if (v == LeagueView.ROOMS) "Rooms" else "Items") }
+                    }
+                }
+            }
             order.forEach { k -> byKey[k]?.let { row -> key(k) { LeagueRowView(row, slides.getOrPut(k) { Slide() }) } } }
         }
     }

@@ -7,6 +7,8 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
@@ -151,5 +153,49 @@ class LeagueTableTest {
         compose.runOnIdle { live.value = kitchen(2900.0, 1000.0) }
         step(200)
         share("Kettle").assert(SemanticsMatcher.expectValue(LeagueFlash, "down"))
+    }
+
+    private val places = LivePower(
+        watts = 6000.0,
+        rooms = listOf(heating.app.data.RoomPower("kitchen", "Kitchen", 2800.0)),
+        areas = listOf(heating.app.data.AreaPower("bathroom", "Bathroom", 2500.0)),
+        items = listOf(
+            ItemPower("Kettle Plug", "Kettle", 2000.0, room = "kitchen", job = "monitored"),
+            ItemPower("Toaster Plug", "Toaster", 800.0, room = "kitchen", job = "monitored"),
+            ItemPower("Shower Clamp", "Shower", 2500.0, area = "bathroom", job = "area"),
+            // Inside the bathroom's clamp already, so not counted again.
+            ItemPower("Fan Plug", "Fan", 40.0, area = "bathroom", job = "monitored"),
+            ItemPower("Fridge Plug", "Fridge", 90.0, job = "monitored"),
+            ItemPower("Garage Clamp", "Garage Clamp", 400.0),
+        ),
+    )
+
+    // BDD: Toggling the league table to Rooms ranks places instead of items
+    @Test
+    fun `toggling the league table to Rooms ranks rooms, areas and devices in neither, leaves out meters with no job, and is remembered`() {
+        val rooms = leagueRows(places, LeagueView.ROOMS)
+        // The garage clamp has no job, so it is in no place: its 400 W sits in everything else.
+        assertEquals(listOf("Kitchen", "Bathroom", "Not in a room", "Everything else"), rooms.map { it.name })
+        assertEquals(listOf("2.80 kW", "2.50 kW", "90 W", "610 W"), rooms.map { leagueWatts(it) })
+        assertEquals(listOf("47%", "42%", "2%", "10%"), rooms.map { leagueShare(it) })
+        // An area whose whole-area meter has no reading adds up its devices instead.
+        val unmeasured = places.copy(items = places.items.map { if (it.meter == "Shower Clamp") it.copy(watts = null) else it })
+        assertEquals(40.0, leagueRows(unmeasured, LeagueView.ROOMS).first { it.name == "Bathroom" }.watts)
+
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        context.getSharedPreferences("league", android.content.Context.MODE_PRIVATE).edit().clear().commit()
+        val shown = mutableStateOf(true)
+        compose.setContent { MaterialTheme { if (shown.value) LeagueTable(places) } }
+        compose.onNodeWithTag("league-items").assertIsSelected()
+        compose.onNodeWithText("Shower").assertIsDisplayed()
+        // A tap; Robolectric does not deliver touches to Material 3 segmented buttons, so the click action is used.
+        compose.onNodeWithTag("league-rooms").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+        compose.onNodeWithTag("league-rooms").assertIsSelected()
+        assertEquals(listOf("Kitchen", "Bathroom", "Not in a room", "Everything else"), shownNames())
+        // Remembered on this device: the table comes back showing Rooms.
+        compose.runOnIdle { shown.value = false }
+        compose.runOnIdle { shown.value = true }
+        compose.onNodeWithTag("league-rooms").assertIsSelected()
+        assertEquals(listOf("Kitchen", "Bathroom", "Not in a room", "Everything else"), shownNames())
     }
 }

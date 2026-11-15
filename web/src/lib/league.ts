@@ -17,39 +17,104 @@ export interface LeagueRow {
   item?: ItemPower
 }
 
+/** Whether the table ranks items (each meter) or rooms (each place). */
+export type LeagueView = 'items' | 'rooms'
+
+/** Something the table can rank: an item or a place, with its live watts. */
+interface Entry {
+  key: string
+  name: string
+  watts: number | null
+  item?: ItemPower
+}
+
+/**
+ * Ranks [entries] biggest first: those using power, then "Everything else" ([rest], when there is a house reading),
+ * then those under 5 W as "Off" in name order, then those with no reading.
+ */
+function rank(entries: Entry[], house: number | null, rest: number | null): LeagueRow[] {
+  const byName = (a: Entry, b: Entry) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+  const shareOf = (w: number) => (house != null && house > 0 ? Math.min(1, w / house) : null)
+  const row = (e: Entry, state: LeagueState): LeagueRow => ({
+    key: e.key,
+    name: e.name,
+    watts: e.watts,
+    share: state === 'on' && e.watts != null ? shareOf(e.watts) : null,
+    state,
+    item: e.item,
+  })
+  const on = entries.filter((e) => e.watts != null && e.watts >= OFF_UNDER_W).sort((a, b) => b.watts! - a.watts! || byName(a, b))
+  const off = entries.filter((e) => e.watts != null && e.watts < OFF_UNDER_W).sort(byName)
+  const none = entries.filter((e) => e.watts == null).sort(byName)
+  const rows = on.map((e) => row(e, 'on'))
+  if (rest != null) rows.push({ key: 'everything-else', name: 'Everything else', watts: rest, share: shareOf(rest), state: 'else' })
+  return [...rows, ...off.map((e) => row(e, 'off')), ...none.map((e) => row(e, 'no-reading'))]
+}
+
+/** Areas whose whole-area meter is reading: their monitored devices are already inside that meter's figure. */
+function measuredAreas(items: ItemPower[]): Set<string> {
+  return new Set(items.filter((i) => i.job === 'area' && i.watts != null && i.area).map((i) => i.area!))
+}
+
+/** The house use none of [counted] accounts for, never counting a device inside a measured area twice. */
+function restOf(house: number | null, items: ItemPower[], counted: ItemPower[]): number | null {
+  if (house == null) return null
+  const measured = measuredAreas(items)
+  const sum = counted
+    .filter((i) => i.watts != null && !(i.job === 'monitored' && i.area != null && measured.has(i.area)))
+    .reduce((s, i) => s + Math.max(0, i.watts!), 0)
+  return Math.max(0, house - sum)
+}
+
+/** Adds up [items]' readings; null when none of them has one. */
+function total(items: ItemPower[]): number | null {
+  const reading = items.filter((i) => i.watts != null)
+  return reading.length ? reading.reduce((s, i) => s + i.watts!, 0) : null
+}
+
 /**
  * The rows, biggest first: items using power, then "Everything else" (the house use no item accounts for), then items
  * under 5 W as "Off" in name order, then items with no reading. A monitored device inside an energy area whose
  * whole-area meter is reading is already in that meter's figure, so it is not counted twice in everything else.
  */
-export function leagueRows(live: LivePower | null): LeagueRow[] {
+export function leagueRows(live: LivePower | null, view: LeagueView = 'items'): LeagueRow[] {
+  if (view === 'rooms') return leagueRoomRows(live)
   const items = live?.items ?? []
   const house = live?.watts ?? null
-  const byName = (a: ItemPower, b: ItemPower) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
-  const shareOf = (w: number) => (house != null && house > 0 ? Math.min(1, w / house) : null)
-  const row = (item: ItemPower, state: LeagueState): LeagueRow => ({
-    key: item.meter,
-    name: item.name,
-    watts: item.watts,
-    share: state === 'on' && item.watts != null ? shareOf(item.watts) : null,
-    state,
-    item,
-  })
+  return rank(
+    items.map((i) => ({ key: i.meter, name: i.name, watts: i.watts, item: i })),
+    house,
+    restOf(house, items, items),
+  )
+}
 
-  const on = items.filter((i) => i.watts != null && i.watts >= OFF_UNDER_W).sort((a, b) => b.watts! - a.watts! || byName(a, b))
-  const off = items.filter((i) => i.watts != null && i.watts < OFF_UNDER_W).sort(byName)
-  const none = items.filter((i) => i.watts == null).sort(byName)
+/**
+ * The rows by place: a room (its monitored devices), an energy area (its whole-area meter while that is reading, else
+ * its monitored devices in no room), "Not in a room" for monitored devices in neither, and "Everything else". Meters
+ * with no job belong to no place and are left out, so their power falls in everything else.
+ */
+function leagueRoomRows(live: LivePower | null): LeagueRow[] {
+  const items = live?.items ?? []
+  const house = live?.watts ?? null
+  const placed = items.filter((i) => i.job === 'area' || i.job === 'monitored')
+  const monitored = placed.filter((i) => i.job === 'monitored')
+  const roomName = new Map((live?.rooms ?? []).map((r) => [r.room, r.name]))
+  const areaName = new Map((live?.areas ?? []).map((a) => [a.area, a.name]))
+  const entries: Entry[] = []
 
-  const rows = on.map((i) => row(i, 'on'))
-  if (house != null) {
-    const measuredAreas = new Set(items.filter((i) => i.job === 'area' && i.watts != null && i.area).map((i) => i.area))
-    const counted = items
-      .filter((i) => i.watts != null && !(i.job === 'monitored' && i.area != null && measuredAreas.has(i.area)))
-      .reduce((sum, i) => sum + Math.max(0, i.watts!), 0)
-    const rest = Math.max(0, house - counted)
-    rows.push({ key: 'everything-else', name: 'Everything else', watts: rest, share: shareOf(rest), state: 'else' })
+  for (const room of new Set(monitored.filter((i) => i.room).map((i) => i.room!))) {
+    entries.push({ key: `room:${room}`, name: roomName.get(room) ?? room, watts: total(monitored.filter((i) => i.room === room)) })
   }
-  return [...rows, ...off.map((i) => row(i, 'off')), ...none.map((i) => row(i, 'no-reading'))]
+  const areas = new Set(placed.filter((i) => i.area && (i.job === 'area' || !i.room)).map((i) => i.area!))
+  for (const area of areas) {
+    const whole = placed.find((i) => i.job === 'area' && i.area === area && i.watts != null)
+    const watts = whole ? whole.watts : total(monitored.filter((i) => i.area === area && !i.room))
+    entries.push({ key: `area:${area}`, name: areaName.get(area) ?? area, watts })
+  }
+  const loose = monitored.filter((i) => !i.room && !i.area)
+  if (loose.length) entries.push({ key: 'not-in-a-room', name: 'Not in a room', watts: total(loose) })
+
+  return rank(entries, house, restOf(house, items, placed))
 }
 
 /** A row changes place at most this often, so figures flickering around each other do not swap back and forth. */

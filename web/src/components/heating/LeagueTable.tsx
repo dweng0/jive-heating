@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
-import { leagueRows, nextUnlock, NO_PLACING, placeRows, type LeagueRow, type Placing } from '@/lib/league'
+import { leagueRows, nextUnlock, NO_PLACING, placeRows, type LeagueRow, type LeagueView, type Placing } from '@/lib/league'
 import { formatWatts, type LivePower } from '@/lib/livePower'
 import { cn } from '@/lib/utils'
 
@@ -8,6 +8,16 @@ import { cn } from '@/lib/utils'
 const MOVE_MS = 500
 /** How long a share stays green or red after it changes. */
 const FLASH_MS = 700
+/** Where this device remembers whether the table shows Items or Rooms. */
+const VIEW_KEY = 'heating.leagueView'
+
+function rememberedView(): LeagueView {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'rooms' ? 'rooms' : 'items'
+  } catch {
+    return 'items'
+  }
+}
 
 /** The rows in the order they are drawn: towards biggest first, but no row changes place more than once every 2 s. */
 function usePlacedRows(rows: LeagueRow[]): LeagueRow[] {
@@ -75,7 +85,16 @@ function useFlash(pct: number | null): 'up' | 'down' | null {
 
 /** What is using power right now, biggest first: a row per meter, with a bar as long as its share of the house. */
 export function LeagueTable({ live }: { live: LivePower | null }) {
-  const rows = usePlacedRows(leagueRows(live))
+  const [view, setView] = useState<LeagueView>(rememberedView)
+  const rows = usePlacedRows(leagueRows(live, view))
+  function choose(next: LeagueView) {
+    setView(next)
+    try {
+      localStorage.setItem(VIEW_KEY, next)
+    } catch {
+      /* not remembered */
+    }
+  }
   const list = useRef<HTMLUListElement>(null)
   const tops = useRef(new Map<string, number>())
   const [sliding, setSliding] = useState<Set<string>>(new Set())
@@ -116,7 +135,25 @@ export function LeagueTable({ live }: { live: LivePower | null }) {
   return (
     <Card data-testid="league-table">
       <CardContent className="flex flex-col gap-1 p-4">
-        <h2 className="mb-1 text-lg font-semibold">Using power now</h2>
+        <div className="mb-1 flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold">Using power now</h2>
+          <div role="group" aria-label="Rank by" className="flex rounded-lg bg-muted p-0.5 text-sm">
+            {(['items', 'rooms'] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                aria-pressed={view === v}
+                onClick={() => choose(v)}
+                className={cn(
+                  'rounded-md px-3 py-1 font-medium transition-colors',
+                  view === v ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {v === 'items' ? 'Items' : 'Rooms'}
+              </button>
+            ))}
+          </div>
+        </div>
         <ul ref={list} className="flex flex-col gap-1">
           {rows.map((r) => (
             <LeagueRowView key={r.key} row={r} sliding={sliding.has(r.key)} />
