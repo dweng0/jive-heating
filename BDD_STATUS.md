@@ -664,15 +664,18 @@ Checked 493 scenario(s) across 156 test file(s).
 ## Feature: Live league table
 
 - [x] Live power carries every meter's watts
-- [ ] UNCOVERED: Items are ranked by their live watts
-- [x] Rows move up and down as readings arrive
-- [ ] UNCOVERED: The table can rank rooms instead of items
-- [x] A meter with no job can be given one from the table
-- [x] The table says when there is nothing live
+- [ ] UNCOVERED: League table ranks items by their live watts
+- [ ] UNCOVERED: League rows swap places as readings arrive
+- [ ] UNCOVERED: League table ranks rooms instead of items
+- [ ] UNCOVERED: League row for a meter with no job opens its settings
+- [ ] UNCOVERED: League table greys out when readings stop
 
 ---
-**491/493 scenarios covered.**
+**488/493 scenarios covered.**
 
-2 scenario(s) need tests:
-- Items are ranked by their live watts
-- The table can rank rooms instead of items
+5 scenario(s) need tests:
+- League table ranks items by their live watts
+- League rows swap places as readings arrive
+- League table ranks rooms instead of items
+- League row for a meter with no job opens its settings
+- League table greys out when readings stop

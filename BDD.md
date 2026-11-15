@@ -3520,7 +3520,7 @@ Engineering rules (apply to every scenario):
             And job is "area" for a whole-area meter, "monitored" for a monitored device and null for a meter with no job
             And "Garage Clamp" is included with job null, so a clamp that has not been given a job is still seen
 
-        Scenario: Items are ranked by their live watts
+        Scenario: League table ranks items by their live watts
             Given the house uses 11000 W, "Shower" 9500 W, "Oven" 1200 W and "Fridge" 90 W
             When someone with energy access opens the Energy tab
             Then the table lists "Shower", "Oven", "Fridge", then "Everything else" 210 W, biggest first
@@ -3529,7 +3529,7 @@ Engineering rules (apply to every scenario):
             And items reading under 5 W sit together at the bottom as "Off" in name order, and items with no reading
                 after them, greyed, as "No reading"
 
-        Scenario: Rows move up and down as readings arrive
+        Scenario: League rows swap places as readings arrive
             Given the table shows "Oven" above "Kettle"
             When a reading has "Kettle" at 2800 W and "Oven" at 1200 W
             Then "Kettle" slides up past "Oven" over about half a second instead of jumping
@@ -3537,7 +3537,7 @@ Engineering rules (apply to every scenario):
             And a row changes place at most once every 2 seconds, so a figure flickering around another's does not
                 make them swap back and forth
 
-        Scenario: The table can rank rooms instead of items
+        Scenario: League table ranks rooms instead of items
             Given the table is showing Items
             When the household chooses "Rooms" above it
             Then each row is a place: a room (its monitored devices), an energy area (its whole-area meter, else its
@@ -3545,14 +3545,14 @@ Engineering rules (apply to every scenario):
             And meters with no job are left out of Rooms, since they belong to no place
             And the choice is remembered on that device
 
-        Scenario: A meter with no job can be given one from the table
+        Scenario: League row for a meter with no job opens its settings
             Given "Garage Clamp" is reporting 400 W and has no job
             When admin "jane" opens the Energy tab
             Then its row says "No job yet" under its name
             And tapping it opens the meter's settings to label it and choose its room, area or job
             And members with energy access see the row but cannot change it
 
-        Scenario: The table says when there is nothing live
+        Scenario: League table greys out when readings stop
             Given the house reading is stale
             Then the shares show "—" and the rows keep their last order, greyed, with "Readings stopped"
             And with no meters but the house meter the table says "Add a plug or clamp to see what is using power"
