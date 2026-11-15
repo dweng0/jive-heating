@@ -17,6 +17,22 @@ if (file("google-services.json").exists()) {
     }
 }
 
+/** The release key's settings from the environment; a null value is missing. */
+val releaseSigning: Map<String, String?> = listOf(
+    "HEATING_RELEASE_KEYSTORE", "HEATING_RELEASE_STORE_PASSWORD", "HEATING_RELEASE_KEY_ALIAS", "HEATING_RELEASE_KEY_PASSWORD",
+).associateWith { System.getenv(it)?.takeIf(String::isNotBlank) }
+
+gradle.taskGraph.whenReady {
+    if (allTasks.any { it.project == project && it.name.contains("Release") && (it.name.startsWith("assemble") || it.name.startsWith("package")) }) {
+        val missing = releaseSigning.filterValues { it == null }.keys
+        if (missing.isNotEmpty()) {
+            throw GradleException("Release builds are signed with the stable release key, but ${missing.joinToString()} ${if (missing.size == 1) "is" else "are"} not set. See docs/android-release.md.")
+        }
+        val store = file(releaseSigning.getValue("HEATING_RELEASE_KEYSTORE")!!)
+        if (!store.isFile) throw GradleException("HEATING_RELEASE_KEYSTORE points at $store, which does not exist.")
+    }
+}
+
 android {
     namespace = "heating.app"
     compileSdk = 35
@@ -29,9 +45,23 @@ android {
         versionName = "0.29.0"
     }
 
+    // Release builds are signed with one stable key, so each new APK installs over the last (in-app updates rely on it).
+    // The key comes from the environment; it is never in git. Without it a release build fails rather than falling back to
+    // the debug key.
+    signingConfigs {
+        create("release") {
+            releaseSigning.forEach { (name, value) -> if (value == null) return@create }
+            storeFile = file(releaseSigning.getValue("HEATING_RELEASE_KEYSTORE")!!)
+            storePassword = releaseSigning["HEATING_RELEASE_STORE_PASSWORD"]
+            keyAlias = releaseSigning["HEATING_RELEASE_KEY_ALIAS"]
+            keyPassword = releaseSigning["HEATING_RELEASE_KEY_PASSWORD"]
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 
