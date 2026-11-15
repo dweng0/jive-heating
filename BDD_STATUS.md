@@ -1,6 +1,6 @@
 # BDD Status
 
-Checked 493 scenario(s) across 156 test file(s).
+Checked 493 scenario(s) across 158 test file(s).
 
 
 ## Feature: Service foundation
@@ -664,18 +664,16 @@ Checked 493 scenario(s) across 156 test file(s).
 ## Feature: Live league table
 
 - [x] Live power carries every meter's watts
-- [ ] UNCOVERED: League table ranks items by their live watts
+- [x] League table ranks items by their live watts
 - [ ] UNCOVERED: League rows swap places as readings arrive
-- [ ] UNCOVERED: League table ranks rooms instead of items
+- [x] League table ranks rooms instead of items
 - [ ] UNCOVERED: League row for a meter with no job opens its settings
 - [ ] UNCOVERED: League table greys out when readings stop
 
 ---
-**488/493 scenarios covered.**
+**490/493 scenarios covered.**
 
-5 scenario(s) need tests:
-- League table ranks items by their live watts
+3 scenario(s) need tests:
 - League rows swap places as readings arrive
-- League table ranks rooms instead of items
 - League row for a meter with no job opens its settings
 - League table greys out when readings stop
