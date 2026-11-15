@@ -3386,6 +3386,7 @@ Engineering rules (apply to every scenario):
         Scenario: The Live tab shows the house with its flows
             Given someone with energy access opens the Live tab on the web app or the Android app
             Then it shows the 3D house, turning very slowly, that can be dragged to turn and pinched or scrolled to zoom
+            And the picture takes the full width of the screen on the web app and the Android app, edge to edge on a phone
             And a line pulses from each source to where its power goes, in the source's colour, as fast as its watts
             And labels show solar, battery, grid and home watts, and the battery's percentage and kWh left
             And the panels glow greener with solar output and the battery tower bluer the fuller it is
