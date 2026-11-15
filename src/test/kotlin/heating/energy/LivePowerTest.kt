@@ -114,6 +114,25 @@ class LivePowerTest {
         )
     }
 
+    // BDD: Before the inverter is connected only the grid shows
+    @Test
+    fun `before the inverter is connected only the grid shows`() {
+        val t = TestHeating()
+        t.discover(meters = listOf("Main Clamp"))
+        t.api { client -> assertEquals(HttpStatusCode.OK, client.put("/api/meters/Main%20Clamp/house").status) }
+        t.meterState("Main Clamp", """{"energy":1523.4,"power":1200}""")
+
+        live(t) { client ->
+            val message = client.connect().nextMessage()
+            val flows = message["flows"]!!.jsonArray.map { it.jsonObject }
+            assertEquals(1, flows.size)
+            assertEquals("grid", flows[0]["from"]!!.jsonPrimitive.content)
+            assertEquals("home", flows[0]["to"]!!.jsonPrimitive.content)
+            assertEquals(1200.0, flows[0]["watts"]!!.jsonPrimitive.double, 1e-9)
+            assertEquals(JsonNull, message["batteryPct"] ?: JsonNull)
+        }
+    }
+
     // BDD: The house power streams live
     @Test
     fun `the house power streams live`() {

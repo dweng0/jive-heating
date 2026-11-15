@@ -135,7 +135,8 @@ class LivePower(
             devices = devices,
             elseWatts = watts?.let { maxOf(0.0, it - accounted) },
             areas = areaPower,
-            flows = if (watts != null && inv != null) powerFlows(inv.solarWatts, inv.batteryWatts, watts) else emptyList(),
+            // Before the inverter is connected the grid is the only source.
+            flows = if (watts == null) emptyList() else powerFlows(inv?.solarWatts ?: 0.0, inv?.batteryWatts ?: 0.0, watts),
             batteryPct = inv?.batteryPct,
         )
     }
