@@ -41,8 +41,8 @@ android {
         applicationId = "heating.app"
         minSdk = 30 // Android 11 and newer (LineageOS 18.1 on the Echo Show 8)
         targetSdk = 35
-        versionCode = 51
-        versionName = "0.31.3"
+        versionCode = 52
+        versionName = "0.31.4"
     }
 
     // Release builds are signed with one stable key, so each new APK installs over the last (in-app updates rely on it).

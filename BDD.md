@@ -3390,8 +3390,15 @@ Engineering rules (apply to every scenario):
             Then the line's speed and the label move to 3000 W over about a second and a half
 
         Scenario: The Live tab says where the home's power came from
-            Given the flows are solar to home 600, battery to home 300 and grid to home 100
-            Then a "Home powered by" ring shows 60% solar, 30% battery and 10% grid, and "90% your own" in the middle
+            Given the flows are solar to home 600, battery to home 300 and grid to home 100, and the battery is at 50%
+            When someone with energy access opens the Live tab
+            Then under the league table a dial, like a car's instrument panel, shows the home's use in the middle:
+                "1.0 kW" "Using now", on an arc that fills towards the busiest it has been since the page opened (at
+                least 3 kW)
+            And an arc on the left shows the grid, "100 W" "Importing" in orange, or "Exporting" in green when power
+                goes out
+            And an arc on the right shows the battery's charge, "50%" in blue, or "Not connected" before the inverter
+            And under the middle it says "90% your own": the share of the home's power from solar and the battery
             And the live league table under the picture shows where it is going (see "Live shows the league table full
                 width under the picture")
 
@@ -3411,6 +3418,16 @@ Engineering rules (apply to every scenario):
                 stacked after the rows above it, like the depth on one side of an order book, with its share and the
                 running total: "Dishwasher" 1st, 65%, running 65%; "Lights" 2nd, 5%, running 70%
             And rows slide up and down to their new places as readings arrive, as on the Energy tab
+
+        Scenario: The diagram draws the flows as glowing lines
+            Given solar sends 700 W to the home, the grid 1700 W, and the battery is at 64%
+            When someone with energy access switches the Live tab to "Diagram"
+            Then it shows line drawings, glowing like neon: solar panels under the sun, the house with appliances
+                inside, the battery filled to its charge with "64%" on it, and the grid's pylon
+            And a line runs from each source to where its power goes, lit in the source's colour with dots running along
+                it while power flows, and dim while it does not
+            And each part shows its watts and what it is doing: solar "700 W" "Generating", grid "1.7 kW"
+                "Importing", home "2.4 kW" "Using now"
 
         Scenario: House and Diagram are switched at the top
             Given someone with energy access opens the Live tab

@@ -102,8 +102,9 @@ vHouse.onclick = () => setView(gl ? 'house' : 'diagram');
 vDiagram.onclick = () => setView('diagram');
 
 // ---------- side panel ----------
+// the app shows its dial instead of this ring; kept for the prototype
 const ringEl = document.getElementById('ring');
-ringEl.innerHTML = `
+if (ringEl) ringEl.innerHTML = `
   <circle cx="60" cy="60" r="48" fill="none" stroke="#17202a" stroke-width="10"/>
   <circle id="rS" cx="60" cy="60" r="48" fill="none" stroke="${C.solar}" stroke-width="10" stroke-linecap="butt" transform="rotate(-90 60 60)"/>
   <circle id="rB" cx="60" cy="60" r="48" fill="none" stroke="${C.battery}" stroke-width="10" stroke-linecap="butt" transform="rotate(-90 60 60)"/>
@@ -112,6 +113,7 @@ ringEl.innerHTML = `
   <text x="60" y="78" text-anchor="middle" fill="#8794a3" font-size="10" font-family="Plus Jakarta Sans, system-ui, sans-serif">your own</text>`;
 const RC = 2 * Math.PI * 48;
 function drawRing() {
+  if (!ringEl) return;
   const t = totals();
   const h = t.home || 1;
   const s = cur['solar>home'] / h, b = cur['battery>home'] / h, g = cur['grid>home'] / h;
@@ -932,36 +934,49 @@ function buildHouse() {
 
 // ---------- 2D diagram (SVG) ----------
 const svgwrap = document.getElementById('svgwrap');
-const NODE = { solar: [200, 82], grid: [70, 232], home: [330, 232], battery: [200, 382] };
-const R = 46;
+// Line drawings glowing like neon, after an inverter app: panels under the sun, the house with its appliances, the
+// battery filled to its charge, and the grid's pylon; lines between them light in the source's colour while power flows.
 const PATHS = {
-  'solar>home':    'M 200 128 C 200 200 240 232 284 232',
-  'solar>grid':    'M 200 128 C 200 200 160 232 116 232',
-  'solar>battery': 'M 200 128 L 200 336',
-  'grid>home':     'M 116 232 L 284 232',
-  'battery>home':  'M 200 336 C 200 264 240 232 284 232',
-  'grid>battery':  'M 116 232 C 160 232 200 264 200 336',
+  'solar>home':    'M 150 142 L 150 226',
+  'solar>battery': 'M 215 142 L 215 170 Q 215 180 225 180 L 455 180 Q 465 180 465 190 L 465 252',
+  'solar>grid':    'M 236 100 L 538 100',
+  'grid>home':     'M 590 176 L 590 440 Q 590 450 580 450 L 185 450 Q 175 450 175 440 L 175 404',
+  'battery>home':  'M 428 330 L 282 330',
+  'grid>battery':  'M 560 176 L 560 320 Q 560 330 550 330 L 502 330',
 };
-const ICONS = {
-  solar: '<circle cx="0" cy="0" r="5" fill="none" stroke="currentColor" stroke-width="1.8"/><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M0-11v3M0 8v3M-11 0h3M8 0h3M-7.8-7.8l2.1 2.1M5.7 5.7l2.1 2.1M-7.8 7.8l2.1-2.1M5.7-5.7l2.1-2.1"/></g>',
-  grid: '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M-6 11L0-11L6 11M-8-5h16M-6 2h12M-4-5l8 7M4-5l-8 7"/></g>',
-  home: '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M-10 -1L0-10L10-1M-7-3v12h14V-3"/><path d="M-2 9v-6h4v6"/></g>',
-  battery: '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="-6" y="-9" width="12" height="20" rx="2"/><path d="M-2-11h4"/><path d="M1-4l-3 5h4l-3 5" stroke-linecap="round"/></g>',
+const FONT = 'font-family="Plus Jakarta Sans, system-ui, sans-serif"';
+const ART = {
+  solar: `<g id="art-solar" fill="none" stroke="${C.solar}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round">
+      <circle cx="52" cy="44" r="11"/><path d="M52 23v-7M52 72v-7M31 44h-7M80 44h-7M37 29l-5-5M72 64l-5-5M37 59l-5 5M72 24l-5 5"/>
+      <path d="M100 66 L238 66 L222 140 L84 140 Z"/><path d="M134.5 66 L118.5 140 M169 66 L153 140 M203.5 66 L187.5 140 M92 103 L230 103"/></g>`,
+  home: `<g id="art-home" fill="none" stroke="${C.home}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round">
+      <path d="M48 276 L175 206 L302 276"/><path d="M70 264 L70 404 L280 404 L280 264"/></g>
+    <g id="art-appliances" fill="none" stroke="#7cc4ff" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round">
+      <rect x="92" y="328" width="66" height="66" rx="5"/><path d="M92 344h66M104 336h10M140 336h6"/><path d="M106 360h38"/>
+      <rect x="192" y="328" width="66" height="66" rx="5"/><path d="M192 342h66"/><circle cx="225" cy="370" r="17"/><circle cx="225" cy="370" r="9"/></g>`,
+  battery: `<g id="art-battery" fill="none" stroke="${C.battery}" stroke-width="2.6" stroke-linejoin="round">
+      <rect x="452" y="254" width="26" height="8" rx="2"/><rect x="430" y="262" width="70" height="138" rx="10"/></g>`,
+  grid: `<g id="art-grid" fill="none" stroke="${C.grid}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round">
+      <path d="M546 176 L566 60 L586 176"/><path d="M538 100 h56 M546 82 h40 M551 140 h30 M556 118 h20 M551 140 L581 176 M581 140 L551 176 M556 118 L578 140 M576 118 L554 140"/></g>`,
 };
+const TXT = (id, x, y, size, fill, extra = '') => `<text id="${id}" x="${x}" y="${y}" ${extra} fill="${fill}" font-size="${size}" ${FONT} style="font-variant-numeric:tabular-nums"></text>`;
+const NAMEL = (x, y, name, anchor = 'start') => `<text x="${x}" y="${y}" text-anchor="${anchor}" fill="#8794a3" font-size="11" font-weight="600" letter-spacing="1.2" ${FONT}>${name}</text>`;
 svgwrap.innerHTML = `
-<svg viewBox="0 0 400 470" role="img" aria-label="Energy flow between solar, grid, battery and home">
-  <defs><filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
-  <g id="dPaths">${Object.entries(PATHS).map(([k, d]) => `<path id="p-${k.replace('>', '-')}" d="${d}" fill="none" stroke="#222d3a" stroke-width="2"/>`).join('')}</g>
+<svg viewBox="0 0 640 470" role="img" aria-label="Energy flow between solar, grid, battery and home">
+  <defs><filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+  <g id="dPaths">${Object.entries(PATHS).map(([k, d]) => `<path id="p-${k.replace('>', '-')}" d="${d}" fill="none" stroke="#2a3340" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" data-lit="false"/>`).join('')}</g>
   <g id="dDots" filter="url(#glow)"></g>
-  ${Object.entries(NODE).map(([k, [x, y]]) => `
-    <g id="n-${k}" transform="translate(${x} ${y})" style="transition:opacity .8s">
-      <circle r="${R}" fill="#11171f" stroke="${C[k]}" stroke-width="3" id="nr-${k}"/>
-      ${k === 'home' ? `<g transform="rotate(-90)">${['solar', 'battery', 'grid'].map(s => `<circle id="hr-${s}" r="${R}" fill="none" stroke="${C[s]}" stroke-width="4"/>`).join('')}</g>` : ''}
-      <g transform="translate(0 -18)" style="color:${C[k]}">${ICONS[k]}</g>
-      <text y="10" text-anchor="middle" fill="#e9eef3" font-size="17" font-weight="600" font-family="Plus Jakarta Sans, system-ui, sans-serif" style="font-variant-numeric:tabular-nums" id="nv-${k}">—</text>
-      <text y="27" text-anchor="middle" fill="#8794a3" font-size="10" font-family="Plus Jakarta Sans, system-ui, sans-serif" id="ns-${k}"></text>
-      <text y="${R + 18}" text-anchor="middle" fill="#8794a3" font-size="11" font-weight="600" letter-spacing="1" font-family="Plus Jakarta Sans, system-ui, sans-serif">${NAMES[k].toUpperCase()}</text>
-    </g>`).join('')}
+  <g id="n-solar" style="transition:opacity .8s"><g filter="url(#glow)">${ART.solar}</g>
+    ${NAMEL(252, 72, 'SOLAR')}${TXT('nv-solar', 252, 98, 24, '#e9eef3', 'font-weight="700"')}${TXT('ns-solar', 252, 118, 13, '#8794a3')}</g>
+  <g id="n-grid" style="transition:opacity .8s"><g filter="url(#glow)">${ART.grid}</g>
+    ${NAMEL(530, 40, 'GRID', 'end')}${TXT('nv-grid', 530, 64, 24, '#e9eef3', 'font-weight="700" text-anchor="end"')}${TXT('ns-grid', 530, 84, 13, '#8794a3', 'text-anchor="end"')}</g>
+  <g id="n-home" style="transition:opacity .8s"><g filter="url(#glow)">${ART.home}</g>
+    ${TXT('nv-home', 175, 296, 24, '#e9eef3', 'font-weight="700" text-anchor="middle"')}${TXT('ns-home', 175, 314, 12, '#8794a3', 'text-anchor="middle"')}</g>
+  <g id="n-battery" style="transition:opacity .8s">
+    <rect id="batt-fill" x="436" y="394" width="58" height="0" rx="5" fill="${C.battery}" opacity=".35"/>
+    <g filter="url(#glow)">${ART.battery}</g>
+    ${TXT('batt-pct', 465, 336, 22, '#e9eef3', 'font-weight="700" text-anchor="middle"')}
+    ${TXT('nv-battery', 465, 422, 16, '#e9eef3', 'font-weight="700" text-anchor="middle"')}${TXT('ns-battery', 465, 438, 11, '#8794a3', 'text-anchor="middle"')}</g>
 </svg>`;
 const dDots = svgwrap.querySelector('#dDots');
 const DN = 5;
@@ -991,10 +1006,15 @@ function diagramFrame() {
       d.setAttribute('opacity', on); d.setAttribute('r', 2.4 + 2.2 * Math.sqrt(Math.min(w, 6000) / 6000));
     });
   }
-  for (const [k, d] of Object.entries(PATHS)) {
+  for (const k of Object.keys(PATHS)) {
     const [a, b] = k.split('>');
-    const active = (cur[k] + (cur[`${b}>${a}`] || 0)) > 30;
-    svgwrap.querySelector('#p-' + k.replace('>', '-')).setAttribute('stroke', active ? '#2d3b4c' : '#1a222c');
+    const fwd = cur[k] || 0, back = cur[`${b}>${a}`] || 0, lit = (fwd + back) > 30 && alive > 0.5;
+    const el = svgwrap.querySelector('#p-' + k.replace('>', '-'));
+    // lit in the colour of whichever end the power is coming from, dim while nothing flows
+    el.setAttribute('stroke', lit ? C[fwd >= back ? a : b] : '#2a3340');
+    el.setAttribute('stroke-width', lit ? 3 : 2.4);
+    if (lit) el.setAttribute('filter', 'url(#glow)'); else el.removeAttribute('filter');
+    el.setAttribute('data-lit', lit);
   }
   const set = (k, v, s, dim) => {
     svgwrap.querySelector('#nv-' + k).textContent = v;
@@ -1003,20 +1023,15 @@ function diagramFrame() {
   };
   const pct = reading && reading.batteryPct != null ? reading.batteryPct + '%' : '';
   const bNet = T.battOut - T.battIn, gNet = T.gridIn - T.gridOut;
-  set('solar', hasSolar ? fmt(T.solar) : 'Off', hasSolar ? (T.solar > 30 ? 'generating' : 'idle') : 'not connected', !hasSolar || T.solar < 30);
-  set('battery', hasSolar ? fmt(Math.abs(bNet)) : 'Off', hasSolar ? `${pct} · ${Math.abs(bNet) < 30 ? 'standby' : bNet > 0 ? 'discharging' : 'charging'}` : 'not connected', !hasSolar || Math.abs(bNet) < 30);
-  set('grid', fmt(Math.abs(gNet)), Math.abs(gNet) < 30 ? 'idle' : gNet > 0 ? 'importing' : 'exporting', Math.abs(gNet) < 30);
-  set('home', fmt(T.home), 'using now', false);
-  // home ring split by source
-  const HC = 2 * Math.PI * R, h = T.home || 1;
-  let start = 0;
-  for (const s of ['solar', 'battery', 'grid']) {
-    const frac = cur[`${s}>home`] / h;
-    const el = svgwrap.querySelector('#hr-' + s);
-    el.setAttribute('stroke-dasharray', `${frac * HC} ${HC}`);
-    el.setAttribute('stroke-dashoffset', -start * HC);
-    start += frac;
-  }
+  set('solar', hasSolar ? fmt(T.solar) : 'Off', hasSolar ? (T.solar > 30 ? 'Generating' : 'Idle') : 'Not connected', !hasSolar || T.solar < 30);
+  set('battery', hasSolar ? fmt(Math.abs(bNet)) : 'Off', hasSolar ? (Math.abs(bNet) < 30 ? 'Standby' : bNet > 0 ? 'Discharging' : 'Charging') : 'Not connected', !hasSolar);
+  set('grid', fmt(Math.abs(gNet)), Math.abs(gNet) < 30 ? 'Idle' : gNet > 0 ? 'Importing' : 'Exporting', Math.abs(gNet) < 30);
+  set('home', fmt(T.home), 'Using now', false);
+  // the battery filled to its charge
+  const charge = reading && reading.batteryPct != null ? Math.max(0, Math.min(100, reading.batteryPct)) : null;
+  svgwrap.querySelector('#batt-pct').textContent = charge == null ? '—' : pct;
+  const fill = svgwrap.querySelector('#batt-fill'), fh = 126 * (charge ?? 0) / 100;
+  fill.setAttribute('height', fh); fill.setAttribute('y', 394 - fh);
 }
 
 // ---------- main loop ----------

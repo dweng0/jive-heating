@@ -80,7 +80,7 @@
 .live-page .label .s {font-size: 12px; color: var(--live-muted); font-variant-numeric: tabular-nums; }
 .live-page .label.off {opacity: .55; }
 .live-page #svgwrap {position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 12px; }
-.live-page #svgwrap svg {width: 100%; height: 100%; max-width: 520px; }
+.live-page #svgwrap svg {width: 100%; height: 100%; max-width: 820px; }
 .live-page .stalenote {position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%);
   background: rgba(17,23,31,.9); border: 1px solid var(--line); color: var(--fg);
   font-size: 13px; padding: 8px 14px; border-radius: 999px; white-space: nowrap; }
@@ -115,4 +115,26 @@
 @media (max-width: 640px) {
   .live-page { border-radius: 0; margin-inline: -16px; }
   .live-page .stage { border-radius: 0; border-inline: 0; height: clamp(380px, 62vh, 620px); }
+}
+
+/* The dial under the league table: like a car's instrument panel. */
+.live-page .dialpanel { margin-inline: 16px; padding: 12px 8px; }
+.live-page .live-dial svg { max-width: 760px; margin: 0 auto; display: block; }
+.live-page .dial-track { stroke: var(--surface-2); }
+.live-page .dial-knob { fill: var(--fg); }
+.live-page .dial-big { fill: var(--fg); font-size: 52px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.live-page .dial-mid { fill: var(--fg); font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.live-page .dial-sub { fill: var(--live-muted); font-size: 14px; }
+.live-page .dial-k { fill: var(--live-muted); font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+.live-page .dial-own { fill: var(--solar); font-size: 15px; font-weight: 600; }
+.live-page .dial-tick { fill: var(--live-muted); font-size: 12px; }
+.live-page .dial-value { transition: d .8s ease; }
+.live-page .dial-legs { display: none; }
+@media (max-width: 640px) {
+  .live-page .dial-side { display: none; }
+  .live-page .live-dial svg { width: 150%; max-width: none; margin-left: -25%; }
+  .live-page .live-dial { overflow: hidden; }
+  .live-page .dial-legs { display: flex; justify-content: space-between; gap: 12px; padding: 4px 12px 8px; font-size: 13px; color: var(--live-muted); }
+  .live-page .dial-legs b { display: block; font-size: 20px; color: var(--fg); }
+  .live-page .dial-legs span:last-child { text-align: right; }
 }

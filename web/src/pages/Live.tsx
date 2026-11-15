@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { LeagueBoard } from '@/components/heating/LeagueTable'
+import { LiveDial } from '@/components/heating/LiveDial'
 import { followPower, type LivePower } from '@/lib/livePower'
 import { startLive, type LiveFeed } from '@/live/liveScene'
 import { toLiveReading } from '@/live/liveReading'
@@ -103,15 +104,10 @@ export function LiveView({ source }: { source: PowerSource }) {
             <LeagueBoard live={power} wide />
           </div>
 
-          <aside>
-            <div className="panel">
-              <h2>Home powered by</h2>
-              <div className="ringrow">
-                <svg className="ring" viewBox="0 0 120 120" id="ring" aria-label="Share of home power from each source" />
-                <div className="ringkey" id="ringKey" />
-              </div>
-            </div>
-          </aside>
+          {/* The house at a glance: home, grid and battery. */}
+          <div className="panel dialpanel">
+            <LiveDial live={power} />
+          </div>
         </div>
       </div>
     </div>

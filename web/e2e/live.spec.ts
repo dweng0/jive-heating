@@ -173,13 +173,28 @@ test('a new reading eases in over about a second and a half', async ({ page }) =
 })
 
 // BDD: The Live tab says where the home's power came from
-test('the ring shows the share from each source and where it is going', async ({ page }) => {
-  await serve(page, { first: power(1000, [{ from: 'solar', to: 'home', watts: 600 }, { from: 'battery', to: 'home', watts: 300 }, { from: 'grid', to: 'home', watts: 100 }], 50) })
+test('the dial shows the home, the grid and the battery', async ({ page }) => {
+  const { push } = await serve(page, { first: power(1000, [{ from: 'solar', to: 'home', watts: 600 }, { from: 'battery', to: 'home', watts: 300 }, { from: 'grid', to: 'home', watts: 100 }], 50) })
   await page.goto('/live')
-  await slowExpect(page.locator('#rPct')).toHaveText('90%', { timeout: 60_000 })
-  await slowExpect(page.locator('#ringKey')).toContainText('Solar600 W')
-  await slowExpect(page.locator('#ringKey')).toContainText('Battery300 W')
-  await slowExpect(page.locator('#ringKey')).toContainText('Grid100 W')
+  await expect(page.getByText('Home powered by')).toHaveCount(0)
+  const dial = page.getByTestId('live-dial')
+  await slowExpect(dial.getByTestId('dial-home')).toHaveText('1.0 kW')
+  await expect(dial).toContainText('Using now')
+  await expect(dial.getByTestId('dial-grid')).toHaveText('100 W')
+  await expect(dial.getByTestId('dial-grid-state')).toHaveText('Importing')
+  await expect(dial.getByTestId('dial-battery')).toHaveText('50%')
+  await expect(dial.getByTestId('dial-own')).toHaveText('90% your own')
+  // Under the league table, full width.
+  const [table, box] = await Promise.all([page.getByTestId('league-table').boundingBox(), dial.boundingBox()])
+  expect(box!.y).toBeGreaterThanOrEqual(table!.y + table!.height)
+
+  // Exporting, and no inverter yet.
+  push(power(400, [{ from: 'grid', to: 'home', watts: 400 }]))
+  await slowExpect(dial.getByTestId('dial-home')).toHaveText('400 W')
+  await expect(dial.getByTestId('dial-battery')).toHaveText('Not connected')
+  push(power(300, [{ from: 'solar', to: 'home', watts: 300 }, { from: 'solar', to: 'grid', watts: 1200 }], 80))
+  await slowExpect(dial.getByTestId('dial-grid-state')).toHaveText('Exporting')
+  await expect(dial.getByTestId('dial-grid')).toHaveText('1.2 kW')
 })
 
 // BDD: Live shows the league table full width under the picture
@@ -218,6 +233,28 @@ test('the league table runs full width under the picture', async ({ page }) => {
   // Rows move to their new places as readings arrive.
   push({ ...reading, items: [{ ...reading.items[0], watts: 50 }, { ...reading.items[1], watts: 2000 }] })
   await slowExpect(rows.nth(0).getByTestId('league-name')).toHaveText('Lights')
+})
+
+// BDD: The diagram draws the flows as glowing lines
+test('the diagram draws the flows as glowing lines', async ({ page }) => {
+  await serve(page, { first: power(2400, [{ from: 'solar', to: 'home', watts: 700 }, { from: 'grid', to: 'home', watts: 1700 }], 64) })
+  await page.goto('/live')
+  await page.getByRole('button', { name: 'Diagram' }).click()
+  const svg = page.locator('#svgwrap svg')
+  await slowExpect(svg.locator('#nv-solar')).toHaveText('700 W')
+  await expect(svg.locator('#ns-solar')).toHaveText('Generating')
+  await slowExpect(svg.locator('#nv-grid')).toHaveText('1.7 kW')
+  await expect(svg.locator('#ns-grid')).toHaveText('Importing')
+  await slowExpect(svg.locator('#nv-home')).toHaveText('2.4 kW')
+  await expect(svg.locator('#ns-home')).toHaveText('Using now')
+  await expect(svg.locator('#batt-pct')).toHaveText('64%')
+  // Line drawings of the panels, the house with appliances, the battery and the pylon.
+  for (const id of ['art-solar', 'art-home', 'art-appliances', 'art-battery', 'art-grid']) await expect(svg.locator(`#${id}`)).toHaveCount(1)
+  // Lit in the source's colour while power flows, dim while it does not.
+  await slowExpect(svg.locator('#p-solar-home')).toHaveAttribute('data-lit', 'true')
+  await expect(svg.locator('#p-solar-home')).toHaveAttribute('stroke', '#3ddc84')
+  await expect(svg.locator('#p-grid-home')).toHaveAttribute('stroke', '#f59f5a')
+  await expect(svg.locator('#p-solar-battery')).toHaveAttribute('data-lit', 'false')
 })
 
 // BDD: House and Diagram are switched at the top
