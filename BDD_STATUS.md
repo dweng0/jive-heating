@@ -1,6 +1,6 @@
 # BDD Status
 
-Checked 483 scenario(s) across 153 test file(s).
+Checked 481 scenario(s) across 154 test file(s).
 
 
 ## Feature: Service foundation
@@ -289,10 +289,8 @@ Checked 483 scenario(s) across 153 test file(s).
 - [x] A failed history write does not stop the heating
 - [x] History survives a restart
 
-## Feature: Dashboard
+## Feature: Room history chart
 
-- [x] The dashboard charts each room, the house median and the boiler
-- [x] The dashboard says when there is no history yet
 - [x] A room's page shows its temperature and target over time
 
 ## Feature: App version
@@ -655,4 +653,4 @@ Checked 483 scenario(s) across 153 test file(s).
 - [x] Release builds are signed with the stable key
 
 ---
-**483/483 scenarios covered.**
+**481/481 scenarios covered.**

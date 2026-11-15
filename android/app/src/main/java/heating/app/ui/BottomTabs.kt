@@ -4,12 +4,11 @@ package heating.app.ui
 data class BottomTab(val label: String, val route: String?)
 
 /** Screens that show the bottom bar: the tabs' own, not the screens opened from them. */
-val TAB_SCREENS = setOf("rooms", "dashboard", "live", "energy")
+val TAB_SCREENS = setOf("rooms", "live", "energy")
 
 /** The bottom bar. The charts and holiday are the whole house's: admins only. Energy: admins and members with energy access. */
 fun bottomTabs(admin: Boolean, energy: Boolean = admin): List<BottomTab> = buildList {
     add(BottomTab("Rooms", "rooms"))
-    if (admin) add(BottomTab("Charts", "dashboard"))
     if (admin || energy) add(BottomTab("Live", "live"))
     if (admin || energy) add(BottomTab("Energy", "energy"))
     if (admin) add(BottomTab("Holiday", null))

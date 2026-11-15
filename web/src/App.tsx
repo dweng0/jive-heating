@@ -6,7 +6,6 @@ import { Shell } from '@/components/heating/Shell'
 import { api, setSessionEndedHandler, type User } from '@/lib/api'
 import { HomeProvider } from '@/lib/home'
 import { AccountPage } from '@/pages/Account'
-import { DashboardPage } from '@/pages/Dashboard'
 import { DeliveriesPage } from '@/pages/Deliveries'
 import { EventsPage } from '@/pages/Events'
 import { RuleNewPage } from '@/pages/RuleNew'
@@ -56,7 +55,6 @@ export default function App() {
             <SetupGate>
             <Routes>
               <Route path="/" element={<RoomsPage />} />
-              <Route path="/dashboard" element={auth.me.admin ? <DashboardPage /> : <Navigate to="/" replace />} />
               <Route path="/live" element={auth.me.admin || auth.me.energy ? <LivePage /> : <Navigate to="/" replace />} />
               <Route path="/energy" element={auth.me.admin || auth.me.energy ? <EnergyPage /> : <Navigate to="/" replace />} />
               <Route path="/energy/manage" element={auth.me.admin ? <EnergyManagePage /> : <Navigate to="/" replace />} />

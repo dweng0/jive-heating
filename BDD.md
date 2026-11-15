@@ -1342,7 +1342,10 @@ Engineering rules (apply to every scenario):
     Feature: Heating history
         As the household
         I want the service to remember room temperatures and what the boiler was doing
-        So that the dashboard can show how the house heats over a day, a week or a month
+        So that we can chart how the house heats over a day, a week or a month
+
+        Recording carries on whether or not anything shows it: room pages chart their own history, and the house-wide
+        Charts page was dropped on 2026-11-15 (see Deferred) while this data and GET /api/history stay.
 
         Scenario: Room temperatures and targets are recorded every five minutes
             Given room "Lounge" at 19.5 with effective target 21.0
@@ -1393,21 +1396,10 @@ Engineering rules (apply to every scenario):
             Then GET /api/history returns the same data
 
 
-    Feature: Dashboard
+    Feature: Room history chart
         As the household
-        I want a chart of every room's temperature with the boiler's state behind it
-        So that we can see how the house heats and when the boiler ran
-
-        Scenario: The dashboard charts each room, the house median and the boiler
-            Given history for "Lounge" and "Bedroom" and a boiler heating period
-            When the household opens the Dashboard
-            Then it shows a line for each room, a bold whole-house line and the heating period shaded behind them
-            And they can switch between 24 hours, 7 days and 30 days
-
-        Scenario: The dashboard says when there is no history yet
-            Given no history has been recorded
-            When the household opens the Dashboard
-            Then it says history appears within five minutes instead of an empty chart
+        I want a chart of a room's temperature and target
+        So that we can see how the room heats
 
         Scenario: A room's page shows its temperature and target over time
             Given history for "Lounge" with current 19.5 and target 21.0
@@ -2129,9 +2121,8 @@ Engineering rules (apply to every scenario):
 
         Scenario: Energy has its own tab
             When admin "jane" opens the web app or the Android app
-            Then there is an Energy tab beside the Dashboard
+            Then there is an Energy tab beside Live
             And it shows the dials first, then the history chart, the room and area cards and the energy totals for today, week or month
-            And the Dashboard shows only heating
             And members without energy access have no Energy tab
 
         Scenario: The dial's scale fits the household's biggest appliances
@@ -3445,6 +3436,10 @@ Engineering rules (apply to every scenario):
                 debug key
 
 # Deferred (not to be built yet)
+# - Charts page (whole house: a line per room, the house median, boiler periods shaded; 24 h / 7 d / 30 d; boiler-on
+#   and average stats). Dropped from the web app and Android app on 2026-11-15 as unused; the history recording and
+#   GET /api/history stay, and git history before that date has the page (web/src/pages/Dashboard.tsx,
+#   android/.../ui/dashboard/DashboardScreen.kt) to bring back.
 # - Live view: weather (clear, cloud, rain, snow, frost) and the sun's real position on the 3D house (source not chosen: Home Assistant or computed)
 # - Mirror schedules to the valve weekly_schedule as a fallback when the service is down
 # - Open-window alerts (TRVZB exposes the setting, not a state; needs inference)

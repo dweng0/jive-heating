@@ -188,11 +188,13 @@ test('with no house meter chosen there is no live dial', async ({ page }) => {
 })
 
 // BDD: Energy has its own tab
-test('energy has its own tab beside the dashboard', async ({ page }) => {
+test('energy has its own tab beside Live', async ({ page }) => {
   await serve(page)
   await page.goto('/')
   const nav = page.getByRole('navigation')
-  await expect(nav.getByRole('link', { name: 'Dashboard' })).toBeVisible()
+  await expect(nav.getByRole('link', { name: 'Live' })).toBeVisible()
+  // The Charts (Dashboard) page was dropped; its history is still recorded.
+  await expect(page.getByRole('link', { name: 'Dashboard' })).toHaveCount(0)
   await nav.getByRole('link', { name: 'Energy' }).click()
   await expect(page).toHaveURL(/\/energy$/)
   await expect(page.getByRole('heading', { name: 'Energy', exact: true })).toBeVisible()
@@ -201,11 +203,8 @@ test('energy has its own tab beside the dashboard', async ({ page }) => {
   const totals = await page.getByTestId('energy').boundingBox()
   expect(totals!.y).toBeGreaterThan(dial!.y)
 
-  // The Dashboard shows only heating.
-  await nav.getByRole('link', { name: 'Dashboard' }).click()
-  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
-  await expect(page.getByTestId('live-power')).toHaveCount(0)
-  await expect(page.getByTestId('energy')).toHaveCount(0)
+  await page.goto('/dashboard')
+  await expect(page).toHaveURL(/\/$/)
 
   // On a phone it is in the menu.
   await page.setViewportSize({ width: 390, height: 800 })

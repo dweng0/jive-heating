@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
-import { Bell, ChartLine, CircleUser, Flame, ListFilter, LogOut, Palmtree, Smartphone, Unplug, Users, Zap, SunMedium } from 'lucide-react'
+import { Bell, CircleUser, Flame, ListFilter, LogOut, Palmtree, Smartphone, Unplug, Users, Zap, SunMedium } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -35,7 +35,6 @@ export function Shell({ children, onSignOut }: { children: ReactNode; onSignOut:
 
           <nav className="ml-4 hidden items-center gap-1 sm:flex">
             <TopLink to="/">Rooms</TopLink>
-            {me.admin && <TopLink to="/dashboard">Dashboard</TopLink>}
             {(me.admin || me.energy) && <TopLink to="/live">Live</TopLink>}
             {(me.admin || me.energy) && <TopLink to="/energy">Energy</TopLink>}
             {me.admin && <TopLink to="/people">People</TopLink>}
@@ -77,13 +76,6 @@ export function Shell({ children, onSignOut }: { children: ReactNode; onSignOut:
                     <Smartphone /> Get the Android app
                   </NavLink>
                 </DropdownMenuItem>
-                {me.admin && (
-                  <DropdownMenuItem asChild className="sm:hidden">
-                    <NavLink to="/dashboard">
-                      <ChartLine /> Dashboard
-                    </NavLink>
-                  </DropdownMenuItem>
-                )}
                 {(me.admin || me.energy) && (
                   <DropdownMenuItem asChild className="sm:hidden">
                     <NavLink to="/live">

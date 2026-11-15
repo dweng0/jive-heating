@@ -77,7 +77,6 @@ import heating.app.MainViewModel
 import heating.app.data.Mode
 import heating.app.data.Session
 import heating.app.ui.account.AccountScreen
-import heating.app.ui.dashboard.DashboardScreen
 import heating.app.data.EnergyStore
 import heating.app.ui.energy.EnergyPricesCard
 import heating.app.ui.account.BoostSettingsCard
@@ -242,7 +241,6 @@ private fun Connected(
                         bottomTabs(state.admin, state.energy).forEach { tab ->
                             val icon = when (tab.route) {
                                 "rooms" -> Icons.Rounded.Home
-                                "dashboard" -> Icons.Rounded.ShowChart
                                 "live" -> Icons.Rounded.WbSunny
                                 "energy" -> Icons.Rounded.ElectricBolt
                                 "account" -> Icons.Rounded.AccountCircle
@@ -319,11 +317,6 @@ private fun Connected(
                         energyState.placing?.let { RoomPickerDialog(it, state.rooms, energy::placeIn, energy::notNow) }
                     },
                 )
-            }
-            composable("dashboard") {
-                if (state.admin) {
-                    DashboardScreen(connection.api, contentPadding = padding)
-                }
             }
             composable("live") {
                 if (state.admin || state.energy) heating.app.ui.live.LiveScreen(connection.api, padding)
