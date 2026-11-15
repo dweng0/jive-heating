@@ -14,7 +14,8 @@ export interface LiveReading {
 }
 
 export function toLiveReading(p: LivePower): LiveReading {
-  const flows = p.flows ?? []
+  // A service from before flows existed sends none: the house meter is then all grid to home.
+  const flows = p.flows ?? (p.watts != null && p.watts > 0 ? [{ from: 'grid' as const, to: 'home' as const, watts: p.watts }] : [])
   const hasSolar = p.batteryPct != null || flows.some((f) => f.from === 'solar' || f.from === 'battery' || f.to === 'battery')
   const circuits = [
     ...p.rooms.map((r) => ({ name: r.name, watts: r.watts ?? 0 })),

@@ -167,3 +167,13 @@ test('effects can be switched off one by one', async ({ page }) => {
     await slowExpect(box).toBeChecked({ checked: !was })
   }
 })
+
+// BDD: Before the inverter is connected only the grid shows
+test('a service that sends no flows yet shows the house meter as grid to home', async ({ page }) => {
+  const old = { watts: 700, at: new Date().toISOString(), rooms: [], devices: [], elseWatts: 700 }
+  await serve(page, { first: old })
+  await page.goto('/live')
+  await slowExpect(label(page, 'home').locator('.v')).toHaveText('700 W', { timeout: 90_000 })
+  await slowExpect(label(page, 'grid').locator('.s')).toHaveText('Importing')
+  await slowExpect(label(page, 'solar').locator('.v')).toHaveText('Not connected')
+})
