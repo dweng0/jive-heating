@@ -95,6 +95,37 @@ test.describe('on a phone', () => {
   })
 })
 
+// BDD: The 3D house fades into the app's background
+for (const [scheme, bg] of [['light', 'rgb(250, 247, 242)'], ['dark', 'rgb(23, 19, 15)']] as const) {
+  test(`the house fades into the ${scheme} background`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: scheme })
+    await serve(page)
+    await page.goto('/live')
+    await slowExpect(page.locator('#gl')).toBeVisible()
+    const look = await page.evaluate(() => {
+      const css = (sel: string) => getComputedStyle(document.querySelector(sel)!)
+      const gl = css('#gl')
+      return {
+        body: css('body').backgroundColor,
+        page: css('.live-page').backgroundColor,
+        stage: css('#stage').backgroundColor,
+        stageBorder: css('#stage').borderTopWidth,
+        mask: gl.maskImage || gl.getPropertyValue('-webkit-mask-image'),
+        panel: css('.live-page .panel').backgroundColor,
+      }
+    })
+    expect(look.body).toBe(bg)
+    expect(look.page).toBe(bg)
+    // No box: the stage shows the page through, and the picture's edges fade out to it.
+    expect(look.stage).toBe('rgba(0, 0, 0, 0)')
+    expect(look.stageBorder).toBe('0px')
+    expect(look.mask).toContain('radial-gradient')
+    expect(look.mask).toMatch(/transparent|rgba\(0, 0, 0, 0\)/)
+    // The panels stay dark in both modes.
+    expect(look.panel).toBe('rgb(17, 23, 31)')
+  })
+}
+
 // BDD: Before the inverter is connected only the grid shows
 test('before the inverter is connected solar and battery say Not connected', async ({ page }) => {
   await serve(page, { first: power(1200, [{ from: 'grid', to: 'home', watts: 1200 }]) })
@@ -154,10 +185,35 @@ test('the ring shows the share from each source and where it is going', async ({
   await slowExpect(page.locator('#circuits')).toContainText('Everything else')
 })
 
+// BDD: House and Diagram are switched at the top
+test('house and diagram are switched at the top', async ({ page }) => {
+  await serve(page)
+  await page.goto('/live')
+  const house = page.getByRole('button', { name: 'House' })
+  await slowExpect(house).toBeVisible()
+  const [title, stage, btn] = await Promise.all([
+    page.getByRole('heading', { name: 'Live' }).boundingBox(),
+    page.locator('#stage').boundingBox(),
+    house.boundingBox(),
+  ])
+  // Beside the title and above the picture, not under it.
+  expect(btn!.y + btn!.height).toBeLessThanOrEqual(stage!.y)
+  expect(Math.abs(btn!.y + btn!.height / 2 - (title!.y + title!.height / 2))).toBeLessThan(30)
+  expect(btn!.height).toBeGreaterThanOrEqual(36)
+  // The chosen view is filled in the app's orange.
+  await expect(house).toHaveCSS('background-color', 'rgb(242, 140, 40)')
+  await page.getByRole('button', { name: 'Diagram' }).click()
+  await expect(page.getByRole('button', { name: 'Diagram' })).toHaveCSS('background-color', 'rgb(242, 140, 40)')
+})
+
 // BDD: Effects can be turned down on a slow phone
 test('effects can be switched off one by one', async ({ page }) => {
   await serve(page)
+  // Only with debug=true in the address.
   await page.goto('/live')
+  await slowExpect(page.locator('#gl')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Effects' })).toHaveCount(0)
+  await page.goto('/live?debug=true')
   await page.getByRole('button', { name: 'Effects' }).click()
   for (const name of ['Shadows', 'Glow', 'Cloud shadows', 'Moss and weathering', 'Vignette and grain', '3D grass']) {
     // Each switch takes effect at once. (A slow device, like this headless browser, starts with some already off.)

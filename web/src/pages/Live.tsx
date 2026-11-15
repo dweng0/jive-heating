@@ -21,6 +21,8 @@ export function LivePage() {
  * app shows the same view (live-embed.html), fed by the app's own connection.
  */
 export function LiveView({ source }: { source: PowerSource }) {
+  // The effects switches are for trying things out: only with debug=true in the address.
+  const debug = new URLSearchParams(window.location.search).get('debug') === 'true'
   const feed = useRef<LiveFeed | null>(null)
 
   useEffect(() => {
@@ -61,6 +63,10 @@ export function LiveView({ source }: { source: PowerSource }) {
               <span id="statusText">Connecting…</span>
             </span>
           </div>
+          <div className="seg" role="group" aria-label="View">
+            <button id="vHouse" aria-pressed="true">House</button>
+            <button id="vDiagram" aria-pressed="false">Diagram</button>
+          </div>
         </header>
 
         <div className="main">
@@ -79,14 +85,14 @@ export function LiveView({ source }: { source: PowerSource }) {
               <div className="hint" id="orbitHint">Drag to turn · pinch or scroll to zoom</div>
             </div>
             <div className="viewbar">
-              <div className="seg" role="group" aria-label="View">
-                <button id="vHouse" aria-pressed="true">House</button>
-                <button id="vDiagram" aria-pressed="false">Diagram</button>
-              </div>
               <button className="reset" id="resetView" hidden>Reset view</button>
-              <button className="reset" id="fxBtn" aria-expanded="false">Effects</button>
+              {debug && (
+                <button className="reset" id="fxBtn" aria-expanded="false">
+                  Effects
+                </button>
+              )}
             </div>
-            <div className="fx" id="fx" hidden />
+            {debug && <div className="fx" id="fx" hidden />}
           </div>
 
           <aside>

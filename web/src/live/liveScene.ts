@@ -795,12 +795,13 @@ function buildHouse() {
   // effects panel: switch each effect off to compare, or to lighten the load on a slow phone
   {
     const fxEl = document.getElementById('fx'), fxBtn = document.getElementById('fxBtn');
-    fxBtn.onclick = () => { fxEl.hidden = !fxEl.hidden; fxBtn.setAttribute('aria-expanded', !fxEl.hidden); };
+    // no switches without debug=true in the address, but a slow device still lightens itself below
+    if (fxBtn && fxEl) fxBtn.onclick = () => { fxEl.hidden = !fxEl.hidden; fxBtn.setAttribute('aria-expanded', !fxEl.hidden); };
     const apply = () => { if (bloomPass) bloomPass.enabled = FX.glow; if (finalPass) finalPass.uniforms.fx.value = FX.lens ? 1 : 0; fxU.uFx.value = FX.weather ? 1 : 0; sun.castShadow = FX.shadows; grass.visible = FX.grass; };
     for (const [k, label] of [['shadows', 'Shadows'], ['glow', 'Glow'], ['clouds', 'Cloud shadows'], ['weather', 'Moss and weathering'], ['lens', 'Vignette and grain'], ['grass', '3D grass']]) {
       const l = document.createElement('label'), c = document.createElement('input');
       c.type = 'checkbox'; c.checked = FX[k]; c.id = 'fx-' + k; c.onchange = () => { FX[k] = c.checked; apply(); };
-      l.append(c, label); fxEl.appendChild(l);
+      l.append(c, label); fxEl?.appendChild(l);
     }
     // a device that can't keep up (a slow phone, a kiosk, software rendering) drops to the lighter settings by itself
     three.lighten = () => {
