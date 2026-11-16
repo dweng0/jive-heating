@@ -3384,6 +3384,12 @@ Engineering rules (apply to every scenario):
             And "Diagram" switches to the flat flow diagram of the same readings, and the choice is remembered
             And members without energy access have no Live tab
 
+        Scenario: The Android Live tab keeps its connection when the app comes back
+            Given the Android app is showing the Live tab
+            When the app goes to the background and comes back, or no reading arrives for 30 seconds
+            Then it reconnects to the live power stream straight away instead of showing "Readings stopped"
+            And a reading that arrives before the page is ready is handed over as soon as the page is listening
+
         Scenario: Readings ease instead of jumping
             Given a flow shows 500 W
             When a reading of 3000 W arrives

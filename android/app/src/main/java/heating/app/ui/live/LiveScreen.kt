@@ -19,7 +19,17 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.webkit.WebViewAssetLoader
 import heating.app.data.HeatingApi
 import heating.app.data.LivePower
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.timeout
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 /** The Live view bundled in the app (web/live-embed.html, built into assets/live), served over the asset loader's https origin. */
 const val LIVE_URL = "https://${WebViewAssetLoader.DEFAULT_DOMAIN}/assets/live/live-embed.html"
@@ -32,6 +42,35 @@ private val pageJson = kotlinx.serialization.json.Json { encodeDefaults = true; 
 
 fun connectedScript(connected: Boolean): String = "window.liveFeed && window.liveFeed.connected($connected)"
 
+/** The same hand-over, answering whether the page was listening: React mounts after the page loads, so the first try can miss. */
+fun handOverScript(power: LivePower): String = "(function(){ if (!window.liveFeed) return false; ${pushScript(power)}; return true })()"
+
+/** No reading for this long and the connection is taken to be dead (readings arrive every few seconds). */
+val LIVE_SILENCE = 30.seconds
+
+/**
+ * Follows /ws/power for as long as it is called: each reading goes to [onPower]. A dropped connection, or one that has
+ * gone quiet for [silence] (a phone back from the background can hold a socket that will never speak again), calls
+ * [onLost] and reconnects, waiting 1 s, then 2 s, up to 30 s while it keeps failing.
+ */
+@OptIn(FlowPreview::class)
+suspend fun followLive(stream: () -> Flow<LivePower>, onPower: (LivePower) -> Unit, onLost: () -> Unit, silence: Duration = LIVE_SILENCE) {
+    var backoff = 1000L
+    while (true) {
+        runCatching {
+            stream().timeout(silence).collect { p ->
+                backoff = 1000L
+                onPower(p)
+            }
+        }
+        // A timeout or a dropped socket ends up here; being cancelled (leaving the tab, going to the background) does not.
+        currentCoroutineContext().ensureActive()
+        onLost()
+        delay(backoff)
+        backoff = (backoff * 2).coerceAtMost(30_000L)
+    }
+}
+
 /**
  * Live: the same full-width 3D house and flow diagram as the web app, fed by this app's own /ws/power connection, so it
  * works however the phone reaches the service. Reconnects while the tab is open.
@@ -43,23 +82,23 @@ fun LiveScreen(api: HeatingApi, contentPadding: PaddingValues) {
     var ready by remember { mutableStateOf(false) }
     var latest by remember { mutableStateOf<LivePower?>(null) }
 
-    LaunchedEffect(api) {
-        var backoff = 1000L
-        while (true) {
-            runCatching {
-                api.livePower().collect { p ->
-                    backoff = 1000L
-                    latest = p
-                }
-            }
-            web?.evaluateJavascript(connectedScript(false), null)
-            delay(backoff)
-            backoff = (backoff * 2).coerceAtMost(30_000L)
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    // Only while the app is on screen: the socket closes in the background and a fresh one opens on the way back.
+    LaunchedEffect(api, lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            followLive(api::livePower, onPower = { latest = it }, onLost = { web?.evaluateJavascript(connectedScript(false), null) })
         }
     }
     LaunchedEffect(ready, latest) {
         val p = latest ?: return@LaunchedEffect
-        if (ready) web?.evaluateJavascript(pushScript(p), null)
+        if (!ready) return@LaunchedEffect
+        // Until the page answers that it is listening (a newer reading restarts this).
+        repeat(50) {
+            val taken = kotlinx.coroutines.CompletableDeferred<Boolean>()
+            web?.evaluateJavascript(handOverScript(p)) { taken.complete(it == "true") } ?: return@LaunchedEffect
+            if (taken.await()) return@LaunchedEffect
+            delay(200)
+        }
     }
 
     AndroidView(

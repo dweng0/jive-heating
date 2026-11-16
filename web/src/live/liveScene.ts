@@ -607,8 +607,28 @@ function buildHouse() {
   scene.add(lampSpot, lampSpot.target);
   const lampGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: 0xffd9a8, blending: THREE.AdditiveBlending, transparent: true, opacity: 0, depthWrite: false, fog: false }));
   lampGlow.scale.setScalar(2.2); lampGlow.position.set(14.2, 6.05, -3.8); scene.add(lampGlow);
-  const lampCone = new THREE.Mesh(new THREE.ConeGeometry(4.4, 6, 28, 1, true), new THREE.MeshBasicMaterial({ color: 0xffd9a8, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
-  lampCone.position.set(13.9, 3.08, -3.6); scene.add(lampCone);
+  // The beam: a soft cone from the lens to the spot's target, brightest near the lamp and along its axis, fading to nothing at its edges and the ground.
+  const beamFrom = new THREE.Vector3(14.2, 6.08, -3.8), beamTo = new THREE.Vector3(12.4, 0, -2.6);
+  const beamLen = beamFrom.distanceTo(beamTo);
+  const beamGeo = new THREE.ConeGeometry(beamLen * 0.5, beamLen, 40, 1, true);
+  beamGeo.translate(0, -beamLen / 2, 0);   // apex at the origin, opening down -y
+  const lampCone = new THREE.Mesh(beamGeo, new THREE.ShaderMaterial({
+    uniforms: { uOpacity: { value: 0 }, uColor: { value: new THREE.Color(0xffd9a8) }, uLen: { value: beamLen } },
+    vertexShader: `varying vec3 vN; varying vec3 vView; varying float vT;
+      uniform float uLen;
+      void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vView = normalize(-mv.xyz); vT = -position.y / uLen; gl_Position = projectionMatrix * mv; }`,
+    fragmentShader: `varying vec3 vN; varying vec3 vView; varying float vT;
+      uniform float uOpacity; uniform vec3 uColor;
+      void main() {
+        float core = pow(abs(dot(normalize(vN), normalize(vView))), 2.2);   // thick through the middle, thin at the silhouette
+        float along = (1.0 - smoothstep(0.15, 1.0, vT)) * smoothstep(0.0, 0.06, vT);
+        gl_FragColor = vec4(uColor, uOpacity * core * along);
+      }`,
+    transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false,
+  }));
+  lampCone.position.copy(beamFrom);
+  lampCone.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), beamTo.clone().sub(beamFrom).normalize());
+  scene.add(lampCone);
 
   // everything away from the house fades into the haze, so the house is the focal point
   {
@@ -885,7 +905,7 @@ function buildHouse() {
     winC.emissiveIntensity = winB.emissiveIntensity = lit * 2.4;
     glass.emissiveIntensity = 0.02 + lit * 0.7;
     for (const l of roomLights) l.intensity = lit * 2.2;
-    lampSpot.intensity = lit * 2.6; lampGlow.material.opacity = lit; lampCone.material.opacity = lit * (0.03 + 0.07 * rainAmt + 0.02 * cloud);
+    lampSpot.intensity = lit * 2.6; lampGlow.material.opacity = lit; lampCone.material.uniforms.uOpacity.value = lit * (0.10 + 0.22 * rainAmt + 0.06 * cloud);
     lampLens.material.color.setRGB(0.33 + lit * 5, 0.33 + lit * 4, 0.33 + lit * 2.6);
     if (finalPass) { finalPass.uniforms.time.value = (t * 0.001) % 100; finalPass.uniforms.exposure.value = 0.5 + 0.55 * (1 - up); }
     const battActive = T.battIn + T.battOut > 50;
@@ -939,9 +959,9 @@ const PATHS = {
   'solar>home':    'M 150 142 L 150 226',
   'solar>battery': 'M 215 142 L 215 170 Q 215 180 225 180 L 455 180 Q 465 180 465 190 L 465 252',
   'solar>grid':    'M 236 100 L 538 100',
-  'grid>home':     'M 590 176 L 590 440 Q 590 450 580 450 L 185 450 Q 175 450 175 440 L 175 404',
+  'grid>home':     'M 586 176 L 586 440 Q 586 450 576 450 L 185 450 Q 175 450 175 440 L 175 404',
   'battery>home':  'M 428 330 L 282 330',
-  'grid>battery':  'M 560 176 L 560 320 Q 560 330 550 330 L 502 330',
+  'grid>battery':  'M 546 176 L 546 320 Q 546 330 536 330 L 502 330',
 };
 const FONT = 'font-family="Plus Jakarta Sans, system-ui, sans-serif"';
 const ART = {

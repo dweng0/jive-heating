@@ -284,8 +284,9 @@ test('the league table counters tick on like odometers', async ({ page }) => {
   const fridge = table.getByTestId('league-row').filter({ hasText: 'Fridge' })
   const today = fridge.getByTestId('league-today')
   const cost = fridge.getByTestId('league-cost')
+  // Stop the clock so only the jumps below move the counters, however busy the machine is.
+  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000)
   // A fresh reading starts each counter at its figure.
-  await page.clock.fastForward(1000)
   push(reading)
   await expect(today).toHaveAttribute('data-value', '0.2000')
   await expect(cost).toHaveAttribute('data-value', '0.0500')

@@ -211,7 +211,8 @@ class KtorHeatingApi(
     private val config: ServerConfig,
     // A minute without data before giving up on a read, not OkHttp's 10 s: a 50 MB update over a slow tunnel and weak
     // Wi-Fi stalls for longer than that and would otherwise fail.
-    engine: HttpClientEngine = OkHttp.create { config { readTimeout(60, java.util.concurrent.TimeUnit.SECONDS) } },
+    // Pings every 15 s keep the live sockets honest: one the network quietly dropped fails instead of hanging.
+    engine: HttpClientEngine = OkHttp.create { config { readTimeout(60, java.util.concurrent.TimeUnit.SECONDS); pingInterval(15, java.util.concurrent.TimeUnit.SECONDS) } },
     /** Called when the server rejects the session (expired, password changed, user deleted). */
     private val onUnauthorized: () -> Unit = {},
 ) : HeatingApi, heating.app.update.UpdateSource {

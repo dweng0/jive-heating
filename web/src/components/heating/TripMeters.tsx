@@ -41,7 +41,7 @@ export function Rolling({
       data-value={value.toFixed(decimals)}
       aria-label={`${prefix ?? ''}${value.toFixed(decimals)}${suffix ?? ''}`}
       className={cn(
-        'inline-flex items-stretch overflow-hidden leading-none tabular-nums',
+        'inline-flex h-[1.4em] items-stretch self-center overflow-hidden leading-none tabular-nums',
         look === 'counter' && 'rounded-[3px] bg-foreground font-mono text-2xl font-bold text-background shadow-inner sm:text-[1.75rem]',
         look === 'small' && 'rounded-[3px] bg-foreground font-mono text-sm font-semibold text-background shadow-inner',
         look === 'plain' && 'font-medium',
@@ -50,7 +50,7 @@ export function Rolling({
       {prefix && <span className="flex items-center px-1">{prefix}</span>}
       {[...text].map((ch, i) =>
         ch === '.' ? (
-          <span key={i} className="flex items-end px-px pb-1 text-base">.</span>
+          <span key={i} className="flex items-end px-px pb-[0.15em]">.</span>
         ) : (
           <span
             key={i}
