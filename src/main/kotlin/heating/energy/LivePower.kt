@@ -27,7 +27,16 @@ data class AreaPower(val area: String, val name: String, val watts: Double?)
  * "monitored" (a monitored device) or null (no job yet).
  */
 @Serializable
-data class ItemPower(val meter: String, val name: String, val watts: Double?, val room: String? = null, val area: String? = null, val job: String? = null)
+data class ItemPower(
+    val meter: String,
+    val name: String,
+    val watts: Double?,
+    val room: String? = null,
+    val area: String? = null,
+    val job: String? = null,
+    /** kWh since the household's midnight, with its use since its last sample at its live watts; null with no job. */
+    val todayKwh: Double? = null,
+)
 
 /** A monitored device in no room or area, and its live power; null while it is offline. */
 @Serializable
@@ -55,6 +64,11 @@ data class LivePowerView(
     val weather: heating.weather.LiveWeather? = null,
     /** Every meter but the house meter, so nothing using power goes unseen. */
     val items: List<ItemPower> = emptyList(),
+    /** The house meter's kWh since the household's midnight, rolled on like [ItemPower.todayKwh]; null without one. */
+    val houseTodayKwh: Double? = null,
+    /** The electricity price, in the currency's minor unit a kWh, for the league table's cost counters. */
+    val pencePerKwh: Double? = null,
+    val currency: String? = null,
 )
 
 /** Where the dial turns amber ([green]: the typical overnight load) and red ([red]: the 90th percentile). */
@@ -154,7 +168,37 @@ class LivePower(
             batteryPct = inv?.batteryPct,
             weather = weather(),
             items = items(),
+            houseTodayKwh = house?.let { h -> rolledOn(recorded("house") { from, to -> history.samples(from, to) }, watts) },
+            pencePerKwh = settings.get().electricityPencePerKwh,
+            currency = settings.get().currency,
         )
+    }
+
+    /** What a meter recorded since midnight: its kWh and when its last sample was. */
+    private data class Recorded(val kwh: Double, val lastAt: Instant?)
+    private val todayCache = java.util.concurrent.ConcurrentHashMap<String, Pair<Instant, Recorded>>()
+
+    private fun midnight(now: Instant): Instant = now.atZone(timezone).toLocalDate().atStartOfDay(timezone).toInstant()
+
+    /** [key]'s samples since the household's midnight (a sample covers the 5 minutes before it), read again each minute. */
+    private fun recorded(key: String, load: (Instant, Instant) -> List<MeterSample>): Recorded {
+        val now = clock.instant()
+        val midnight = midnight(now)
+        val k = "$key@$midnight"
+        todayCache[k]?.let { (at, r) -> if (Duration.between(at, now) < TODAY_REREAD) return r }
+        val samples = load(midnight, now).filter { it.at.isAfter(midnight) }
+        val r = Recorded(samples.sumOf { it.kwh ?: 0.0 }, samples.maxOfOrNull { it.at })
+        todayCache.keys.removeIf { !it.endsWith("@$midnight") }
+        todayCache[k] = now to r
+        return r
+    }
+
+    /** [r] with what has been used since its last sample (at most one sample's 5 minutes) at [watts] added on. */
+    private fun rolledOn(r: Recorded, watts: Double?): Double {
+        val now = clock.instant()
+        val since = r.lastAt ?: midnight(now)
+        val gap = Duration.between(since, now).let { if (it.isNegative) Duration.ZERO else minOf(it, SAMPLE_SPAN) }
+        return r.kwh + maxOf(0.0, watts ?: 0.0) * gap.toMillis() / 3_600_000_000.0
     }
 
     fun summary(): PowerSummary {
@@ -220,8 +264,13 @@ class LivePower(
             val area = areas?.measuredBy(m.name)
             when {
                 area == null && m.name !in monitored && ignored(m) -> null
-                area != null -> ItemPower(m.name, label(m.name), plugWatts(m.name), area = area, job = "area")
-                m.name in monitored -> ItemPower(m.name, label(m.name), plugWatts(m.name), monitored.roomOf(m.name), monitored.areaOf(m.name), "monitored")
+                area != null -> plugWatts(m.name).let { w ->
+                    ItemPower(m.name, label(m.name), w, area = area, job = "area", todayKwh = rolledOn(recorded("area:$area") { f, t -> history.areaSamples(area, f, t) }, w))
+                }
+                m.name in monitored -> plugWatts(m.name).let { w ->
+                    ItemPower(m.name, label(m.name), w, monitored.roomOf(m.name), monitored.areaOf(m.name), "monitored",
+                        rolledOn(recorded("device:${m.name}") { f, t -> history.deviceSamples(m.name, f, t) }, w))
+                }
                 else -> ItemPower(m.name, label(m.name), plugWatts(m.name))
             }
         }.sortedBy { it.name.lowercase() }
@@ -240,6 +289,10 @@ class LivePower(
     }
 
     companion object {
+        /** How often today's recorded kWh are read again from the history. */
+        private val TODAY_REREAD: Duration = Duration.ofMinutes(1)
+        /** The span one five-minute sample covers. */
+        private val SAMPLE_SPAN: Duration = Duration.ofMinutes(5)
         /** A clamp reports every few seconds: after this long without a reading, the dial shows "No reading". */
         val LIVE_FOR: Duration = Duration.ofMinutes(2)
         private val SPARKLINE = Duration.ofMinutes(30)

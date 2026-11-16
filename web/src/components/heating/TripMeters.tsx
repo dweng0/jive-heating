@@ -12,10 +12,41 @@ const TICK_MS = 250
  * A car's mechanical counter, square-cornered: each digit a wheel that rolls to its place. The last [decimals] wheels
  * are the fractions; [prefix], such as "£", stands before them.
  */
-function Rolling({ value, digits, decimals, testId, prefix, roll = 700, fraction = 'bg-[var(--power-high)]/80' }: { value: number; digits: number; decimals: number; testId: string; prefix?: string; roll?: number; fraction?: string }) {
+export function Rolling({
+  value,
+  digits,
+  decimals,
+  testId,
+  prefix,
+  suffix,
+  roll = 700,
+  fraction = 'bg-[var(--power-high)]/80',
+  look = 'counter',
+}: {
+  value: number
+  digits: number
+  decimals: number
+  testId: string
+  prefix?: string
+  suffix?: string
+  roll?: number
+  fraction?: string
+  /** "counter": the big dark counter; "small": the same, small; "plain": rolling figures in the text's own colour */
+  look?: 'counter' | 'small' | 'plain'
+}) {
   const text = value.toFixed(decimals).padStart(digits + (decimals > 0 ? 1 : 0), '0')
   return (
-    <div data-testid={testId} data-value={value.toFixed(decimals)} aria-label={`${prefix ?? ''}${value.toFixed(decimals)}`} className="inline-flex items-stretch overflow-hidden rounded-[3px] bg-foreground font-mono text-2xl leading-none font-bold text-background tabular-nums shadow-inner sm:text-[1.75rem]">
+    <div
+      data-testid={testId}
+      data-value={value.toFixed(decimals)}
+      aria-label={`${prefix ?? ''}${value.toFixed(decimals)}${suffix ?? ''}`}
+      className={cn(
+        'inline-flex items-stretch overflow-hidden leading-none tabular-nums',
+        look === 'counter' && 'rounded-[3px] bg-foreground font-mono text-2xl font-bold text-background shadow-inner sm:text-[1.75rem]',
+        look === 'small' && 'rounded-[3px] bg-foreground font-mono text-sm font-semibold text-background shadow-inner',
+        look === 'plain' && 'font-medium',
+      )}
+    >
       {prefix && <span className="flex items-center px-1">{prefix}</span>}
       {[...text].map((ch, i) =>
         ch === '.' ? (
@@ -23,7 +54,11 @@ function Rolling({ value, digits, decimals, testId, prefix, roll = 700, fraction
         ) : (
           <span
             key={i}
-            className={cn('relative h-[1.4em] w-[0.85em] overflow-hidden border-r border-background/15 last:border-r-0', i >= text.length - decimals && fraction)}
+            className={cn(
+              'relative h-[1.4em] overflow-hidden',
+              look === 'plain' ? 'w-[0.62em]' : 'w-[0.85em] border-r border-background/15 last:border-r-0',
+              look !== 'plain' && i >= text.length - decimals && fraction,
+            )}
           >
             <span className="absolute inset-x-0 top-0 flex flex-col items-center transition-transform ease-out" style={{ transform: `translateY(-${Number(ch) * 1.4}em)`, transitionDuration: `${roll}ms` }}>
               {Array.from({ length: 10 }, (_, d) => (
@@ -33,6 +68,7 @@ function Rolling({ value, digits, decimals, testId, prefix, roll = 700, fraction
           </span>
         ),
       )}
+      {suffix && <span className="flex items-center pl-0.5">{suffix}</span>}
     </div>
   )
 }

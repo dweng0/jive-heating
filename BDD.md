@@ -3414,9 +3414,10 @@ Engineering rules (apply to every scenario):
             When someone with energy access opens the Live tab on the web app or the Android app
             Then the picture is at the top, and under it the live league table takes the full width, in place of
                 "Where it's going"
-            And each row shows its place, its name with its room or area under it, its watts, and a bar of its share
-                stacked after the rows above it, like the depth on one side of an order book, with its share and the
-                running total: "Dishwasher" 1st, 65%, running 65%; "Lights" 2nd, 5%, running 70%
+            And each row shows its place, its name with its room or area under it, its watts, and a bar like the depth
+                on one side of an order book: filled lightly from the left up to the rows above it, then solidly for its
+                own share, with its share and the running total under it: "Dishwasher" 1st, 65%, running 65%;
+                "Lights" 2nd, 5%, running 70%
             And rows slide up and down to their new places as readings arrive, as on the Energy tab
 
         Scenario: The diagram draws the flows as glowing lines
@@ -3428,6 +3429,17 @@ Engineering rules (apply to every scenario):
                 it while power flows, and dim while it does not
             And each part shows its watts and what it is doing: solar "700 W" "Generating", grid "1.7 kW"
                 "Importing", home "2.4 kW" "Using now"
+
+        Scenario: The league table's counters tick on like odometers
+            Given the house uses 1000 W and has used 5.0 kWh today, "Fridge" uses 100 W and has used 0.2 kWh today,
+                and electricity is 25p a kWh
+            When someone with energy access opens the Live tab
+            Then the league table has a "Today" column and a "Cost" column, each a rolling counter like a car's
+                odometer to 4 decimal places: "Fridge" 0.2000 kWh and £0.0500
+            And they roll on between readings at each row's live watts: after 36 seconds "Fridge" shows 0.2010 kWh
+                and £0.0503
+            And "Everything else" counts the house's use today that no item accounts for
+            And each row's share rolls up and down like an odometer too, lit green as it rises and red as it falls
 
         Scenario: House and Diagram are switched at the top
             Given someone with energy access opens the Live tab
@@ -3580,6 +3592,17 @@ Engineering rules (apply to every scenario):
             When admin "jane" opens the live power channel at /ws/power
             Then "Lights Clamp" is in items with job "area", so its watts are not lumped into "Everything else"
             And "Hallway Plug" is left out, as ignoring only hides meters that have no job
+
+        Scenario: Live power carries each meter's use today
+            Given "Fridge Plug" is a monitored device that recorded 0.2 kWh since midnight and 0.3 kWh yesterday,
+                "Lights Clamp" is the whole-area meter for energy area "Lights" and recorded 0.1 kWh since midnight,
+                "Garage Clamp" has no job, the house meter recorded 5.0 kWh since midnight, and electricity is 24.5p
+                a kWh in GBP
+            When admin "jane" opens the live power channel at /ws/power
+            Then each item has todayKwh: its kWh since the household's midnight, with what it has used since its
+                last five-minute sample at its live watts added on: "Fridge Plug" 0.2, "Lights Clamp" 0.1, and
+                "Garage Clamp" null, as nothing records a meter with no job
+            And the message has houseTodayKwh 5.0, pencePerKwh 24.5 and currency "GBP"
 
         Scenario: League table ranks items by their live watts
             Given the house uses 11000 W, "Shower" 9500 W, "Oven" 1200 W and "Fridge" 90 W

@@ -2,7 +2,8 @@ import { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type
 import { toast } from 'sonner'
 import { Card, CardContent } from '@/components/ui/card'
 import { JobDialog, type Act } from '@/components/heating/MeterJobDialog'
-import { energyApi, type EnergyArea, type Meter } from '@/lib/energy'
+import { energyApi, symbol, type EnergyArea, type Meter } from '@/lib/energy'
+import { Rolling } from '@/components/heating/TripMeters'
 import { useHome } from '@/lib/home'
 import { leagueRows, nextUnlock, NO_PLACING, placeRows, type LeagueRow, type LeagueView, type Placing } from '@/lib/league'
 import { formatWatts, type LivePower } from '@/lib/livePower'
@@ -12,6 +13,8 @@ import { cn } from '@/lib/utils'
 const MOVE_MS = 500
 /** How long a share stays green or red after it changes. */
 const FLASH_MS = 700
+/** How often the wide table's counters roll on between readings: often enough that the last wheel is seen to turn. */
+const TICK_MS = 250
 /** Where this device remembers whether the table shows Items or Rooms. */
 const VIEW_KEY = 'heating.leagueView'
 
@@ -149,6 +152,19 @@ export function LeagueBoard({
       /* not remembered */
     }
   }
+  // The counters roll on from each reading at each row's live watts, a quarter second at a time.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const receivedAt = useMemo(() => Date.now(), [shown])
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!wide) return
+    const t = window.setInterval(() => setNow(Date.now()), TICK_MS)
+    return () => window.clearInterval(t)
+  }, [wide])
+  const todayOf = (r: LeagueRow) =>
+    r.todayKwh == null ? null : r.todayKwh + (stale ? 0 : Math.max(0, r.watts ?? 0) * Math.max(0, now - receivedAt)) / 3_600_000_000   // W·ms to kWh
+  const pence = shown?.pencePerKwh ?? null
+  const money = symbol(shown?.currency ?? 'GBP')
   // Each row's bar starts where the rows above it end, like the depth on one side of an order book.
   const running: number[] = []
   rows.forEach((_, i) => running.push(i === 0 ? 0 : running[i - 1] + (rows[i - 1].share ?? 0)))
@@ -223,12 +239,14 @@ export function LeagueBoard({
           <p className="py-2 text-sm text-muted-foreground">Add a plug or clamp to see what is using power</p>
         ) : wide ? (
           <>
-            <div className="hidden grid-cols-[2rem_minmax(0,1fr)_5.5rem_minmax(6rem,22rem)_3.5rem] items-center gap-3 border-b px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground sm:grid">
+            <div className="hidden grid-cols-[2rem_minmax(0,1fr)_5.5rem_minmax(6rem,20rem)_3.5rem_7.5rem_6.5rem] items-center gap-3 border-b px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground sm:grid">
               <span>#</span>
               <span>{view === 'items' ? 'Item' : 'Place'}</span>
               <span className="text-right">Now</span>
               <span>Share of the house</span>
               <span className="text-right">Share</span>
+              <span className="text-right">Today kWh</span>
+              <span className="text-right">Cost</span>
             </div>
             <ul ref={list} className="flex flex-col">
               {rows.map((r, i) => (
@@ -238,6 +256,9 @@ export function LeagueBoard({
                   place={i + 1}
                   before={running[i]}
                   where={whereOf(r)}
+                  today={todayOf(r)}
+                  pence={pence}
+                  money={money}
                   stale={stale}
                   sliding={sliding.has(r.key)}
                   onSetUp={onSetUp}
@@ -336,11 +357,19 @@ function LeagueWideRow({
   place,
   before,
   where,
+  today,
+  pence,
+  money,
   stale,
   sliding,
   onSetUp,
 }: {
   row: LeagueRow
+  /** kWh since midnight, rolled on to now; null when nothing records it */
+  today: number | null
+  /** The price a kWh in the currency's minor unit, and its symbol */
+  pence: number | null
+  money: string
   place: number
   /** The share of the rows above this one (0..1), where its bar starts */
   before: number
@@ -363,7 +392,7 @@ function LeagueWideRow({
       data-sliding={sliding}
       data-stale={stale}
       className={cn(
-        'relative grid grid-cols-[2rem_minmax(0,1fr)_5.5rem] items-center gap-x-3 gap-y-1 border-b border-border/60 px-3 py-3 last:border-b-0 sm:grid-cols-[2rem_minmax(0,1fr)_5.5rem_minmax(6rem,22rem)_3.5rem]',
+        'relative grid grid-cols-[2rem_minmax(0,1fr)_5.5rem] items-center gap-x-3 gap-y-1 border-b border-border/60 px-3 py-3 last:border-b-0 sm:grid-cols-[2rem_minmax(0,1fr)_5.5rem_minmax(6rem,20rem)_3.5rem_7.5rem_6.5rem]',
         (r.state === 'no-reading' || stale) && 'opacity-50',
       )}
     >
@@ -399,29 +428,60 @@ function LeagueWideRow({
         {r.state === 'off' ? 'Off' : r.state === 'no-reading' ? 'No reading' : formatWatts(watts)}
       </span>
       <span className="col-span-3 flex flex-col gap-1 sm:col-span-1">
-        <span className="relative h-3 overflow-hidden rounded-sm bg-muted">
+        <span className="relative h-2.5 overflow-hidden rounded-full bg-muted">
+          {/* Depth: the rows above, filled lightly from the left; then this row's own share, solid, straight after. */}
+          {before > 0 && pct != null && (
+            <span
+              data-testid="league-depth"
+              aria-hidden
+              className="absolute inset-y-0 left-0 bg-primary/25 transition-[width] duration-500"
+              style={{ width: `${before * 100}%` }}
+            />
+          )}
           <span
             data-testid="league-bar"
             aria-hidden
-            className={cn('absolute inset-y-0 transition-[left,width] duration-500', r.state === 'else' ? 'bg-foreground/25' : 'bg-primary')}
+            className={cn(
+              'absolute inset-y-0 transition-[left,width] duration-500',
+              before === 0 && 'rounded-l-full',
+              r.state === 'else' ? 'bg-foreground/35' : 'bg-primary',
+            )}
             style={{ left: `${before * 100}%`, width: `${pct ?? 0}%` }}
           />
         </span>
         <span className="flex justify-between text-[11px] tabular-nums text-muted-foreground">
-          <span>{pct == null || stale ? '' : `+${Math.round(shownPct ?? 0)}%`}</span>
-          <span data-testid="league-running">{runningPct == null || stale ? '' : `${Math.round(runningPct)}%`}</span>
+          <span className="font-medium text-foreground/80">{pct == null || stale ? '' : `${Math.round(shownPct ?? 0)}%`}</span>
+          {runningPct != null && !stale && (
+            <span>
+              {before > 0 ? 'Total ' : ''}
+              <span data-testid="league-running">{`${Math.round(runningPct)}%`}</span>
+            </span>
+          )}
         </span>
       </span>
       <span
         data-testid="league-share"
         data-flash={flash ?? undefined}
+        aria-label={stale ? '—' : pct == null ? '' : `${Math.round(pct)}%`}
         className={cn(
-          'hidden rounded text-right text-sm tabular-nums text-muted-foreground transition-colors duration-300 sm:block',
+          'hidden justify-end rounded px-1 text-sm text-muted-foreground transition-colors duration-300 sm:flex',
           flash === 'up' && 'bg-green-500/25 text-green-700 dark:text-green-400',
           flash === 'down' && 'bg-red-500/25 text-red-700 dark:text-red-400',
         )}
       >
-        {stale ? '—' : shownPct == null ? '' : `${Math.round(shownPct)}%`}
+        {/* Rolls up and down like an odometer. */}
+        {stale ? '—' : pct == null ? '' : <Rolling value={Math.round(pct)} digits={1} decimals={0} suffix="%" look="plain" roll={500} testId="league-share-wheels" />}
+      </span>
+      {/* Odometers: kWh since midnight and its cost, rolling on at the live watts. On a phone they share a line. */}
+      <span className="col-span-3 flex items-center justify-between gap-3 sm:contents">
+        <span className="flex justify-end">
+          {today != null && <Rolling value={today} digits={2} decimals={4} look="small" roll={240} testId="league-today" fraction="bg-[var(--power-high)]/70" />}
+        </span>
+        <span className="flex justify-end">
+          {today != null && pence != null && (
+            <Rolling value={(today * pence) / 100} digits={1} decimals={4} prefix={money} look="small" roll={240} testId="league-cost" fraction="bg-[var(--power-high)]/70" />
+          )}
+        </span>
       </span>
     </li>
   )

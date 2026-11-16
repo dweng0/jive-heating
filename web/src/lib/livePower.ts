@@ -41,6 +41,11 @@ export interface LivePower {
   weather?: LiveWeather | null
   /** Every meter but the house meter, for the league table (older services leave it out) */
   items?: ItemPower[]
+  /** The house meter's kWh since the household's midnight, as of this message */
+  houseTodayKwh?: number | null
+  /** Electricity price, in the currency's minor unit a kWh */
+  pencePerKwh?: number
+  currency?: string
 }
 
 export interface ItemPower {
@@ -53,6 +58,8 @@ export interface ItemPower {
   area?: string | null
   /** "area" (an area's whole-area meter), "monitored" (a monitored device) or null (no job yet) */
   job?: string | null
+  /** kWh since the household's midnight, as of this message; null for a meter with no job (older services leave it out) */
+  todayKwh?: number | null
 }
 
 export interface LiveWeather {

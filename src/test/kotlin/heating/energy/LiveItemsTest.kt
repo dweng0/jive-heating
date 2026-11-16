@@ -12,6 +12,8 @@ import io.ktor.http.isSuccess
 import io.ktor.http.contentType
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import java.time.Instant
+import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -45,7 +47,8 @@ class LiveItemsTest {
             t.meterState(m, """{"energy":1.0,"power":$w}""")
         }
 
-        val items = t.app.livePower.now().items.associateBy { it.meter }
+        // Today's kWh has a test of its own.
+        val items = t.app.livePower.now().items.associateBy { it.meter }.mapValues { it.value.copy(todayKwh = null) }
         assertEquals(setOf("Shower Clamp", "Oven Clamp", "Kettle Plug", "Fridge Plug", "Garage Clamp"), items.keys, "every meter but the house")
         assertEquals(ItemPower("Shower Clamp", "Shower", 9500.0, room = null, area = "bathroom", job = "area"), items["Shower Clamp"])
         assertEquals(ItemPower("Oven Clamp", "Oven", 1200.0, room = kitchen, area = null, job = "monitored"), items["Oven Clamp"])
@@ -72,8 +75,48 @@ class LiveItemsTest {
         }
         for ((m, w) in listOf("Main Clamp" to 500, "Lights Clamp" to 110, "Hallway Plug" to 20)) t.meterState(m, """{"energy":1.0,"power":$w}""")
 
-        val items = t.app.livePower.now().items.associateBy { it.meter }
+        val items = t.app.livePower.now().items.associateBy { it.meter }.mapValues { it.value.copy(todayKwh = null) }
         assertEquals(ItemPower("Lights Clamp", "Lights Clamp", 110.0, room = null, area = "lights", job = "area"), items["Lights Clamp"])
         assertNull(items["Hallway Plug"], "ignoring still hides a meter with no job")
+    }
+
+    // BDD: Live power carries each meter's use today
+    @Test
+    fun `live power carries each meter's use today`() {
+        val t = TestHeating()
+        t.discover(meters = listOf("Main Clamp", "Fridge Plug", "Lights Clamp", "Garage Clamp"))
+        t.api { client ->
+            client.post("/api/energy/areas") { contentType(ContentType.Application.Json); setBody("""{"name":"Lights"}""") }
+            assertEquals(HttpStatusCode.OK, client.put("/api/meters/Main Clamp/house").status)
+            assertEquals(HttpStatusCode.OK, client.put("/api/meters/Lights Clamp/job") { contentType(ContentType.Application.Json); setBody("""{"job":"area","area":"lights"}""") }.status)
+            assertEquals(HttpStatusCode.OK, client.put("/api/meters/Fridge Plug/job") { contentType(ContentType.Application.Json); setBody("""{"job":"monitored"}""") }.status)
+        }
+        t.app.energySettings.update { it.copy(electricityPencePerKwh = 24.5) }
+        // The household's midnight: 2026-10-11T23:00Z (London is on summer time); now is 09:00Z.
+        val h = t.app.energyHistory
+        h.addDevice(MeterSample(Instant.parse("2026-10-11T12:00:00Z"), "Fridge Plug", null, 0.3))
+        h.addDevice(MeterSample(Instant.parse("2026-10-11T23:00:00Z"), "Fridge Plug", null, 0.05))   // covers yesterday's last 5 min
+        h.addDevice(MeterSample(Instant.parse("2026-10-12T03:00:00Z"), "Fridge Plug", null, 0.15))
+        h.addDevice(MeterSample(Instant.parse("2026-10-12T09:00:00Z"), "Fridge Plug", null, 0.05))
+        h.addArea(MeterSample(Instant.parse("2026-10-12T09:00:00Z"), "Lights Clamp", null, 0.1, room = "lights"))
+        h.add(MeterSample(Instant.parse("2026-10-12T05:00:00Z"), "Main Clamp", null, 3.0))
+        h.add(MeterSample(Instant.parse("2026-10-12T09:00:00Z"), "Main Clamp", null, 2.0))
+        for ((m, w) in listOf("Main Clamp" to 1000, "Fridge Plug" to 100, "Lights Clamp" to 0, "Garage Clamp" to 50)) t.meterState(m, """{"energy":1.0,"power":$w}""")
+
+        var view = t.app.livePower.now()
+        var items = view.items.associateBy { it.meter }
+        assertEquals(0.2, items["Fridge Plug"]!!.todayKwh!!, 1e-9)
+        assertEquals(0.1, items["Lights Clamp"]!!.todayKwh!!, 1e-9)
+        assertNull(items["Garage Clamp"]!!.todayKwh, "nothing records a meter with no job")
+        assertEquals(5.0, view.houseTodayKwh!!, 1e-9)
+        assertEquals(24.5, view.pencePerKwh)
+        assertEquals("GBP", view.currency)
+
+        // Since the last sample, its live watts are added on: 36 s at 100 W is 0.001 kWh.
+        t.clock.advance(Duration.ofSeconds(36))
+        view = t.app.livePower.now()
+        items = view.items.associateBy { it.meter }
+        assertEquals(0.201, items["Fridge Plug"]!!.todayKwh!!, 1e-9)
+        assertEquals(5.01, view.houseTodayKwh!!, 1e-9)
     }
 }

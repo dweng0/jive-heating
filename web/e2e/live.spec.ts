@@ -226,14 +226,18 @@ test('the league table runs full width under the picture', async ({ page }) => {
   await expect(rows.nth(0).getByTestId('league-place')).toHaveText('1')
   await expect(rows.nth(0).getByTestId('league-name')).toHaveText('Dishwasher')
   await expect(rows.nth(0).getByTestId('league-where')).toHaveText('Kitchen')
-  await expect(rows.nth(0).getByTestId('league-share')).toHaveText('65%')
+  await expect(rows.nth(0).getByTestId('league-share')).toHaveAttribute('aria-label', '65%')
   await expect(rows.nth(0).getByTestId('league-running')).toHaveText('65%')
   await expect(rows.nth(1).getByTestId('league-name')).toHaveText('Lights')
   await expect(rows.nth(1).getByTestId('league-where')).toHaveText('Lights')
   await expect(rows.nth(1).getByTestId('league-running')).toHaveText('70%')
-  // The bar is stacked after the rows above: Lights' starts where Dishwasher's ends.
-  const offset = await rows.nth(1).getByTestId('league-bar').evaluate((el) => (el as HTMLElement).style.left)
-  expect(parseFloat(offset)).toBeCloseTo(65, 0)
+  // Like order-book depth: Lights' bar is filled lightly up to where Dishwasher's ends, then solidly for its own 5%.
+  const depth = await rows.nth(1).getByTestId('league-depth').evaluate((el) => parseFloat((el as HTMLElement).style.width))
+  expect(depth).toBeCloseTo(65, 0)
+  const own = await rows.nth(1).getByTestId('league-bar').evaluate((el) => [parseFloat((el as HTMLElement).style.left), parseFloat((el as HTMLElement).style.width)])
+  expect(own[0]).toBeCloseTo(65, 0)
+  expect(own[1]).toBeCloseTo(4.6, 0)
+  await expect(rows.nth(0).getByTestId('league-depth')).toHaveCount(0)
 
   // Rows move to their new places as readings arrive.
   push({ ...reading, items: [{ ...reading.items[0], watts: 50 }, { ...reading.items[1], watts: 2000 }] })
@@ -260,6 +264,46 @@ test('the diagram draws the flows as glowing lines', async ({ page }) => {
   await expect(svg.locator('#p-solar-home')).toHaveAttribute('stroke', '#3ddc84')
   await expect(svg.locator('#p-grid-home')).toHaveAttribute('stroke', '#f59f5a')
   await expect(svg.locator('#p-solar-battery')).toHaveAttribute('data-lit', 'false')
+})
+
+// BDD: The league table's counters tick on like odometers
+test('the league table counters tick on like odometers', async ({ page }) => {
+  await page.clock.install()
+  const reading = {
+    ...power(1000, [{ from: 'grid', to: 'home', watts: 1000 }]),
+    houseTodayKwh: 5.0,
+    pencePerKwh: 25,
+    currency: 'GBP',
+    items: [{ meter: 'Fridge Plug', name: 'Fridge', watts: 100, room: 'kitchen', area: null, job: 'monitored', todayKwh: 0.2 }],
+  }
+  const { push } = await serve(page, { first: reading })
+  await page.goto('/live')
+  const table = page.getByTestId('league-table')
+  await expect(table.getByText('Today kWh')).toBeVisible({ timeout: 90_000 })
+  await expect(table.getByText('Cost', { exact: true })).toBeVisible()
+  const fridge = table.getByTestId('league-row').filter({ hasText: 'Fridge' })
+  const today = fridge.getByTestId('league-today')
+  const cost = fridge.getByTestId('league-cost')
+  // A fresh reading starts each counter at its figure.
+  await page.clock.fastForward(1000)
+  push(reading)
+  await expect(today).toHaveAttribute('data-value', '0.2000')
+  await expect(cost).toHaveAttribute('data-value', '0.0500')
+  await expect(cost).toHaveAttribute('aria-label', '£0.0500')
+  // 36 s at 100 W is 0.001 kWh more.
+  // (A jump: running every frame of the 3D picture through 36 s is too slow in a headless browser.)
+  await page.clock.fastForward(36_000)
+  await expect(today).toHaveAttribute('data-value', '0.2010')
+  await expect(cost).toHaveAttribute('data-value', '0.0503')
+  // Everything else: the house's 5.0 kWh less the fridge's, rolling on at its 900 W.
+  const rest = table.getByTestId('league-row').filter({ hasText: 'Everything else' }).getByTestId('league-today')
+  expect(Number(await rest.getAttribute('data-value'))).toBeCloseTo(4.8 + (0.9 * 36) / 3600, 3)
+  // The share rolls like an odometer, lit green as it rises.
+  push({ ...reading, items: [{ ...reading.items[0], watts: 300 }] })
+  const share = fridge.getByTestId('league-share')
+  await expect(share).toHaveAttribute('aria-label', '30%')
+  await expect(share.getByTestId('league-share-wheels')).toHaveAttribute('data-value', '30')
+  await expect(share).toHaveAttribute('data-flash', 'up')
 })
 
 // BDD: House and Diagram are switched at the top
