@@ -1,6 +1,6 @@
 # BDD Status
 
-Checked 493 scenario(s) across 158 test file(s).
+Checked 505 scenario(s) across 160 test file(s).
 
 
 ## Feature: Service foundation
@@ -500,6 +500,8 @@ Checked 493 scenario(s) across 158 test file(s).
 
 - [x] Admins have an energy management page
 - [x] An admin names a meter
+- [x] An admin corrects a meter that reads too low or too high
+- [x] A corrected reading flows into use, cost and "Everything else"
 - [x] An admin changes or removes the main meter from the page
 - [x] An admin sets up areas from the page
 - [x] A meter is given a new job in one step
@@ -641,15 +643,23 @@ Checked 493 scenario(s) across 158 test file(s).
 - [x] Before the inverter is connected only the grid shows
 - [x] Stopped readings fade the flows
 - [x] The Live tab shows the house with its flows
+- [x] The Android Live tab keeps its connection when the app comes back
 - [x] Readings ease instead of jumping
 - [x] The Live tab says where the home's power came from
 - [x] Effects can be turned down on a slow phone
+- [x] Live shows the league table full width under the picture
+- [x] The diagram draws the flows as glowing lines
+- [x] The league table's counters tick on like odometers
+- [x] House and Diagram are switched at the top
+- [x] The 3D house sits on the app's background in a rounded frame
 
 ## Feature: App updates
 
 - [x] The service says which app version it holds
 - [x] The app offers a newer version
 - [x] Updating downloads and installs the new version
+- [x] An interrupted update download carries on where it stopped
+- [x] The update banner sits below the status bar
 - [x] Release builds are signed with the stable key
 
 ## Feature: Live weather
@@ -664,6 +674,8 @@ Checked 493 scenario(s) across 158 test file(s).
 ## Feature: Live league table
 
 - [x] Live power carries every meter's watts
+- [x] A meter with a job shows even when its device was ignored
+- [x] Live power carries each meter's use today
 - [x] League table ranks items by their live watts
 - [x] League rows swap places as readings arrive
 - [x] Toggling the league table to Rooms ranks places instead of items
@@ -671,4 +683,4 @@ Checked 493 scenario(s) across 158 test file(s).
 - [x] League table greys out when readings stop
 
 ---
-**493/493 scenarios covered.**
+**505/505 scenarios covered.**
