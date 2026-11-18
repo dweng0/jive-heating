@@ -50,6 +50,9 @@ data class Meter(
     val clamp: String? = null,
     /** The clamp says the current flows the other way (it is fitted backwards); its power is still counted as use. */
     val reversed: Boolean = false,
+    /** What the meter itself reports: [power] and [energy] are these times the admin's correction factor ([MeterScales]). */
+    val rawPower: Double? = null,
+    val rawEnergy: Double? = null,
 )
 
 /**
@@ -60,6 +63,8 @@ class MeterRegistry(
     private val bus: MqttBus,
     private val topics: Z2mTopics,
     private val clock: Clock,
+    /** The admin's correction factor for a meter (1.0 when none): its readings are multiplied by it as they arrive. */
+    private val scaleOf: (String) -> Double = { 1.0 },
 ) {
     private val meters = linkedMapOf<String, Meter>()
     /** Every device in the bridge device list, meters or not. */
@@ -118,6 +123,12 @@ class MeterRegistry(
         val meter = get(name)?.takeIf { it.online && !isStale(it) } ?: return null
         val read = meter.lastReading ?: return null
         return meter.powerKwh + used(meter.power, read, clock.instant())
+    }
+
+    /** [name]'s latest readings at its current correction factor, after the admin changed it; null if there is no such meter. */
+    fun rescale(name: String): Meter? = update(name) { current ->
+        val scale = scaleOf(name)
+        current.copy(power = current.rawPower?.times(scale) ?: current.power, energy = current.rawEnergy?.times(scale) ?: current.energy)
     }
 
     /** Called with a meter that disappeared from Zigbee2MQTT (each clamp of a two-clamp meter in turn). */
@@ -217,7 +228,10 @@ class MeterRegistry(
     private fun withReading(current: Meter, reading: Pair<JsonObject, Boolean>): Meter {
         val (state, reversed) = reading
         val now = clock.instant()
-        val energy = (state["energy"] as? JsonPrimitive)?.doubleOrNull ?: current.energy
+        val scale = scaleOf(current.name)
+        val rawEnergy = (state["energy"] as? JsonPrimitive)?.doubleOrNull ?: current.rawEnergy
+        val rawPower = (state["power"] as? JsonPrimitive)?.doubleOrNull ?: current.rawPower
+        val energy = rawEnergy?.times(scale)
         // The power last reported is taken to hold until this message.
         val used = current.lastReading?.let { used(current.power, it, now) } ?: 0.0
         val changed = energy != current.energy
@@ -230,7 +244,9 @@ class MeterRegistry(
             online = true,
             wentOffline = null,
             energy = energy,
-            power = (state["power"] as? JsonPrimitive)?.doubleOrNull ?: current.power,
+            power = rawPower?.times(scale),
+            rawPower = rawPower,
+            rawEnergy = rawEnergy,
             lastReading = now,
             energyChanged = if (changed) now else current.energyChanged,
             usedSinceEnergyChanged = if (changed) 0.0 else current.usedSinceEnergyChanged + used,

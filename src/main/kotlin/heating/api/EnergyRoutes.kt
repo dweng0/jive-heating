@@ -154,6 +154,10 @@ data class MeterView(
     val reversed: Boolean = false,
     /** The name the admin gave it, or its Zigbee2MQTT name when it has none. */
     val label: String = name,
+    /** The admin's correction factor: [power] and [energy] are what the clamp reports times this; 1 when none is set. */
+    val scale: Double = 1.0,
+    /** What the clamp itself reports in W, before [scale]. */
+    val rawPower: Double? = null,
 )
 
 fun HeatingApp.meterView(meter: Meter, house: String? = energySettings.get().electricityMeter) = MeterView(
@@ -173,6 +177,8 @@ fun HeatingApp.meterView(meter: Meter, house: String? = energySettings.get().ele
     clamp = meter.clamp,
     reversed = meter.reversed,
     label = meterLabels.of(meter.name),
+    scale = meterScales.of(meter.name),
+    rawPower = meter.rawPower,
 )
 
 /** The four prices Bright can set. */

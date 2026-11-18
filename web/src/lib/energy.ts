@@ -57,6 +57,20 @@ export interface Meter {
   reversed?: boolean
   /** The name an admin gave it, else its Zigbee2MQTT name */
   label?: string
+  /** The admin's correction factor: power and energy are what the clamp reports times this (1, or left out, when none) */
+  scale?: number
+  /** Power the clamp itself reports, W, before the correction factor */
+  rawPower?: number | null
+}
+
+/** The most a correction factor can be; the service refuses more. */
+export const MAX_SCALE = 10
+
+/** A meter's correction note, such as "Reading ×3 (clamp reports 1700 W)"; null while it has none. */
+export function scaleNote(m: Pick<Meter, 'scale' | 'rawPower'>): string | null {
+  if (m.scale == null || m.scale === 1) return null
+  const raw = m.rawPower != null ? ` (clamp reports ${Math.round(m.rawPower)} W)` : ''
+  return `Reading ×${Number(m.scale.toFixed(3))}${raw}`
 }
 
 /** What a meter is shown as: its label, else its name. */
@@ -254,6 +268,8 @@ export const energyApi = {
   takeOutOfArea: (id: string, meter: string) => request<void>('DELETE', `/api/energy/areas/${enc(id)}/meters/${enc(meter)}`).then(() => true),
   shareCircuit: (id: string, other: string) => request<unknown>('PUT', `/api/energy/areas/${enc(id)}/overlaps/${enc(other)}`).then(() => true),
   label: (meter: string, label: string) => request<Meter>('PUT', `/api/meters/${enc(meter)}/label`, { label }),
+  setScale: (meter: string, factor: number) => request<Meter>('PUT', `/api/meters/${enc(meter)}/scale`, { factor }),
+  clearScale: (meter: string) => request<void>('DELETE', `/api/meters/${enc(meter)}/scale`).then(() => true),
   setJob: (meter: string, job: MeterJob) => request<Meter>('PUT', `/api/meters/${enc(meter)}/job`, job),
   setDailyTarget: (kwh: number | null) => request<EnergySettings>('PUT', '/api/settings/energy', { dailyKwhTarget: kwh }),
   stopSharingCircuit: (id: string, other: string) => request<unknown>('DELETE', `/api/energy/areas/${enc(id)}/overlaps/${enc(other)}`).then(() => true),

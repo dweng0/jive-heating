@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, Gauge, Pencil, Plus, Plug, Trash2, TriangleAlert, Unplug, Wrench } from 'lucide-react'
+import { ArrowLeft, Gauge, Pencil, Plus, Plug, Scale, Trash2, TriangleAlert, Unplug, Wrench } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   AlertDialog,
@@ -27,6 +27,8 @@ import {
   formatCost,
   formatPower,
   meterLabel,
+  scaleNote,
+  MAX_SCALE,
   type EnergyArea,
   type EnergySettings,
   type Meter,
@@ -45,6 +47,7 @@ export function EnergyManagePage() {
   const [version, setVersion] = useState(0)
   const [renaming, setRenaming] = useState<Meter | null>(null)
   const [jobFor, setJobFor] = useState<Meter | null>(null)
+  const [correcting, setCorrecting] = useState<Meter | null>(null)
 
   const refresh = useCallback(() => {
     energyApi.settings().then(setSettings, () => undefined)
@@ -65,7 +68,7 @@ export function EnergyManagePage() {
     return result !== undefined
   }
 
-  const rowProps = { onRename: setRenaming, onJob: setJobFor }
+  const rowProps = { onRename: setRenaming, onJob: setJobFor, onCorrect: setCorrecting }
 
   return (
     <div className="flex flex-col gap-8">
@@ -110,12 +113,13 @@ export function EnergyManagePage() {
       )}
 
       <RenameDialog meter={renaming} onClose={() => setRenaming(null)} act={act} />
+      <CorrectDialog meter={correcting} onClose={() => setCorrecting(null)} act={act} />
       <JobDialog meter={jobFor} areas={areas} onClose={() => setJobFor(null)} act={act} />
     </div>
   )
 }
 
-type RowActions = { onRename: (m: Meter) => void; onJob: (m: Meter) => void }
+type RowActions = { onRename: (m: Meter) => void; onJob: (m: Meter) => void; onCorrect: (m: Meter) => void }
 
 function Section({ title, description, testId, action, children }: { title: string; description?: string; testId: string; action?: ReactNode; children: ReactNode }) {
   return (
@@ -140,7 +144,7 @@ function meterNow(m: Meter): string {
 }
 
 /** One meter: its label (and Zigbee2MQTT name when it has another), power now, a backwards clamp's note, Rename and Change job. */
-function MeterRow({ meter, onRename, onJob, children }: { meter: Meter; children?: ReactNode } & RowActions) {
+function MeterRow({ meter, onRename, onJob, onCorrect, children }: { meter: Meter; children?: ReactNode } & RowActions) {
   const label = meterLabel(meter)
   return (
     <div data-testid={`meter-${meter.name}`} className="flex flex-wrap items-center gap-3">
@@ -151,6 +155,11 @@ function MeterRow({ meter, onRename, onJob, children }: { meter: Meter; children
           {label !== meter.name && <span>{meter.name} · </span>}
           <span data-testid="meter-now">{meterNow(meter)}</span>
         </div>
+        {scaleNote(meter) && (
+          <div data-testid="meter-scale" className="text-xs text-muted-foreground">
+            {scaleNote(meter)}
+          </div>
+        )}
         {meter.reversed && (
           <div data-testid="meter-reversed" className="flex items-center gap-1 text-xs text-amber-700 dark:text-amber-500">
             <TriangleAlert className="size-3" /> {REVERSED}
@@ -160,6 +169,9 @@ function MeterRow({ meter, onRename, onJob, children }: { meter: Meter; children
       {children}
       <Button variant="ghost" size="sm" aria-label={`Rename ${label}`} onClick={() => onRename(meter)}>
         <Pencil /> Rename
+      </Button>
+      <Button variant="ghost" size="sm" aria-label={`Correct reading of ${label}`} onClick={() => onCorrect(meter)}>
+        <Scale /> Correct reading
       </Button>
       <Button variant="outline" size="sm" aria-label={`Change job of ${label}`} onClick={() => onJob(meter)}>
         <Wrench /> Change job
@@ -543,6 +555,53 @@ function NameDialog({ open, title, submit, initial, onClose, onSave }: { open: b
           </div>
           <DialogFooter>
             <Button type="submit">{submit}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/** Sets the factor a clamp's power and energy are multiplied by, for a clamp that reads too low or too high. */
+function CorrectDialog({ meter, onClose, act }: { meter: Meter | null; onClose: () => void; act: Act }) {
+  const [factor, setFactor] = useState('')
+  useEffect(() => {
+    if (meter) setFactor(String(meter.scale ?? 1))
+  }, [meter])
+  const value = Number(factor)
+  const valid = factor.trim() !== '' && Number.isFinite(value) && value > 0 && value <= MAX_SCALE
+  return (
+    <Dialog open={meter != null} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent>
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault()
+            if (!meter || !valid) return
+            const done = value === 1 ? () => energyApi.clearScale(meter.name) : () => energyApi.setScale(meter.name, value).then(() => true)
+            if (await act(done, "Couldn't correct the reading", 'Reading corrected')) onClose()
+          }}
+          className="flex flex-col gap-4"
+        >
+          <DialogHeader>
+            <DialogTitle>Correct the reading of {meter ? meterLabel(meter) : ''}</DialogTitle>
+            <DialogDescription>
+              Multiply what the clamp reports by this. A clamp reading a third of the real load needs 3. Use 1 for no correction. What was recorded is not changed.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="meter-scale">Multiply by</Label>
+            <Input id="meter-scale" type="number" inputMode="decimal" min={0.001} max={MAX_SCALE} step="any" value={factor} onChange={(e) => setFactor(e.target.value)} />
+            {meter?.rawPower != null && valid && (
+              <p className="text-sm text-muted-foreground">
+                {formatPower(meter.rawPower)} on the clamp will read {formatPower(meter.rawPower * value)}.
+              </p>
+            )}
+            {!valid && factor.trim() !== '' && <p className="text-sm text-destructive">Enter a number above 0 and up to {MAX_SCALE}.</p>}
+          </div>
+          <DialogFooter>
+            <Button type="submit" disabled={!valid}>
+              Save
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

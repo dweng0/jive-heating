@@ -2570,6 +2570,25 @@ Engineering rules (apply to every scenario):
             And an empty label goes back to the Zigbee2MQTT name, a label over 40 characters gets 400, and a member gets 403
             And the label is kept after a restart, and dropped when the meter leaves Zigbee2MQTT
 
+        Scenario: An admin corrects a meter that reads too low or too high
+            Given "Oven and shower A" is monitored as "shower" and reads about a third of the real load
+            When admin "jane" chooses "Correct reading" on it, enters 3 and saves
+            Then PUT /api/meters/Oven and shower A/scale is sent with {"factor":3}
+            And GET /api/meters shows scale 3, and the meter's power and energy are multiplied by 3 before anything else uses them
+            And 540 W reported by the clamp shows as 1620 W, in its card on /energy/manage, the Live league table and the room or area it is in
+            And a factor of 1 or DELETE /api/meters/Oven and shower A/scale goes back to the raw reading
+            And a factor of 0 or less, over 10, or not a number gets 400 and changes nothing, and a member gets 403
+            And the factor is kept after a restart, and dropped when the meter leaves Zigbee2MQTT
+
+        Scenario: A corrected reading flows into use, cost and "Everything else"
+            Given "Mains and lights A" is the house meter and reads 5200 W
+            And "Oven and shower A" is monitored with scale 3 and the clamp reports 1700 W
+            When five minutes pass
+            Then history records 0.4333 kWh for the house and 0.425 kWh for "Oven and shower A"
+            And "Everything else" is the house minus every monitored device, using 5100 W for the corrected clamp, so it reads 100 W
+            And changing the factor does not rewrite what was recorded: earlier samples and past costs keep their kWh
+            And the meter card says "Reading ×3 (clamp reports 1700 W)" while a scale other than 1 is set
+
         Scenario: An admin changes or removes the main meter from the page
             Given "CCU Clamp" is the house meter and "Mains and lights A" is waiting to be set up
             When admin "jane" chooses "Change" under "Main meter" and picks "Mains and lights A"

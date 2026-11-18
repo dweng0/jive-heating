@@ -24,6 +24,8 @@ class MeterRecorder(
     private val monitored: MonitoredMeters,
     private val now: () -> Instant,
     private val areas: EnergyAreas? = null,
+    /** The admin's correction factor for a meter (1.0 when none), which scales what a plug may pass as well. */
+    private val scaleOf: (String) -> Double = { 1.0 },
 ) {
     /** Each whole-area meter's power total at its last sample that had one. */
     private val lastAreaPower = mutableMapOf<String, Double>()
@@ -36,6 +38,16 @@ class MeterRecorder(
 
     /** Each monitored device's total at its last sample that had a reading. */
     private val lastDevices = mutableMapOf<String, Double>()
+
+    /**
+     * [device]'s totals have just been multiplied by [ratio] (new correction factor over old). Its last total is multiplied the
+     * same, so the change is never taken as use, and what it used since its last sample counts at the new factor.
+     */
+    @Synchronized
+    fun rebase(device: String, ratio: Double) {
+        val previous = lastDevices[device] ?: history.lastDeviceCounter(device) ?: return
+        lastDevices[device] = previous * ratio
+    }
 
     /** Each monitored device's power total at its last sample that had one. */
     private val lastDevicePower = mutableMapOf<String, Double>()
@@ -94,7 +106,7 @@ class MeterRecorder(
                 // Back after being offline with a lower total (it was reset): the use while offline is lost.
                 staleSince != null && previous != null && reading < previous -> 0.0
                 // More than a plug can pass in the time since the last sample: its total jumped, nothing was used.
-                staleSince == null && previous != null && hours > 0 && reading - previous > MAX_PLUG_KW * hours -> 0.0
+                staleSince == null && previous != null && hours > 0 && reading - previous > MAX_PLUG_KW * maxOf(1.0, scaleOf(device)) * hours -> 0.0
                 else -> used(reading, previous)
             }
             history.addDevice(MeterSample(at, device, reading, use, monitored.roomOf(device), watts, monitored.areaOf(device)))

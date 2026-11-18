@@ -8,12 +8,21 @@ import heating.untrusted
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
+import io.ktor.server.routing.delete
 import io.ktor.server.routing.put
+import io.ktor.http.HttpStatusCode
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.doubleOrNull
 
 /** openapi: MeterLabel */
 @Serializable
 data class MeterLabel(val label: String)
+
+/** openapi: MeterScale. [factor] is more than 0 and at most 10. */
+@Serializable
+data class MeterScale(val factor: Double)
 
 /** openapi: MeterJob. [job] is "house", "area" (with [area]), "monitored" (with an optional [room] or [area]) or "none". */
 @Serializable
@@ -30,6 +39,28 @@ fun Route.meterJobRoutes(heating: HeatingApp) {
             actionLog.info("meter {} labelled {}{}", untrusted(name), untrusted(heating.meterLabels.of(name)), Actor.by())
         }
         call.respond(heating.meterView(meter))
+    }
+
+    put("/api/meters/{meter}/scale") {
+        val name = call.parameters["meter"]!!
+        val meter = heating.meters[name] ?: throw ApiException.notFound("meter not found")
+        val factor = ((call.receive<JsonObject>()["factor"] as? JsonPrimitive)?.takeUnless { it.isString })?.doubleOrNull
+            ?: throw ApiException.badRequest("factor must be a number")
+        call.acting {
+            heating.meterScales.set(name, factor)
+            actionLog.info("meter {} reading corrected x{}{}", untrusted(name), heating.meterScales.of(name), Actor.by())
+        }
+        call.respond(heating.meterView(heating.meters[name] ?: meter))
+    }
+
+    delete("/api/meters/{meter}/scale") {
+        val name = call.parameters["meter"]!!
+        heating.meters[name] ?: throw ApiException.notFound("meter not found")
+        call.acting {
+            heating.meterScales.clear(name)
+            actionLog.info("meter {} reading no longer corrected{}", untrusted(name), Actor.by())
+        }
+        call.respond(HttpStatusCode.NoContent)
     }
 
     put("/api/meters/{meter}/job") {

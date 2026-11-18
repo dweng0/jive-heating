@@ -67,6 +67,13 @@ async function serve(page: Page, opts: { me?: typeof jane; meters?: Meter[]; tar
       settings.electricityMeter = method === 'PUT' ? house[1] : null
       return route.fulfill({ json: settings })
     }
+    const scale = path.match(/^\/api\/meters\/(.+)\/scale$/)
+    if (scale) {
+      const m = meters.find((x) => x.name === scale[1])!
+      m.scale = method === 'PUT' ? request.postDataJSON().factor : 1
+      if (method === 'PUT') m.power = ((m.rawPower as number | null) ?? 0) * (m.scale as number)
+      return method === 'PUT' ? route.fulfill({ json: m }) : route.fulfill({ status: 204 })
+    }
     const label = path.match(/^\/api\/meters\/(.+)\/label$/)
     if (label) {
       const m = meters.find((x) => x.name === label[1])!
@@ -151,6 +158,34 @@ test('an admin renames a clamp and the label is shown', async ({ page }) => {
   await page.getByRole('dialog').getByRole('button', { name: 'Save' }).click()
   await expect(page.getByTestId('manage-main').getByText('Mains', { exact: true })).toBeVisible()
   expect(sent).toContain('PUT /api/meters/Mains and lights A/label {"label":"Mains"}')
+})
+
+// BDD: An admin corrects a meter that reads too low or too high
+test('an admin corrects a clamp that reads a third of the load', async ({ page }) => {
+  const { sent } = await serve(page, {
+    meters: [meter('Oven and shower A', { monitored: true, label: 'shower', clamp: 'A', device: 'Oven and shower', power: 540, rawPower: 540, scale: 1 })],
+  })
+  await page.goto('/energy/manage')
+  await expect(page.getByTestId('meter-scale')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Correct reading of shower' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.getByLabel('Multiply by').fill('3')
+  await expect(dialog.getByText('540 W on the clamp will read 1.6 kW.')).toBeVisible()
+  await dialog.getByRole('button', { name: 'Save' }).click()
+  expect(sent).toContain('PUT /api/meters/Oven and shower A/scale {"factor":3}')
+  await expect(page.getByTestId('meter-scale')).toHaveText('Reading ×3 (clamp reports 540 W)')
+  await expect(page.getByTestId('manage-monitored').getByTestId('meter-now')).toHaveText('1.6 kW now')
+
+  // 0, negative or more than 10 cannot be saved; 1 goes back to the raw reading.
+  await page.getByRole('button', { name: 'Correct reading of shower' }).click()
+  await dialog.getByLabel('Multiply by').fill('11')
+  await expect(dialog.getByRole('button', { name: 'Save' })).toBeDisabled()
+  await dialog.getByLabel('Multiply by').fill('0')
+  await expect(dialog.getByRole('button', { name: 'Save' })).toBeDisabled()
+  await dialog.getByLabel('Multiply by').fill('1')
+  await dialog.getByRole('button', { name: 'Save' }).click()
+  expect(sent).toContain('DELETE /api/meters/Oven and shower A/scale')
+  await expect(page.getByTestId('meter-scale')).toHaveCount(0)
 })
 
 // BDD: An admin changes or removes the main meter from the page

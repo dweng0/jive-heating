@@ -116,7 +116,8 @@ class HeatingApp(
     val monitoredMeters = heating.energy.MonitoredMeters(store)
     val energyAreas = heating.energy.EnergyAreas(store)
     val meterLabels = heating.energy.MeterLabels(store)
-    val meters = heating.energy.MeterRegistry(bus, topics, clock)
+    val meterScales = heating.energy.MeterScales(store)
+    val meters = heating.energy.MeterRegistry(bus, topics, clock) { meterScales.of(it) }
     val energyHistory = heating.energy.EnergyHistory(config.dbPath)
     /** The solar inverter and battery; nothing reports to it until the inverter is connected. */
     val inverter = heating.energy.Inverter(changes, clock)
@@ -126,7 +127,7 @@ class HeatingApp(
         energyHistory, config.timezone, changes, clock, energyAreas, inverter, weather::now,
         { meterLabels.of(it) }, { it.name in ignoredDevices || it.device in ignoredDevices },
     )
-    val meterRecorder = heating.energy.MeterRecorder(energyHistory, meters, energySettings, monitoredMeters, clock::instant, energyAreas)
+    val meterRecorder = heating.energy.MeterRecorder(energyHistory, meters, energySettings, monitoredMeters, clock::instant, energyAreas) { meterScales.of(it) }
     val gasReadings = heating.gas.GasReadings(config.dbPath)
     val gasDays = heating.gas.GasDayReport(gasReadings, history, energySettings, config.timezone)
     /** Keeps the prices at the Bright tariff when asked to; null without a Bright account. */
@@ -204,11 +205,14 @@ class HeatingApp(
             energySettings.meterRemoved(meter, notice)
             monitoredMeters.meterRemoved(meter)
             meterLabels.meterRemoved(meter)
+            meterScales.meterRemoved(meter)
             energyAreas.meterRemoved(meter)?.let { area ->
                 actionLog.info("whole-area meter {} of {} removed from Zigbee2MQTT", meter, area.id)
                 energySettings.update { if (notice in it.notices) it else it.copy(notices = it.notices + notice) }
             }
         }
+        // A new factor re-reads the latest values; the recorder counts no jump in the total when it changes.
+        meterScales.onChanged { name, old, new -> meters.rescale(name); meterRecorder.rebase(name, new / old) }
         livePower.start()
         meters.start()
         meterRecorder.start()

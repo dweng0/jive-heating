@@ -175,7 +175,9 @@
           "device": { "type": "string", "description": "The Zigbee2MQTT device the meter is on: its own name, or the two-clamp meter it is one clamp of" },
           "clamp": { "type": "string", "nullable": true, "description": "A or B for one clamp of a two-clamp meter (named '<device> A'); null otherwise" },
           "reversed": { "type": "boolean", "description": "The clamp reads backwards (fitted the wrong way round); its use is still counted" },
-          "label": { "type": "string", "description": "The name an admin gave it, else its Zigbee2MQTT name" }
+          "label": { "type": "string", "description": "The name an admin gave it, else its Zigbee2MQTT name" },
+          "scale": { "type": "number", "description": "The admin's correction factor: power and energy are what the clamp reports times this; 1 when none is set" },
+          "rawPower": { "type": "number", "nullable": true, "description": "Power the clamp itself reports, W, before the correction factor" }
         }
       },
       "EnergyDay": {
@@ -1227,6 +1229,11 @@
     "/api/meters/{meter}/label": {
       "parameters": [{ "name": "meter", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Meter friendly name, URL-encoded" }],
       "put": { "summary": "Name a meter, such as 'Mains' (admin only). Blank goes back to its Zigbee2MQTT name; 400 over 40 characters", "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["label"], "properties": { "label": { "type": "string" } } } } } }, "responses": { "200": { "description": "meter", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Meter" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/api/meters/{meter}/scale": {
+      "parameters": [{ "name": "meter", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Meter friendly name, URL-encoded" }],
+      "put": { "summary": "Correct a meter whose clamp reads too low or too high (admin only): its power and energy are multiplied by 'factor' as they arrive, so everything that uses the meter sees the corrected reading. 1 clears it; 400 unless more than 0 and at most 10. What was recorded is not rewritten", "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["factor"], "properties": { "factor": { "type": "number", "exclusiveMinimum": 0, "maximum": 10 } } } } } }, "responses": { "200": { "description": "meter", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Meter" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "404": { "$ref": "#/components/responses/NotFound" } } },
+      "delete": { "summary": "Go back to the meter's raw reading (admin only)", "responses": { "204": { "description": "no longer corrected" }, "404": { "$ref": "#/components/responses/NotFound" } } }
     },
     "/api/meters/{meter}/job": {
       "parameters": [{ "name": "meter", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Meter friendly name, URL-encoded" }],
